@@ -15,3 +15,5 @@ playwright-report/
 
 # Playwright install + browser cache (local test runs)
 .pw-browsers/
+package.json
+package-lock.json
