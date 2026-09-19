@@ -653,75 +653,9 @@ input[readonly],input.derived{background:var(--derived-bg);color:var(--text-seco
 .ss-st,.ss-ft{grid-column:1/3;color:var(--text-secondary)}
 .ss-why{grid-column:1/3;color:var(--accent)}
 .ss-note{grid-column:1/3;color:var(--text-secondary)}
-.sched-region.folded .card-more{display:none}
-.sched-region.folded{padding:5px 9px;margin-bottom:6px}
-.card-fold{background:none;border:none;padding:0 2px;color:var(--text-secondary);cursor:pointer;font:inherit;font-size:12px;line-height:1;width:14px}
-.card-fold:hover{color:var(--text)}
-.card-chips{display:inline-flex;flex-wrap:wrap;gap:4px;margin-left:4px}
-.beam-count{font-weight:700;color:#fff;background:var(--mcc-red,#CF0A2C);border-radius:9px;padding:0 6px;margin-right:6px;font-size:.8em;line-height:1.5}
-.beam-tag{font-size:.72em;color:var(--text-tertiary,#8A8A8D);border:1px solid currentColor;border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:middle}
-.beam-members{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;margin:4px 0 6px;font-size:.82em}
-.beam-member{display:inline-flex;align-items:center;gap:6px;padding:2px 6px;border:1px solid var(--border,#D9D9D9);border-radius:4px;background:var(--surface-raised,rgba(0,0,0,.03))}
-.beam-member .ss-undo{font-size:.9em}
-.card-sf{color:var(--text-secondary);font-family:var(--font-mono);font-size:11px;white-space:nowrap}
-.card-stat{display:block;margin:2px 0 4px}
-.pat-chip{display:inline-flex;align-items:center;gap:4px;padding:0 6px 0 0;border-radius:9px;font-size:10.5px;line-height:1.7;
-  border:1px solid var(--border);background:var(--panel-2,rgba(127,127,127,.08));color:var(--text);white-space:nowrap}
-.pat-chip[style*="--pc"]{border-color:var(--pc);background:color-mix(in srgb,var(--pc) 22%,transparent)}
-.pat-chip b{font-family:var(--font-mono);font-size:11px}
-.pat-chip .pc-fl{padding:0 5px;border-radius:9px 0 0 9px;background:rgba(127,127,127,.18);color:var(--text-secondary);font-size:10px}
-/* the one chip that asks for something: solid amber, bold, a dot — it has to
-   read as "look here" next to a row of quiet grey and pattern chips */
-.pat-chip.pend{background:#f2b705;border-color:#b98600;color:#1c1c1c;font-weight:700;padding-right:8px}
-.pat-chip.pend .pc-fl{background:rgba(0,0,0,.18);color:#1c1c1c}
-.pat-chip.pend::after{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#1c1c1c;margin-left:2px}
-.sched-region:has(.pat-chip.pend){border-left:3px solid #f2b705}
-/* a shore that passes through an open floor: flagged until accepted */
-.pat-chip.thru{border-color:var(--danger);box-shadow:0 0 0 1px var(--danger) inset}
-.pc-thru{font-style:normal;font-size:10px;color:var(--danger);margin-left:2px}
-.pat-chip.thru .pc-thru{font-weight:700}
-.sched-region:has(.pat-chip.thru){border-left:3px solid var(--danger)}
-.ra-row.thru{background:rgba(207,10,44,.07)}
-.ra-thru{grid-column:1/4;font-size:11px;color:var(--danger);margin-top:2px}
-.ra-thru.ok{color:var(--text-secondary)}
-.ra-thru .ss-ok{margin-left:6px;vertical-align:middle}
-.rs-thru{color:var(--danger)}
-/* a later pour needs it tighter here: amber, never red — nothing is wrong,
-   it is just not this placement's number that goes in */
-.pat-chip.later{border-color:#b98600}
-.pc-later{font-style:normal;font-size:10px;color:#8a5a00;margin-left:3px;font-weight:700}
-.ra-later{grid-column:1/4;font-size:11px;color:#8a5a00;margin-top:2px}
-.ra-later .later-go{margin-left:6px}
-.seq-note.seq-later{color:#8a5a00}
-.rs-later-n{background:none;border:1px solid #b98600;color:#8a5a00;border-radius:10px;padding:0 7px;font:inherit;font-size:11px;cursor:pointer}
-.rs-later-n:hover{background:rgba(217,138,0,.12)}
-.lg-later{background:repeating-linear-gradient(135deg,#8a5a00 0 2px,transparent 2px 6px)}
-.rs-thru-n{background:none;border:1px solid var(--danger);color:var(--danger);border-radius:10px;padding:0 7px;font:inherit;font-size:11px;cursor:pointer}
-.rs-thru-n:hover{background:rgba(207,10,44,.1)}
-.pat-chip.warn{border-color:var(--danger);color:var(--danger)}
-.pat-chip.quiet{color:var(--text-secondary)}
-.pat-chip.active{box-shadow:0 0 0 2px color-mix(in srgb,var(--pc,var(--text)) 55%,transparent)}
-.rs-tabs{display:flex;flex-wrap:wrap;gap:4px;margin:10px 0 4px}
-.rs-tab{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:14px;border:1px solid var(--border);background:var(--surface-raised);
-  color:var(--text);font:inherit;font-size:12px;cursor:pointer}
-.rs-tab:hover{background:var(--panel-2,rgba(127,127,127,.14))}
-.rs-tab.active{border-color:var(--accent);background:rgba(207,10,44,.08);font-weight:600}
-.rs-tab small{color:var(--text-secondary);font-size:10.5px}
-.rs-tab-pat{font-family:var(--font-mono);font-size:11px;font-weight:700;padding:0 5px;border-radius:4px;background:color-mix(in srgb,var(--pc) 28%,transparent);border:1px solid var(--pc)}
-.rs-tab-warn{display:inline-block;min-width:14px;padding:0 3px;border-radius:7px;border:1px solid var(--danger);color:var(--danger);font-size:10px;font-style:normal;font-weight:700;text-align:center;line-height:1.3}
-.rs-tab-pend{display:inline-block;min-width:16px;padding:0 4px;border-radius:8px;background:var(--danger);color:#fff;font-size:10px;font-style:normal;text-align:center;line-height:1.5}
-.rs-legend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:2px 0 8px;padding:6px 10px;border-radius:4px;background:var(--panel-2,rgba(127,127,127,.08));font-size:11.5px}
-.rs-legend-h{flex:1 0 100%;font-size:11px;color:var(--text-secondary)}
-.lg-item{display:inline-flex;align-items:center;gap:5px}
-.lg-sw{display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,.25)}
-.lg-pend{background:repeating-linear-gradient(45deg,#bbb 0 3px,transparent 3px 6px)}
-.lg-item b{font-family:var(--font-mono)}
-.rs-next{display:flex;align-items:center;gap:8px;margin:0 0 8px;padding:6px 10px;border-radius:4px;border:1px solid var(--border);background:var(--surface-raised);font-size:12px}
-.rs-next-n{color:var(--text-secondary);font-family:var(--font-mono);font-size:11.5px}
-.rs-next-go{font-weight:600}
-.exc-go,.later-go{background:none;border:1px solid var(--warn,#d98a00);color:var(--warn,#d98a00);border-radius:10px;padding:0 7px;margin:0 1px;
+.exc-go{background:none;border:1px solid var(--warn,#d98a00);color:var(--warn,#d98a00);border-radius:10px;padding:0 7px;margin:0 1px;
   font:inherit;font-size:11px;line-height:1.5;cursor:pointer;vertical-align:baseline}
-.exc-go:hover,.later-go:hover{background:rgba(217,138,0,.12)}
+.exc-go:hover{background:rgba(217,138,0,.12)}
 .exc-go.lit{background:rgba(46,160,90,.18);border-color:rgba(20,110,60,.9);color:var(--text)}
 .sched-zone-head{display:flex;align-items:baseline;gap:10px;margin:14px 0 6px;padding:6px 10px;border-radius:4px;cursor:pointer;
   background:var(--panel-2,rgba(127,127,127,.12));border-left:3px solid var(--accent);font-size:14px}
@@ -2077,7 +2011,7 @@ function zoneName(lv,z,i){
 function drawFocusPlan(){try{drawCvs.focus({preventScroll:true})}catch(_){}}
 function slabKind(z){return z&&z.kind==='opening'?'opening':z&&z.kind==='beam'?'beam':z&&z.kind==='grade'?'grade':z&&z.kind==='edge'?'edge':'slab'}
 // FLOOR EDGE: where the floor exists. A level with one or more edge shapes
-// exists only inside them (plus a 3 ft overhang that falsework carries back); a level with none
+// exists only inside them (plus the slab edge tolerance); a level with none
 // exists everywhere. Loading areas are about capacity only.
 function isEdgeZone(z){return slabKind(z)==='edge'}
 function levelEdges(lv){return zonesOf(lv,'slab').filter(isEdgeZone)}
@@ -2457,24 +2391,13 @@ function levelStackWarnings(){
 function placementLoad(slabIn,dl){return(slabIn/12)*150+dl}
 // Construction dead load is one number for the job (formwork, workers,
 // equipment on the fresh slab), not a per-level question.
-// ── OVERHANGS PAST THE FLOOR BELOW ──
-// Adolfo, Sep 18 2026: "I feel like the slab edge tolerance really messes
-// with the results … if there is an overhanging slab, it gets flagged and the
-// user can choose." The tolerance is no longer a setting anyone can turn. The
-// rule is his: an overhang of 3 ft or less past the floor below's edge bears
-// on that floor — "usually overhangs will have falsework supporting it that
-// bring the loads back inside to the edge of slab below", and hairlines are
-// areas not drawn exactly. Anything wider is no slab: the reshore above
-// spans through to the next slab and is FLAGGED for his OK (the through-shore
-// machinery), never taken as bearing. `project.edgeTolFt` in old saves is
-// ignored.
-const OVERHANG_BEAR_FT=3;
-function edgeToleranceFt(){return OVERHANG_BEAR_FT}
-// The pour's OWN edge is different: a loading area lapping past the floor
-// edge of the slab being placed is not concrete, it is a line drawn a little
-// long. Only drafting slop (half a foot) is counted as poured there; the
-// rest is reported as "outside the floor edge", as before.
-const POUR_LAP_FT=0.5;
+// Slab edge tolerance (ft): a pour sample that falls just outside a lower
+// floor's outlined areas — drafting slop, or a small overhang — is taken as
+// bearing on that floor rather than "no slab here". One project setting.
+function edgeToleranceFt(){
+  const v=state.project&&state.project.edgeTolFt;
+  return (v==null||isNaN(v))?2:Math.max(0,+v);
+}
 function projectDL(){
   const v=state.project&&state.project.constructionDL;
   return (v==null||isNaN(v))?30:+v;
@@ -6188,8 +6111,6 @@ function finishPolygon(){
     const kind=newSlabKind();
     const sz={id:sid(),polygon:poly,kind,thicknessIn:(kind==='slab'||kind==='grade')?lv.slabThickness:null,offsetIn:0,label:''};
     if(kind==='beam'){sz.widthIn=12;sz.depthIn=Math.round(((lv.slabThickness||7.5)+12)*4)/4;sz.offsetIn=null}
-    // an edge drawn by hand after the Building step is its own confirmation
-    if(kind==='edge'&&!editingOnBuildingStep())sz.confirmed=true;
     {const pg=drawingPage(lv);if(pg!=null)sz.page=pg}
     // ONE FLOOR EDGE PER SHEET: drawing a new one replaces the one there
     if(kind==='edge'){
@@ -7058,37 +6979,6 @@ function regionEdgePath(cells,st,T,occupied,mine,grow){
   }
   return path;
 }
-// ── THE REGION IS ITS POLYGON ──
-// Adolfo, Sep 17 2026: "it appears that the results zones dont quite align
-// with the drawn areas from the loading area and slab areas." They did not:
-// the solver cuts the pour into exact polygons along every drawn boundary
-// (Sep 15) and the numbers come from those, but the plan still painted each
-// region from its 2 ft sample cells, so every edge was a staircase up to a
-// foot off the outline it should follow. The map and the highlight now draw
-// the polygon itself; cells remain only for things that are made of cells
-// (a floor's install footprint, a "tighten to" patch).
-function mpPath(mp,T){
-  if(!mp||!mp.length)return null;
-  const path=new Path2D();let any=false;
-  for(const poly of mp)for(const ring of poly){
-    let first=true;
-    for(const q of ring){
-      const s=buildingToPixel(q[0],q[1],T);if(!s)continue;
-      if(first){path.moveTo(s.px,s.py);first=false}else path.lineTo(s.px,s.py);
-      any=true;
-    }
-    if(!first)path.closePath();
-  }
-  return any?path:null;
-}
-// The exact polygon behind a highlight, when it is a region's.
-function highlightMp(h){
-  if(!h||!h.regionKey||typeof schedSolve==='undefined'||!schedSolve)return null;
-  if(/^(beam|floor|tighten):/.test(String(h.regionKey)))return null;
-  const P=(schedSolve.levels||[]).find(L=>L.pour&&L.pour.name===h.pour)||schedSolve.levels[schedPourIdx];
-  const reg=P&&P.solve&&P.solve.regions?P.solve.regions.find(r=>r.key===h.regionKey):null;
-  return reg&&reg.mp?reg.mp:null;
-}
 function regionCellPath(cells,st,T,occupied,grow){
   const path=new Path2D();
   const g=st/2,e=grow?st/2:0;
@@ -7115,78 +7005,18 @@ function drawRegionMap(lv,zoom,F_MONO){
   const L=schedSolve.levels[schedPourIdx];
   if(!L||!L.solve||!L.solve.spatial)return;
   const sel=state.ui.highlight&&state.ui.highlight.regionKey;
+  const clip=pourOutlinePath(lv,L),occ=placementCellSet(L);
   // a floor drawn across several sheets: only what this sheet shows
   const sheetClip=sheetClipPath(lv,T);
-  // ── A FLOOR'S TAB: THE PLAN SHADED BY WHAT GOES IN UNDER IT ──
-  const tabF=resultsFloor(L);
-  if(tabF&&tabF.level&&lv.id===(tabF.level.defId||tabF.level.id)){
-    drawCtx.save();
-    if(sheetClip)drawCtx.clip(sheetClip);
-    const labels=[];
-    for(const r of L.solve.regions){
-      if(!regionOnFloorTab(r,tabF,L))continue;
-      const q=floorStateAt(r,tabF);
-      let fill=null,txt=null,dash=false;
-      const thruFlag=q.st&&isThrough(q.st)&&!throughAccepted(q.st.choiceKey);
-      if(q.kind==='pattern'){fill=patColor(L,tabF,q.pattern);txt=thruFlag?`${q.pattern} \u2193${q.st.supportLevel.name}`:q.pattern}
-      else if(q.kind==='pending'){fill=PAT_PEND;txt='pick shore';dash=true}
-      else if(q.kind==='nofit'){fill=PAT_PEND;txt=q.st.supportLevel?'no shore reaches':'nothing below';dash=true}
-      else if(q.kind==='absorbed'){fill=PAT_ABSORB;txt='no shores'}
-      else continue;                                  // open, no slab, grade: nothing goes in
-      const path=r.mp?mpPath(r.mp,T):regionCellPath(r.cells,r.cellStep,T,new Set(),false);
-      if(!path)continue;
-      drawCtx.globalAlpha=r.key===sel?0.25:0.45;
-      drawCtx.fillStyle=fill;
-      drawCtx.fill(path,'evenodd');
-      drawCtx.globalAlpha=1;
-      drawCtx.lineWidth=1/zoom;drawCtx.strokeStyle='rgba(0,0,0,.35)';
-      if(dash)drawCtx.setLineDash([5/zoom,4/zoom]);
-      drawCtx.stroke(path);drawCtx.setLineDash([]);
-      if(thruFlag){                                 // a through-shore not yet accepted
-        drawCtx.lineWidth=2.5/zoom;drawCtx.strokeStyle='rgba(207,10,44,.95)';
-        drawCtx.setLineDash([8/zoom,5/zoom]);drawCtx.stroke(path);drawCtx.setLineDash([]);
-      }
-      // a later pour needs it tighter here: hatch the patch it governs
-      const later=q.kind==='pattern'?laterGoverns(L,r,q.st):null;
-      if(later){
-        const lp=regionCellPath(later.cells,later.cellStep,T,new Set(),false);
-        drawCtx.save();drawCtx.clip(lp);
-        drawCtx.strokeStyle='rgba(120,60,0,.55)';drawCtx.lineWidth=1.2/zoom;
-        const a=buildingToPixel(later.bb.minX,later.bb.minY,T),b=buildingToPixel(later.bb.maxX,later.bb.maxY,T);
-        if(a&&b){const x0=Math.min(a.px,b.px)-20,x1=Math.max(a.px,b.px)+20,y0=Math.min(a.py,b.py)-20,y1=Math.max(a.py,b.py)+20,gap=9/zoom;
-          drawCtx.beginPath();for(let x=x0-(y1-y0);x<x1;x+=gap){drawCtx.moveTo(x,y1);drawCtx.lineTo(x+(y1-y0),y0)}drawCtx.stroke()}
-        drawCtx.restore();
-      }
-      if(txt&&r.key!==sel)labels.push({r,txt,fill});
-    }
-    // the pattern written where the region has room for it
-    const fs=Math.max(11,13/zoom);
-    drawCtx.font=`700 ${fs}px ${F_MONO}`;drawCtx.textAlign='center';drawCtx.textBaseline='middle';
-    for(const {r,txt,fill} of labels){
-      const cx=(r.bb.minX+r.bb.maxX)/2,cy=(r.bb.minY+r.bb.maxY)/2;
-      if(!inSheetGround(lv,cx,cy))continue;
-      const c=buildingToPixel(cx,cy,T);if(!c)continue;
-      const a=buildingToPixel(r.bb.minX,r.bb.minY,T),b=buildingToPixel(r.bb.maxX,r.bb.maxY,T);
-      const w=drawCtx.measureText(txt).width;
-      if(a&&b&&(w>Math.abs(b.px-a.px)||fs*1.2>Math.abs(b.py-a.py)))continue;
-      drawCtx.lineWidth=4/zoom;drawCtx.strokeStyle='rgba(255,255,255,.92)';drawCtx.strokeText(txt,c.px,c.py);
-      drawCtx.fillStyle='#222';drawCtx.fillText(txt,c.px,c.py);
-    }
-    drawCtx.restore();
-    return;
-  }
-  const clip=pourOutlinePath(lv,L),occ=placementCellSet(L);
   drawCtx.save();
   if(sheetClip)drawCtx.clip(sheetClip);
   L.solve.regions.forEach((r,ri)=>{
     const st=r.cellStep,cells=r.cells;
-    const exact=r.mp?mpPath(r.mp,T):null;
-    if(!exact&&(!cells||!cells.length))return;
+    if(!cells||!cells.length)return;
     drawCtx.save();
-    if(clip&&!exact)drawCtx.clip(clip);          // the polygon is already exact
+    if(clip)drawCtx.clip(clip);
     drawCtx.fillStyle=regionColorCss(regionColorIdx(r,ri,L),r.key===sel?0.10:0.20);
-    if(exact)drawCtx.fill(exact,'evenodd');
-    else drawCtx.fill(regionCellPath(cells,st,T,occ,!!clip));
+    drawCtx.fill(regionCellPath(cells,st,T,occ,!!clip));
     drawCtx.restore();
   });
   // names last so no fill lands on top of one
@@ -7235,18 +7065,14 @@ function drawResultHighlight(lv,zoom,F_MONO){
   // A beam block is the beam's own footprint, not a patch of slab, so it is
   // neither grown nor clipped to the loading areas.
   const isBeam=/^beam:/.test(String(h.regionKey||''));
-  const rmp=sameP?highlightMp(h):null;
-  const clip=(sameP&&!isBeam&&!rmp)?pourOutlinePath(lv,L):null;
+  const clip=(sameP&&!isBeam)?pourOutlinePath(lv,L):null;
   const occ=sameP?placementCellSet(L):new Set();
   const mine=new Set();
   for(let i=0;i<cells.length;i+=2)mine.add(Math.round(cells[i]/st)+','+Math.round(cells[i+1]/st));
   // a beam is drawn as itself, not as the cells that happened to sample it
   const bPoly=isBeam?beamDrawnPoly(L,h.regionKey):null;
   let shape,edge;
-  const exact=rmp?mpPath(rmp,T):null;
-  if(exact){
-    shape=exact;edge=exact;                    // the region as the solver cut it
-  }else if(bPoly){
+  if(bPoly){
     const p=new Path2D();
     bPoly.forEach((q,i)=>{const s=buildingToPixel(q.x,q.y,T);if(!s)return;
       if(i===0)p.moveTo(s.px,s.py);else p.lineTo(s.px,s.py)});
@@ -7263,7 +7089,7 @@ function drawResultHighlight(lv,zoom,F_MONO){
   // it has to sit over a loading area without hiding its colour or mark. The
   // tint is light because the marching boundary is what carries the signal.
   drawCtx.fillStyle='rgba(46,160,90,.22)';
-  if(exact)drawCtx.fill(shape,'evenodd');else drawCtx.fill(shape);
+  drawCtx.fill(shape);
   // Where two regions meet, the boundary is the sample grid and shows as it
   // is. Where the region reaches the drawn edge its own boundary was grown
   // past it and the clip has just removed it, so that stretch of outline is
@@ -8258,7 +8084,6 @@ function serializeDoc(){
     project:{...state.project,grid:state.project.grid||{x:[],y:[]},
              loadingConditions:(state.project.loadingConditions||[]).map(c=>({...c})),
              shoreChoices:{...(state.project.shoreChoices||{})},
-             throughOk:{...(state.project.throughOk||{})},
              assumedScale:state.project.assumedScale||null,
              llSchedule:(state.project.llSchedule||[]).map(r=>({...r})),
              sdlSchedule:(state.project.sdlSchedule||[]).map(r=>({...r}))},
@@ -10273,18 +10098,10 @@ function edgeRemove(li,pg){
   state.results=null;
   persist();refreshFlow();renderSidebar();renderCanvas();
 }
-// A hand edit to a confirmed edge ON THE BUILDING STEP reopens it: what was
-// confirmed is no longer what is drawn, and the review is right there. An
-// edit anywhere later — the Areas step, mostly — is the confirmation itself.
-// Adolfo, Sep 18 2026: "the floor edge asks for confirmation all the way
-// back in step one if you make a change to slab edge later on. this is not
-// necessary. assume that the changes to slab edge after the building step
-// are an assumed confirmation."
-function editingOnBuildingStep(){return typeof curGroup==='function'&&curGroup()&&curGroup().id==='building'}
+// Any hand edit to a confirmed edge reopens it: what was confirmed is no
+// longer what is drawn.
 function edgeEdited(z){
-  if(!z||!isEdgeZone(z))return;
-  if(editingOnBuildingStep()){if(z.confirmed){delete z.confirmed;if(typeof refreshFlow==='function')refreshFlow()}}
-  else if(!z.confirmed){z.confirmed=true;if(typeof refreshFlow==='function')refreshFlow()}
+  if(z&&isEdgeZone(z)&&z.confirmed){delete z.confirmed;if(typeof refreshFlow==='function')refreshFlow()}
 }
 function edgeEditedActive(){const z=typeof getActiveZone==='function'?getActiveZone():null;edgeEdited(z)}
 function renderEdgeSection(){
@@ -11283,45 +11100,6 @@ function shoreChoices(){
   if(!state.project.shoreChoices)state.project.shoreChoices={};
   return state.project.shoreChoices;
 }
-// ── A SHORE THAT PASSES THROUGH AN OPEN FLOOR ──
-// Adolfo, Sep 18 2026, on a region reading "L3 39 PSF – L2 opening – 1B SOG":
-// "this incorrectly assumes that there is slab beneath L3 when there is an
-// opening at L2 directly beneath." The floor under L3 is open there, so the
-// reshore under L3 has nothing to stand on at L2 and the solver runs it
-// down to the next slab (1B, 19'-5"). He chose to keep that through-shore
-// but never as a silent default: each one is flagged on its row, on its
-// chip and on the plan until he has looked at it and pressed OK, and the
-// acceptance is saved with the job by the row's own key.
-function throughOk(){
-  if(!state.project.throughOk)state.project.throughOk={};
-  return state.project.throughOk;
-}
-function isThrough(st){return !!(st&&!st.open&&!st.grade&&st.resultant>0&&st.spansOpen>0&&st.supportLevel)}
-function throughAccepted(key){return !!throughOk()[key]}
-// the open floors a through-shore passes: the steps between this one and its support
-function throughPassed(r,st){
-  const i=r.steps.indexOf(st);if(i<0)return [];
-  return r.steps.slice(i+1).filter(x=>x.open&&x.levelIdx<st.supportIdx).map(x=>x.level.name);
-}
-function throughText(r,st){
-  const names=throughPassed(r,st);
-  return `through ${names.length?names.map(n=>`${n} (${r.steps.find(x=>x.level.name===n&&x.noSlab)?`no slab — past its floor edge by more than ${OVERHANG_BEAR_FT} ft`:'opening'})`).join(' and '):'an open floor'} → stands on ${st.supportLevel.name}`;
-}
-function throughItems(L){
-  const s=L&&L.solve;if(!s||!s.spatial)return [];
-  const out=[];
-  s.regions.forEach((r,ri)=>r.steps.forEach(st=>{if(isThrough(st))out.push({r,ri,st,key:st.choiceKey,accepted:throughAccepted(st.choiceKey)})}));
-  (s.beams||[]).forEach((b,bi)=>(b.rows||[]).forEach(row=>{
-    if(row.open||row.grade||!(row.beamNet>0)||!(row.spansOpen>0)||!row.supportLevel)return;
-    out.push({b,bi,row,key:row.beamKey,accepted:throughAccepted(row.beamKey),beam:true});
-  }));
-  return out;
-}
-function setThroughOk(key,on){
-  history.record(on?'Accept through-shore':'Recheck through-shore');
-  if(on)throughOk()[key]=true;else delete throughOk()[key];
-  persist();
-}
 function choiceKey(pourName,regionKey,levelIdx){return `${pourName}|${regionKey}|${levelIdx}`}
 function chosenOption(options,key){
   const id=shoreChoices()[key];
@@ -11719,38 +11497,17 @@ function floorCuts(lv,within,listsSlab,listsLoad){
   }
   // PASS 1 — slab-layer conditions, smallest first so the smaller shape wins
   // its space (an opening drawn inside a slab area is an exception to it)
-  // A BEAM IS AN OVERLAY, NOT A PIECE OF THE SLAB (Adolfo, Sep 18 2026: "if
-  // I have a beam that is the same depth as an adjacent slab for a portion of
-  // it, the calculator will assume no extra stem load for the entire beam").
-  // Beams used to be cut with the slab shapes, smallest first, so a beam
-  // footprint was taken out whole and read at one point — one slab thickness
-  // for its whole run, one stem. The slab areas, openings and on-grade
-  // patches partition the floor first; then each beam is cut along those
-  // pieces, so a beam over a 9" slab and a 20" slab is two pieces with two
-  // stems.
   const slabPieces=[];
-  const nonBeam=(listsSlab||[]).filter(e=>!isEdgeZone(e.zone)&&!isBeam(e.zone))
+  const slabs=(listsSlab||[]).filter(e=>!isEdgeZone(e.zone))
     .slice().sort((a,b)=>a.areaFt-b.areaFt);
-  const beamsHere=(listsSlab||[]).filter(e=>isBeam(e.zone));
-  const base=[];
-  for(const e of nonBeam){
+  for(const e of slabs){
     if(!rest)break;
     const mp=mpFor(e);
     if(!mp)continue;
     const got=mpInter(rest,mp);
-    if(got){base.push({mp:got,tag:'slab:'+e.zone.id});rest=mpDiff(rest,mp)}
+    if(got){slabPieces.push({mp:got,tag:'slab:'+e.zone.id});rest=mpDiff(rest,mp)}
   }
-  if(rest)base.push({mp:rest,tag:'slab:none'});
-  for(const bp of base){
-    let left=bp.mp;
-    for(const e of beamsHere){
-      if(!left)break;
-      const mp=mpFor(e);if(!mp)continue;
-      const got=mpInter(left,mp);
-      if(got){slabPieces.push({mp:got,tag:bp.tag+'+beam:'+e.zone.id});left=mpDiff(left,mp)}
-    }
-    if(left)slabPieces.push({mp:left,tag:bp.tag});
-  }
+  if(rest)slabPieces.push({mp:rest,tag:'slab:none'});
   // PASS 2 — loading areas, over each slab piece: same rule, smallest wins
   const loads=(listsLoad||[]).slice().sort((a,b)=>a.areaFt-b.areaFt);
   if(!loads.length)return out.concat(slabPieces);
@@ -11769,29 +11526,11 @@ function floorCuts(lv,within,listsSlab,listsLoad){
 }
 const EXACT_MAX_PIECES=4000;
 // Split `extent` along every boundary that matters, from the pour down.
-// CUT ONLY AS DEEP AS THE LOAD GOES. Every floor from the pour to the ground
-// used to cut every piece, so on a 42-level model a tower pour was split by
-// the openings and beams of twenty floors its load never reaches: 4 s per
-// pour and eleven regions with one answer between them (Kalae, Sep 18 2026).
-// `settled(mp,k)` says whether a piece's cascade is fully decided by floors
-// 0..k — absorbed, on grade, or at the bottom — and a settled piece passes
-// the floors below untouched. Deeper cuts could not change its answer.
-function exactPartition(extent,belowLevels,slabLists,capLists,settled){
+function exactPartition(extent,belowLevels,slabLists,capLists){
   let pieces=[{mp:extent}];
   for(let k=0;k<belowLevels.length;k++){
     const next=[];
     for(const piece of pieces){
-      if(piece.done){next.push(piece);continue}
-      // A BEAM IS READ ALONG ITS CENTERLINE (Adolfo, Sep 18 2026): "if a
-      // beam above is slightly wider than a beam below, it will take the
-      // shore height of the slab outside of the narrower beam below. usually
-      // we'll try to install reshore at the center of the beam." So a piece
-      // of the pour's beam is not cut by the floors below — the strips a
-      // narrower beam beneath would leave along its sides are not where the
-      // shores go. What is under the beam is read along its centerline
-      // instead (`beamCenterlinePieces`), and changes along that line are
-      // where the beam is split.
-      if(k>0&&piece.beam){next.push(piece);continue}
       // The POUR's loading areas are cut too, even though the pour does not
       // use their capacity. The piece has to be uniform in whether a loading
       // area covers it: that is what says the concrete is there because an
@@ -11802,83 +11541,12 @@ function exactPartition(extent,belowLevels,slabLists,capLists,settled){
       // outside the loading area was new.
       const cuts=floorCuts(belowLevels[k],piece.mp,slabLists[k],capLists[k]);
       if(!cuts.length){next.push(piece);continue}
-      for(const c of cuts){
-        const m=k===0?/\+beam:([^|]+)/.exec(c.tag||''):null;
-        next.push({mp:c.mp,beam:m?m[1]:(piece.beam||null)});
-      }
+      for(const c of cuts)next.push({mp:c.mp});
     }
-    if(settled&&k>=1)for(const piece of next){if(!piece.done&&!piece.beam&&settled(piece.mp,k))piece.done=true}
     pieces=next;
     if(pieces.length>EXACT_MAX_PIECES)break;
   }
   return pieces;
-}
-// ── WHAT IS UNDER A BEAM, ALONG ITS CENTERLINE ──
-// The beam's long axis is the side of its minimum-area bounding rectangle;
-// the centerline runs through that rectangle's middle. It is sampled every
-// foot inside the piece, each sample keyed by what the floors below say
-// there (`lowerSig`), and consecutive samples that agree become one
-// sub-piece: the piece clipped to that run along the axis, read at the run's
-// middle. A beam over a 24" beam below for 40 ft and over slab for the last
-// 10 ft is two items; the 3" strips beside the narrower beam are gone.
-function beamAxis(mp){
-  const ring=(mp&&mp[0]&&mp[0][0])||[];
-  if(ring.length<3)return null;
-  let best=null;
-  for(let i=0;i<ring.length;i++){
-    const a=ring[i],b=ring[(i+1)%ring.length];
-    const ang=Math.atan2(b[1]-a[1],b[0]-a[0]);
-    const c=Math.cos(ang),sn=Math.sin(ang);
-    let u0=Infinity,u1=-Infinity,v0=Infinity,v1=-Infinity;
-    for(const p of ring){const u=p[0]*c+p[1]*sn,v=-p[0]*sn+p[1]*c;if(u<u0)u0=u;if(u>u1)u1=u;if(v<v0)v0=v;if(v>v1)v1=v}
-    const area=(u1-u0)*(v1-v0);
-    if(!best||area<best.area-1e-9)best={area,ang,u0,u1,v0,v1};
-  }
-  if(!best)return null;
-  // the long side is the axis
-  if(best.u1-best.u0<best.v1-best.v0){
-    const ang=best.ang+Math.PI/2,c=Math.cos(ang),sn=Math.sin(ang);
-    let u0=Infinity,u1=-Infinity,v0=Infinity,v1=-Infinity;
-    for(const p of ring){const u=p[0]*c+p[1]*sn,v=-p[0]*sn+p[1]*c;if(u<u0)u0=u;if(u>u1)u1=u;if(v<v0)v0=v;if(v>v1)v1=v}
-    best={area:best.area,ang,u0,u1,v0,v1};
-  }
-  return best;
-}
-function beamCenterlinePieces(piece,lowerSig){
-  const ax=beamAxis(piece.mp);
-  if(!ax)return null;
-  const c=Math.cos(ax.ang),sn=Math.sin(ax.ang),vm=(ax.v0+ax.v1)/2;
-  const toXY=(u,v)=>({x:u*c-v*sn,y:u*sn+v*c});
-  const len=ax.u1-ax.u0;
-  const n=Math.max(2,Math.ceil(len));
-  const samples=[];
-  for(let i=0;i<=n;i++){
-    const u=ax.u0+len*(i/n);
-    const p=toXY(u,vm);
-    if(!mpHas(piece.mp,p.x,p.y))continue;
-    samples.push({u,x:p.x,y:p.y,sig:lowerSig(p.x,p.y)});
-  }
-  if(!samples.length)return null;
-  const runs=[];
-  for(const sm of samples){
-    const last=runs[runs.length-1];
-    if(last&&last.sig===sm.sig){last.to=sm.u;last.pts.push(sm)}
-    else runs.push({sig:sm.sig,from:sm.u,to:sm.u,pts:[sm]});
-  }
-  if(runs.length===1)return [{mp:piece.mp,pt:samples[Math.floor(samples.length/2)]}];
-  const out=[];
-  const pad=1,V0=ax.v0-pad,V1=ax.v1+pad;
-  for(let i=0;i<runs.length;i++){
-    const r=runs[i];
-    // the run's along-axis span, halfway to its neighbours
-    const a=i===0?ax.u0-pad:(runs[i-1].to+r.from)/2;
-    const b=i===runs.length-1?ax.u1+pad:(r.to+runs[i+1].from)/2;
-    const box=[toXY(a,V0),toXY(b,V0),toXY(b,V1),toXY(a,V1)];
-    const cut=mpInter(piece.mp,mpOf(box));
-    if(!cut)continue;
-    out.push({mp:cut,pt:r.pts[Math.floor(r.pts.length/2)]});
-  }
-  return out.length?out:null;
 }
 // A CELL THAT NOBODY CLAIMED.
 // Cells are centre-sampled from each region's polygon, so a cell whose centre
@@ -12072,13 +11740,60 @@ function solvePourLevel(stack,pourIdx,opts){
   // each piece once at a point inside it. A piece only has to be uniform;
   // pieces that read the same are merged below, so the number of cuts never
   // shows up in the answer.
-  // What the floors 1..kmax say at (x,y): fills belowLevels[k]._slabAt/_capAt/
-  // _codeAt for the cascade and returns the region signature so far.
-  const readColumn=(x,y,thick,kmax)=>{
+  const rawPieces=exactPartition(readMP,belowLevels,slabLists,capLists);
+  const pieces=[];
+  for(const p of rawPieces){
+    const a=mpArea(p.mp);
+    if(!(a>0))continue;
+    const pt=mpInnerPoint(p.mp);
+    if(!pt)continue;                  // degenerate hairline, no inside to read
+    pieces.push({mp:p.mp,area:a,pt,bb:mpBBox(p.mp)});
+  }
+  if(!pieces.length)return{spatial:false,reason:'the drawn areas do not enclose any floor'};
+
+  for(const piece of pieces){
+    const x=piece.pt.x, y=piece.pt.y, pcArea=piece.area;
+    let pourZ=null,viaSlab=false;
+    if(pourFromEdge){
+      // the floor edge says where the concrete goes; a loading area on the
+      // pour is capacity, which the pour does not use — it only ever says
+      // which mark to show in the region head
+      if(!insideAny(pourEdges,x,y)){
+        // a loading area that laps just past the edge is drafting slop, not a
+        // slab that stops there — the same tolerance the lower floors get.
+        // Nothing is poured out here where no area was drawn at all.
+        const lap=capZoneAt(pourLoading,x,y);
+        if(!lap)continue;
+        if(!capZoneNear(pourEdges,x,y,edgeTol)){outsideSF+=pcArea;continue}
+        pourZ=lap;
+      }else{
+        pourZ=capZoneAt(pourLoading,x,y);
+      }
+    }else{
+      pourZ=capZoneAt(pourLoading,x,y);
+      // no loading area here, but a slab drawn on the slab layer says there
+      // is slab: poured, at the level's own thickness and typical capacity
+      if(!pourZ){
+        if(!capZoneAt(pourExtentSlabs,x,y))continue;   // outside the poured area
+        viaSlab=true;
+      }
+    }
+    const pourSlab=slabStateAt(pour,pourSlabs,x,y);
+    const slabZ=pourSlab.zone?{zone:pourSlab.zone}:null;
+    if(pourSlab.open){openSF+=pcArea;continue}   // no concrete placed here
+    if(pourSlab.grade){gradeSF+=pcArea;continue} // placed on grade — nothing to reshore
+    sampled++;sampledSF+=pcArea;
+    if(viaSlab)fromSlabsSF+=pcArea;             // poured because a slab was drawn there
+    const thick=pourSlab.thick;
+    const beam=pourSlab.beam;
+
+    // resolve each floor's capacity and slab state at this point, then cascade.
+    // The slab signature ignores a beam on the pour: the slab around a beam
+    // is the same slab, and the beam gets its own block.
     const sig=[thick];
     let edgeHits=0;
     const pointAssumptions=[];
-    for(let k=1;k<=kmax;k++){
+    for(let k=1;k<belowLevels.length;k++){
       let sl=slabStateAt(belowLevels[k],slabLists[k],x,y);
       let hit=capZoneAt(capLists[k],x,y);
       // SLAB EXTENT: where the floor has edge shapes it exists only inside
@@ -12111,114 +11826,14 @@ function solvePourLevel(stack,pourIdx,opts){
       const odd=sl.thick!==belowLevels[k].slabThickness||sl.off||sl.beam;
       sig.push(odd?`${tag}@${sl.thick}/${sl.off}${sl.beam?'B'+sl.soffitIn:''}`:tag);
     }
-    return{sig,edgeHits,pointAssumptions};
-  };
-  // Is a piece's answer decided by floors 0..k alone? Read its inside point
-  // down to floor k and cascade over just those floors: decided when the load
-  // is absorbed (or on grade) AND the floor the last shore stands on is known,
-  // or when floor k is the bottom of the stack.
-  const settledBy=(mp,k)=>{
-    const pt=mpInnerPoint(mp);if(!pt)return true;
-    const ps=slabStateAt(pour,pourSlabs,pt.x,pt.y);
-    if(ps.open||ps.grade)return true;
-    readColumn(pt.x,pt.y,ps.thick,k);
-    if(k>=belowLevels.length-1)return true;
-    const res=cascadeAtPoint(belowLevels.slice(0,k+1),0,ps.thick,dl,shores);
-    if(res.unresolved)return false;
-    const last=res.steps[res.steps.length-1];
-    if(!last)return true;
-    if(last.grade)return true;
-    return last.supportIdx!=null&&last.supportIdx>=0&&last.supportIdx<=k;
-  };
-  const rawPieces=exactPartition(readMP,belowLevels,slabLists,capLists,settledBy);
-  // what the floors below say at a point, as a key — the beam centerline is
-  // split where this changes (the same reading the main loop makes)
-  const lowerSig=(x,y)=>{
-    const parts=[];
-    for(let k=1;k<belowLevels.length;k++){
-      let sl=slabStateAt(belowLevels[k],slabLists[k],x,y);
-      const edges=edgeLists[k];
-      if(edges&&edges.length&&!sl.open&&!insideAny(edges,x,y)&&!capZoneNear(edges,x,y,edgeTol))sl={open:true,noSlab:true};
-      if(sl.open){parts.push(sl.noSlab?'none':'open');continue}
-      if(sl.grade){parts.push('grade');break}
-      const hit=capZoneAt(capLists[k],x,y);
-      parts.push(`${hit?hit.zone.capacityPSF+'/'+zoneCode(hit.zone):'d'}@${sl.thick}/${sl.off}${sl.beam?'B'+sl.soffitIn+'w'+(sl.beam.widthIn||0):''}`);
-    }
-    return parts.join('|');
-  };
-  const pieces=[];
-  for(const p of rawPieces){
-    const a=mpArea(p.mp);
-    if(!(a>0))continue;
-    if(p.beam){
-      const subs=beamCenterlinePieces(p,lowerSig);
-      if(subs){
-        for(const sp of subs){const sa=mpArea(sp.mp);if(sa>0)pieces.push({mp:sp.mp,area:sa,pt:sp.pt,bb:mpBBox(sp.mp),beam:true})}
-        continue;
-      }
-    }
-    const pt=mpInnerPoint(p.mp);
-    if(!pt)continue;                  // degenerate hairline, no inside to read
-    pieces.push({mp:p.mp,area:a,pt,bb:mpBBox(p.mp)});
-  }
-  if(!pieces.length)return{spatial:false,reason:'the drawn areas do not enclose any floor'};
-
-  for(const piece of pieces){
-    const x=piece.pt.x, y=piece.pt.y, pcArea=piece.area;
-    let pourZ=null,viaSlab=false;
-    if(pourFromEdge){
-      // the floor edge says where the concrete goes; a loading area on the
-      // pour is capacity, which the pour does not use — it only ever says
-      // which mark to show in the region head
-      if(!insideAny(pourEdges,x,y)){
-        // a loading area that laps just past the edge is drafting slop, not a
-        // slab that stops there — the same tolerance the lower floors get.
-        // Nothing is poured out here where no area was drawn at all.
-        const lap=capZoneAt(pourLoading,x,y);
-        if(!lap)continue;
-        if(!capZoneNear(pourEdges,x,y,POUR_LAP_FT)){outsideSF+=pcArea;continue}
-        pourZ=lap;
-      }else{
-        pourZ=capZoneAt(pourLoading,x,y);
-      }
-    }else{
-      pourZ=capZoneAt(pourLoading,x,y);
-      // no loading area here, but a slab drawn on the slab layer says there
-      // is slab: poured, at the level's own thickness and typical capacity
-      if(!pourZ){
-        if(!capZoneAt(pourExtentSlabs,x,y))continue;   // outside the poured area
-        viaSlab=true;
-      }
-    }
-    const pourSlab=slabStateAt(pour,pourSlabs,x,y);
-    const slabZ=pourSlab.zone?{zone:pourSlab.zone}:null;
-    if(pourSlab.open){openSF+=pcArea;continue}   // no concrete placed here
-    if(pourSlab.grade){gradeSF+=pcArea;continue} // placed on grade — nothing to reshore
-    sampled++;sampledSF+=pcArea;
-    if(viaSlab)fromSlabsSF+=pcArea;             // poured because a slab was drawn there
-    const thick=pourSlab.thick;
-    const beam=pourSlab.beam;
-
-    // resolve each floor's capacity and slab state at this point, then cascade.
-    // The slab signature ignores a beam on the pour: the slab around a beam
-    // is the same slab, and the beam gets its own block.
-    const {sig,edgeHits,pointAssumptions}=readColumn(x,y,thick,belowLevels.length-1);
-    // the key reaches as far down as the cascade does — the floor that
-    // absorbs the load and the floor its last shore stands on — and no
-    // further, so floors the load never reaches cannot split a region
-    const res=cascadeAtPoint(belowLevels,0,thick,dl,shores);
-    let depth=belowLevels.length-1;
-    if(!res.unresolved&&res.steps.length){
-      const last=res.steps[res.steps.length-1];
-      depth=Math.max(last.levelIdx,(last.supportIdx!=null&&last.supportIdx>=0)?last.supportIdx:last.levelIdx);
-    }
-    const key=sig.slice(0,depth+1).join('|');
+    const key=sig.join('|');
     let reg=regions.get(key);
     if(!reg){
+      const res=cascadeAtPoint(belowLevels,0,thick,dl,shores);
       reg={key,thicknessIn:thick,slabZone:slabZ&&slabZ.zone,
            openBelow:res.steps.some(s=>s.open),
            toGrade:res.steps.some(s=>s.grade&&s.remaining>0),
-           loadingMarks:new Set(),caps:sig.slice(1,depth+1),stepCodes:{},edgeSamples:0,
+           loadingMarks:new Set(),caps:sig.slice(1),stepCodes:{},edgeSamples:0,
            placementLoad:res.placementLoad,steps:res.steps,
            reshoreLevels:res.reshoreLevels,unresolved:res.unresolved,
            samples:0,cells:[],cellStep:step,mp:null,areaSF:0,edgeSF:0,
@@ -12266,21 +11881,6 @@ function solvePourLevel(stack,pourIdx,opts){
               bb:{minX:Infinity,minY:Infinity,maxX:-Infinity,maxY:-Infinity}};
         beamItems.set(bkey,item);
       }
-      if(!item.below){
-        // what the shores under this beam actually meet on each floor below:
-        // a beam (and how wide) or the slab — and, where it is a beam, the
-        // taller height a shore set off its side would need to the slab
-        item.below={};
-        for(let k=1;k<belowLevels.length;k++){
-          const sl=belowLevels[k]._slabAt;if(!sl||sl.open||sl.grade)continue;
-          if(sl.beam){
-            let sj=-1;for(let m=k+1;m<belowLevels.length;m++){const t=belowLevels[m]._slabAt;if(!t||!t.open){sj=m;break}}
-            const sup=sj>=0?belowLevels[sj]:null;
-            item.below[k]={widthIn:+sl.beam.widthIn||0,depthIn:+sl.beam.depthIn||0,
-              slabHeightFt:sup?shoreHeightUnder(belowLevels[k],sup,sl.thick,sl.off,(sup._slabAt||{}).off||0):null};
-          }
-        }
-      }
       item.samples++;item.areaSF+=pcArea;
       item.mp=mpUnion(item.mp,piece.mp);
       item.bb.minX=Math.min(item.bb.minX,piece.bb.minX);item.bb.maxX=Math.max(item.bb.maxX,piece.bb.maxX);
@@ -12320,29 +11920,14 @@ function solvePourLevel(stack,pourIdx,opts){
 
   // beam items: follow region merges, combine items of one beam that ended
   // up over the same region, then apply widths and picks
-  // THE STEM IS PART OF WHAT A BEAM ITEM IS (Adolfo, Sep 18 2026): "if I have
-  // a beam that is the same depth as an adjacent slab for a portion of it,
-  // the calculator will assume no extra stem load for the entire beam even if
-  // a portion of the beam is deeper than another adjacent slab." Two pieces
-  // of one beam over slabs of different thickness have different stems; when
-  // a sliver merge put them over one region they were folded into whichever
-  // had more samples and the other's stem was thrown away. Items are now
-  // combined only when their stem agrees, so a beam over a 15" and a 20" slab
-  // is two items — one with a stem, one without — and a hairline never folds
-  // into an item with a smaller stem than its own.
-  // …and so is what the shores under it meet: two pieces of a beam over a
-  // beam below and over slab have different heights (Sep 18 2026), and the
-  // sliver rule that lets slab regions with height-only differences merge
-  // must not fold those together either.
-  const profSig=it=>(it.profile||[]).map(r=>r.open?'o':r.grade?'g':Math.round((r.shoreHeightFt||0)*100)).join(',');
   const combined=new Map();
   for(const it of beamItems.values()){
     const reg=resolveMerged(it.region);
-    const k=it.beamId+'|'+reg.key+'|'+it.stemIn+'|'+profSig(it);
+    const k=it.beamId+'|'+reg.key;
     const prev=combined.get(k);
     if(!prev){it.region=reg;it.regionKey=reg.key;combined.set(k,it);continue}
-    if(it.samples>prev.samples){it.samples+=prev.samples;it.cells.push(...prev.cells);it.areaSF+=prev.areaSF;it.mp=mpUnion(it.mp,prev.mp);it.region=reg;it.regionKey=reg.key;combined.set(k,it)}
-    else{prev.samples+=it.samples;prev.cells.push(...it.cells);prev.areaSF+=it.areaSF;prev.mp=mpUnion(prev.mp,it.mp)}
+    if(it.samples>prev.samples){it.samples+=prev.samples;it.cells.push(...prev.cells);it.region=reg;it.regionKey=reg.key;combined.set(k,it)}
+    else{prev.samples+=it.samples;prev.cells.push(...it.cells)}
   }
   {
     const byBeam=new Map();
@@ -12351,24 +11936,16 @@ function solvePourLevel(stack,pourIdx,opts){
     }
     for(const [,l] of byBeam){
       if(l.length<2)continue;
-      const bySize=l.slice().sort((a,b)=>b.areaSF-a.areaSF);
+      const main=l.slice().sort((a,b)=>b.areaSF-a.areaSF)[0];
       for(const it of l){
-        if(it.areaSF>=HAIRLINE_SF)continue;
-        // a hairline folds into the largest item of the same stem, else the
-        // largest item whose stem is at least its own — never into a lighter one
-        const main=bySize.find(m=>m!==it&&m.areaSF>=HAIRLINE_SF&&m.stemIn===it.stemIn&&profSig(m)===profSig(it))
-                 ||bySize.find(m=>m!==it&&m.areaSF>=HAIRLINE_SF&&m.stemIn>=it.stemIn);
-        if(!main)continue;
+        if(it===main||it.areaSF>=HAIRLINE_SF)continue;
         main.areaSF+=it.areaSF;main.samples+=it.samples;
         main.mp=mpUnion(main.mp,it.mp);
         for(const [k,v] of combined)if(v===it)combined.delete(k);
       }
-      // several items of one beam with different stems: say which is which
-      const stems=new Set([...combined.values()].filter(x=>x.beamId===l[0].beamId).map(x=>x.stemIn));
-      if(stems.size>1)for(const x of combined.values())if(x.beamId===l[0].beamId)x.stemSplit=true;
     }
   }
-  const rawBeams=[...combined.values()].map(it=>{
+  const beams=[...combined.values()].map(it=>{
     const regOut=out.find(r=>r.key===it.regionKey);
     const chain=beamChain(it,pour.name);
     it.cells=mpCells(it.mp,step);it.cellStep=step;
@@ -12376,8 +11953,6 @@ function solvePourLevel(stack,pourIdx,opts){
            lengthFt:it.widthFt>0?Math.round(it.areaSF/it.widthFt):null,
            rows:chain.rows,beamUnresolved:chain.unresolved,beamLevels:chain.levels,absorbedAt:chain.absorbedAt};
   }).sort((a,b)=>b.areaSF-a.areaSF);
-  // identical beams share a row (Adolfo, Sep 18 2026) — see groupBeamItems
-  const beams=groupBeamItems(rawBeams,pour.name,shores,step);
 
   const needChoice=out.reduce((n,r)=>n+r.steps.filter(s=>s.resultant>0&&!s.chosen&&s.options.length).length,0)
                   +beams.reduce((n,b)=>n+b.rows.filter(r=>r.beamKey&&r.beamNet>0&&!r.beamChosen&&r.options.length).length,0);
@@ -12391,127 +11966,12 @@ function solvePourLevel(stack,pourIdx,opts){
          pourFromEdge,pourFromSlabs,hadLoading:!!(pourLoading&&pourLoading.length),
          areaSF:sampledSF,openAreaSF:openSF,gradeAreaSF:gradeSF,outsideEdgeSF:outsideSF,fromSlabsSF,
          hasGrade:belowLevels.slice(1).some(l=>levelOnGrade(l)||zonesOf(l,'slab').some(isGradeZone)),
-         regions:out,beams,rawBeams,assumptions:[...assumptionSamples.values()],
+         regions:out,beams,assumptions:[...assumptionSamples.values()],
          sliverSF:out.reduce((n,r)=>n+(r.sliverSF||0),0),
          maxReshoreLevels:out.reduce((m,r)=>Math.max(m,r.reshoreLevels),0),
          anyUnresolved:out.some(r=>r.unresolved)||beams.some(b=>b.beamUnresolved),
          pendingChoices:needChoice,
          noShoreRows:out.reduce((n,r)=>n+r.steps.filter(s=>s.noOptions).length,0)+beams.reduce((n,b)=>n+b.rows.filter(r=>r.noOptions).length,0)};
-}
-
-// ════════════════════════════════════════════════════════════
-//  IDENTICAL BEAMS SHARE A ROW  (Adolfo, Sep 18 2026: "the beams could be
-//  grouped if they're the same type of beam and fall under the same shore
-//  height and load capacity conditions")
-//
-//  A row is a condition, not an object — the slab regions have always worked
-//  that way, and a floor with 55 beams was asking the same question 55 times.
-//  Beam items of one pour group when they are the same size, carry the same
-//  stem load over the same slab condition (the region key carries the marks,
-//  so "do not merge loading conditions" holds for beams too), and on every
-//  carrying floor see the same capacity, the same slab load arriving and the
-//  same support — with shore heights within an inch of the group's anchor,
-//  the row showing the tallest (his Sep 10 call: inches of height do not
-//  change the answer). Reinforcement marks (LB1 / LB3) are listed, not split
-//  on. One shore pick, effective width and shores-per-cluster apply to every
-//  member; a member can be broken out to get its own values and stays out
-//  until it is regrouped. A pick every member already agreed on before this
-//  existed is carried into the group so old jobs open as they were.
-// ════════════════════════════════════════════════════════════
-const BEAM_GROUP_TOL_FT=1/12;
-function beamBreakouts(){const p=state.project;if(!p.beamBreakout)p.beamBreakout={};return p.beamBreakout}
-function beamMemberId(pourName,it){return `${pourName}|${it.beamId}|${it.regionKey}`}
-function beamCondSig(it){
-  const rows=(it.profile||[]).map(r=>r.open?`o${r.noSlab?'n':''}:${r.level.name}`
-    :r.grade?`g:${r.level.name}`
-    :`${r.level.name}:${r.capacity}:${(+r.slabRemaining||0).toFixed(1)}:${r.supportLevel?r.supportLevel.name:'-'}:${r.spansOpen||0}`);
-  return `${it.widthIn}x${it.depthIn}|${it.stemIn}|${it.plf}|${it.thicknessIn}|${it.regionKey}|`+rows.join('|');
-}
-function beamHeights(it){return (it.profile||[]).map(r=>(r.open||r.grade||r.shoreHeightFt==null)?-1:r.shoreHeightFt)}
-function strHash(str){let h=5381;for(let i=0;i<str.length;i++)h=((h<<5)+h+str.charCodeAt(i))|0;return (h>>>0).toString(36)}
-function groupBeamItems(items,pourName,shores,step){
-  const bo=beamBreakouts();
-  const buckets=new Map(),out=[];
-  for(const it of items){
-    const sig=beamCondSig(it);it.groupSig=sig;it.memberId=beamMemberId(pourName,it);
-    if(bo[it.memberId]){it.brokenOut=true;out.push(it);continue}
-    (buckets.get(sig)||buckets.set(sig,[]).get(sig)).push(it);
-  }
-  for(const [sig,list] of buckets){
-    list.sort((a,b)=>b.areaSF-a.areaSF);           // the largest anchors its cluster
-    const used=list.map(()=>false);
-    for(let i=0;i<list.length;i++){
-      if(used[i])continue;used[i]=true;
-      const anchor=list[i],ha=beamHeights(anchor),members=[anchor];
-      for(let j=i+1;j<list.length;j++){
-        if(used[j])continue;
-        const hj=beamHeights(list[j]);
-        const close=hj.length===ha.length&&hj.every((h,q)=>(h<0&&ha[q]<0)||(h>=0&&ha[q]>=0&&Math.abs(h-ha[q])<=BEAM_GROUP_TOL_FT+1e-9));
-        if(close){used[j]=true;members.push(list[j])}
-      }
-      // a lone item whose signature has broken-out siblings can be regrouped — say so
-      if(members.length<2){anchor.canRegroup=items.some(x=>x!==anchor&&x.brokenOut&&x.groupSig===sig);out.push(anchor);continue}
-      out.push(makeBeamGroup(members,sig,pourName,shores,step));
-    }
-  }
-  for(const it of out)if(it.brokenOut)it.canRegroup=true;
-  return out.sort((a,b)=>b.areaSF-a.areaSF);
-}
-function makeBeamGroup(members,sig,pourName,shores,step){
-  const a=members[0];
-  // the row shows the tallest height in the group, and the shores legal at it
-  const heights=a.profile.map((r,q)=>Math.max(...members.map(m=>{const x=m.profile[q];return x&&!x.open&&!x.grade&&x.shoreHeightFt!=null?x.shoreHeightFt:-1})));
-  const profile=a.profile.map((r,q)=>{
-    if(r.open||r.grade)return{...r};
-    const h=heights[q]>=0?heights[q]:null;
-    return{...r,shoreHeightFt:h,options:h!=null?shoreOptionsFor(h,0,shores):[]};
-  });
-  const id='grp:'+strHash(sig+'|'+heights.map(h=>Math.round(h*48)).join(','));
-  let mp=null,cells=[],areaSF=0,samples=0,lengthFt=0;
-  const bb={minX:Infinity,minY:Infinity,maxX:-Infinity,maxY:-Infinity};
-  const labels=new Set();
-  for(const m of members){
-    mp=mpUnion(mp,m.mp);cells.push(...m.cells);areaSF+=m.areaSF;samples+=m.samples||0;lengthFt+=m.lengthFt||0;
-    bb.minX=Math.min(bb.minX,m.bb.minX);bb.maxX=Math.max(bb.maxX,m.bb.maxX);bb.minY=Math.min(bb.minY,m.bb.minY);bb.maxY=Math.max(bb.maxY,m.bb.maxY);
-    if(m.label)labels.add(m.label);
-  }
-  const g={...a,beamId:id,group:true,members,count:members.length,groupSig:sig,memberId:null,brokenOut:false,canRegroup:false,
-           label:[...labels].sort().join(', '),mp,cells,cellStep:step,areaSF,samples,bb,profile,lengthFt:lengthFt||null,
-           stemSplit:members.some(m=>m.stemSplit),
-           // the beam below is read off the anchor; members that meet something else keep their own note
-           belowDiffers:members.some(m=>JSON.stringify(m.below||{})!==JSON.stringify(a.below||{}))};
-  // adopt a unanimous member pick into the group's key, once
-  const ch=shoreChoices();
-  for(const r of profile){
-    if(r.open||r.grade)continue;
-    const gk=beamRowKey(pourName,g,r.levelIdx);
-    for(const suf of ['','|W','N']){
-      if(ch[gk+suf]!=null)continue;
-      const vals=members.map(m=>ch[beamRowKey(pourName,m,r.levelIdx)+suf]);
-      if(vals.every(v=>v!=null)&&vals.every(v=>String(v)===String(vals[0])))ch[gk+suf]=vals[0];
-    }
-  }
-  const chain=beamChain(g,pourName);
-  g.rows=chain.rows;g.beamUnresolved=chain.unresolved;g.beamLevels=chain.levels;g.absorbedAt=chain.absorbedAt;
-  return g;
-}
-// Break a member out of its group (or put it back) without re-solving: the
-// geometry has not changed, only how the beam items are gathered.
-function regroupBeamsOf(L){
-  if(!L||!L.solve||!L.solve.rawBeams)return;
-  const s=L.solve;
-  s.beams=groupBeamItems(s.rawBeams,L.pour.name,state.shores,s.step||SOLVE_STEP_FT);
-  L._beamNames=null;
-  s.pendingChoices=s.regions.reduce((n,r)=>n+r.steps.filter(x=>x.resultant>0&&!x.chosen&&x.options.length).length,0)
-                  +s.beams.reduce((n,b)=>n+b.rows.filter(r=>r.beamKey&&r.beamNet>0&&!r.beamChosen&&r.options.length).length,0);
-  s.anyUnresolved=s.regions.some(r=>r.unresolved)||s.beams.some(b=>b.beamUnresolved);
-  s.noShoreRows=s.regions.reduce((n,r)=>n+r.steps.filter(x=>x.noOptions).length,0)+s.beams.reduce((n,b)=>n+b.rows.filter(r=>r.noOptions).length,0);
-  if(s._cellIdx)s._cellIdx=null;
-}
-function setBeamBreakout(L,memberId,on){
-  const bo=beamBreakouts();
-  if(on)bo[memberId]=true;else delete bo[memberId];
-  regroupBeamsOf(L);
 }
 
 // Solve every level that can be poured.
@@ -12957,315 +12417,13 @@ function noShoreItems(L){
 }
 // The list this used to build ("NOTHING TO SHORE AGAINST", a row per case) is
 // gone — see renderInstallSummary. noShoreItems still feeds the count.
-// ════════════════════════════════════════════════════════════
-//  READING THE RESULTS  (Adolfo, Sep 18 2026: "we need a much easier way
-//  to navigate/interpret results")
-//
-//  Three things, chosen from a list of five:
-//   · FLOOR TABS — one tab per floor (per zone) that gets reshoring under
-//     this placement. On a floor's tab the plan is shaded by the spacing
-//     that goes in under it, with a legend, and the region cards underneath
-//     become the explanation for that one floor.
-//   · ONE-LINE CARDS — a region is a swatch, its name, its size and a chip
-//     per floor with the pattern; the strip, the numbers and the diagram
-//     open on a click.
-//   · NEXT — the rows still waiting for a shore, stepped through in order:
-//     the card opens, the plan lands on the region on that floor's sheet,
-//     the shore picker is focused.
-// ════════════════════════════════════════════════════════════
-// pattern colours: warm for tighter than the floor's general pattern
-// (tightest darkest), blue for the general one, grey-green for looser
-const PAT_TIGHT=['#a41a24','#d9502a','#ec8c2a','#f2c14e'];
-const PAT_GENERAL='#5b8fc7', PAT_LOOSER='#8fb5a0', PAT_PEND='#9a9a9a', PAT_ABSORB='#b8d9b6';
-// ── TIGHTENED BY A LATER POUR ──
-// Adolfo, Sep 18 2026: "we need something that tells us if the pattern needs
-// to be tighter under a floor for another pour in the area." The reshoring
-// under a floor goes in once and stays for every placement above it, so
-// what this placement needs under Level 2 is not always what gets installed:
-// a later pour may need it tighter on the same patch. The Sequence step has
-// always resolved that; Results now says it too — as a WARNING beside this
-// placement's own answer, never folded into it — and only once both
-// placements have a shore chosen (his call: silent until then). Only pours
-// that come later govern; an earlier pour's tighter shores are already in.
-function laterPlacements(L){
-  if(typeof schedSolve==='undefined'||!schedSolve)return [];
-  const i=schedSolve.levels.indexOf(L);
-  // solveAll lists pours top-down, so the placements poured after L are the
-  // ones above it in the list
-  return i<0?[]:schedSolve.levels.slice(0,i).filter(x=>x.solve&&x.solve.spatial);
-}
-function laterPatternMap(L,floorName){
-  const cache=L._laterMaps||(L._laterMaps={});
-  if(cache[floorName])return cache[floorName];
-  const step=L.solve.step||SOLVE_STEP_FT;
-  const ck=(x,y)=>Math.round(x/step)+','+Math.round(y/step);
-  const map=new Map();
-  for(const LL of laterPlacements(L)){
-    for(const rr of LL.solve.regions){
-      const st=rr.steps.find(x=>x.level&&x.level.name===floorName);
-      if(!st||st.open||st.grade||!(st.resultant>0)||!st.chosen)continue;
-      const pa=patternArea(st.chosen.pattern);
-      for(let i=0;i<rr.cells.length;i+=2){
-        const k=ck(rr.cells[i],rr.cells[i+1]),cur=map.get(k);
-        if(!cur||pa<cur.area)map.set(k,{pattern:st.chosen.pattern,area:pa,pour:LL.pour.name,shore:st.chosen.shore.name});
-      }
-    }
-  }
-  return (cache[floorName]=map);
-}
-// Does a later pour need the reshoring under this step's floor tighter on
-// this region's ground? {pattern, pour, sf, cells} or null.
-function laterGoverns(L,r,st){
-  if(!L||!r||!st||!st.chosen||st.open||st.grade||!(st.resultant>0))return null;
-  const key=st.choiceKey||(st.level.name+'|'+r.key);
-  const cache=r._later||(r._later={});
-  if(key in cache)return cache[key];
-  const map=laterPatternMap(L,st.level.name);
-  let out=null;
-  if(map.size){
-    const step=L.solve.step||SOLVE_STEP_FT,ck=(x,y)=>Math.round(x/step)+','+Math.round(y/step);
-    const own=patternArea(st.chosen.pattern);
-    const cells=[];let best=null;const pours=new Set();
-    for(let i=0;i<r.cells.length;i+=2){
-      const m=map.get(ck(r.cells[i],r.cells[i+1]));
-      if(!m||!(m.area<own))continue;
-      cells.push(r.cells[i],r.cells[i+1]);pours.add(m.pour);
-      if(!best||m.area<best.area)best=m;
-    }
-    if(best){
-      let bb=null;for(let i=0;i<cells.length;i+=2){const x=cells[i],y=cells[i+1];if(!bb)bb={minX:x,minY:y,maxX:x,maxY:y};else{if(x<bb.minX)bb.minX=x;if(x>bb.maxX)bb.maxX=x;if(y<bb.minY)bb.minY=y;if(y>bb.maxY)bb.maxY=y}}
-      out={pattern:best.pattern,pour:best.pour,shore:best.shore,pours:[...pours],sf:cells.length/2*step*step,cells,bb,cellStep:step,
-           whole:cells.length===r.cells.length};
-    }
-  }
-  return (cache[key]=out);
-}
-function laterItems(L){
-  const s=L&&L.solve;if(!s||!s.spatial)return [];
-  const out=[];
-  s.regions.forEach((r,ri)=>r.steps.forEach(st=>{const g=laterGoverns(L,r,st);if(g)out.push({r,ri,st,g,key:st.choiceKey})}));
-  return out;
-}
-// Put any patch (cells in feet) on the plan, on the sheet of `level` that holds it.
-function showPatchOn(level,cells,step,bb,label,regionKey,after){
-  if(!level||!cells||!cells.length)return;
-  const li=state.levels.findIndex(l=>l.id===(level.defId||level.id));
-  state.ui.highlight={cells,step,bb,label,regionKey,pour:'\u00b7patch'};
-  startAnts();renderCanvas();
-  if(after)after();
-  if(li>=0)showRegionOn(li,{cells,cellStep:step,bb},label).then(()=>{if(after)after()});
-}
-function resultsFloorKey(){return state.ui.resultsFloor||null}
-function resultsFloor(L){
-  const k=resultsFloorKey();if(!k)return null;
-  const plan=pourInstallPlan(L);
-  return plan?plan.floors.find(f=>f.key===k)||null:null;
-}
-// The step of a region that is the reshoring under floor f (null when the
-// region never reaches that floor).
-function stepForFloor(r,f){return (r.steps||[]).find(st=>st.level&&st.level.name===f.name)||null}
-// Does this region belong to the floor tab (same pour zone, when zoned)?
-function regionOnFloorTab(r,f,L){return !pourIsZoned(L)||f.zonePage==null||regionZonePage(r,L)===f.zonePage}
-// What the reshoring under floor f is at a region: {kind, pattern, shore}
-function floorStateAt(r,f){
-  const st=stepForFloor(r,f);
-  if(!st)return {kind:'none'};
-  if(st.grade)return {kind:'grade',st};
-  if(st.open)return {kind:st.noSlab?'noslab':'open',st};
-  if(!(st.resultant>0))return {kind:'absorbed',st};
-  if(!st.chosen)return {kind:st.options&&st.options.length?'pending':'nofit',st};
-  return {kind:'pattern',pattern:st.chosen.pattern,shore:st.chosen.shore.name,st};
-}
-// The patterns in use under floor f on this placement, tightest first, each
-// with its colour, area and shores — the legend and the paint.
-function floorPatternScale(L,f){
-  if(!L||!f)return null;
-  const cache=(L._patScale||(L._patScale={}));
-  if(cache[f.key])return cache[f.key];
-  const pats=new Map();let pendSF=0,absorbSF=0;
-  for(const r of L.solve.regions){
-    if(!regionOnFloorTab(r,f,L))continue;
-    const q=floorStateAt(r,f);
-    if(q.kind==='pattern'){
-      let e=pats.get(q.pattern);
-      if(!e){e={pattern:q.pattern,area:patternArea(q.pattern),sf:0,shores:new Set()};pats.set(q.pattern,e)}
-      e.sf+=r.areaSF;e.shores.add(q.shore);
-    }else if(q.kind==='pending'||q.kind==='nofit')pendSF+=r.areaSF;
-    else if(q.kind==='absorbed')absorbSF+=r.areaSF;
-  }
-  const list=[...pats.values()].sort((a,b)=>a.area-b.area);
-  const gArea=f.general!=null?patternArea(f.general):null;
-  const tighter=list.filter(e=>gArea!=null&&e.area<gArea);
-  const colours=new Map();
-  tighter.forEach((e,i)=>colours.set(e.pattern,PAT_TIGHT[Math.min(PAT_TIGHT.length-1,Math.round(i*(PAT_TIGHT.length-1)/Math.max(1,tighter.length-1)))]));
-  for(const e of list){
-    if(colours.has(e.pattern))continue;
-    colours.set(e.pattern,gArea==null?PAT_GENERAL:(e.area===gArea?PAT_GENERAL:PAT_LOOSER));
-  }
-  const out={list:list.map(e=>({...e,shores:[...e.shores],color:colours.get(e.pattern),general:gArea!=null&&e.area===gArea,tighter:gArea!=null&&e.area<gArea})),
-             colours,pendSF,absorbSF,general:f.general};
-  cache[f.key]=out;
-  return out;
-}
-function patColor(L,f,pattern){const sc=floorPatternScale(L,f);return (sc&&sc.colours.get(pattern))||PAT_GENERAL}
-// A floor chip on a region card: "under 2 · 6×8"
-function floorChip(r,f,L,active){
-  const q=floorStateAt(r,f);
-  const who=`<span class="pc-fl">${esc(f.name)}${f.zone&&!pourIsZoned(L)?' '+esc(f.zone):''}</span>`;
-  const cls=`pat-chip${active?' active':''}`;
-  switch(q.kind){
-    case 'pattern':{
-      const thru=isThrough(q.st),okd=thru&&throughAccepted(q.st.choiceKey);
-      const later=laterGoverns(L,r,q.st);
-      return `<span class="${cls}${thru&&!okd?' thru':''}${later?' later':''}" style="--pc:${patColor(L,f,q.pattern)}" title="Reshore under ${esc(f.name)}: ${esc(q.pattern)} · ${esc(q.shore)}${later?` · but the ${esc(levelTagName(later.pour))} placement needs ${esc(later.pattern)} here${later.whole?'':' over '+fmtArea(later.sf)} — that is what goes in`:''}${thru?` · ${esc(feetToStr(q.st.shoreHeightFt))} through ${esc(throughPassed(r,q.st).join(', ')||'an open floor')} to ${esc(q.st.supportLevel.name)}${okd?' (accepted)':' — check it'}`:''}">${who}<b>${esc(q.pattern)}</b>${later?`<i class="pc-later">\u2191${esc(later.pattern)} ${esc(levelTagName(later.pour))}</i>`:''}${thru?`<i class="pc-thru">\u2193${esc(q.st.supportLevel.name)}</i>`:''}</span>`;}
-    case 'pending':{
-      const thru=isThrough(q.st),okd=thru&&throughAccepted(q.st.choiceKey);
-      return `<span class="${cls} pend${thru&&!okd?' thru':''}" title="Reshore under ${esc(f.name)}: shore not chosen yet${thru?` · ${esc(feetToStr(q.st.shoreHeightFt))} through to ${esc(q.st.supportLevel.name)}`:''}">${who}pick a shore${thru?`<i class="pc-thru">\u2193${esc(q.st.supportLevel.name)}</i>`:''}</span>`;}
-    case 'nofit':return `<span class="${cls} warn" title="Reshore under ${esc(f.name)}: ${q.st.supportLevel?'no shore in the catalog reaches':'no floor below to stand on'}">${who}${q.st.supportLevel?'no shore reaches':'nothing below'}</span>`;
-    case 'absorbed':return `<span class="${cls} quiet" title="${esc(f.name)} carries this on its own — no shores under it here">${who}absorbed</span>`;
-    case 'grade':return `<span class="${cls} quiet" title="${esc(f.name)} is on grade here">${who}SOG</span>`;
-    case 'open':return `<span class="${cls} quiet" title="${esc(f.name)} has an opening here — the shore above spans past">${who}opening</span>`;
-    case 'noslab':return `<span class="${cls} quiet" title="${esc(f.name)} has no slab here">${who}no slab</span>`;
-    default:return '';
-  }
-}
-// The floors of this placement in tab order (the install plan's), only the
-// ones something goes in under.
-function resultsTabFloors(L){
-  const plan=pourInstallPlan(L);
-  return plan?plan.floors.filter(f=>f.needsShores||f.pending):[];
-}
-function resultsTabsHtml(L){
-  const floors=resultsTabFloors(L);
-  if(!floors.length)return '';
-  const cur=resultsFloorKey();
-  return `<div class="rs-tabs" role="tablist">
-    <button type="button" class="rs-tab${cur?'':' active'}" data-rsf="" title="Every floor of this placement: the region map on the plan, the install summary and every region">Overview</button>
-    ${floors.map(f=>{
-      const sc=floorPatternScale(L,f);
-      const picks=Math.max(0,f.pending-f.noOptions);
-      const pend=(picks?`<i class="rs-tab-pend" title="${picks} shore pick${picks>1?'s':''} outstanding">${picks}</i>`:'')
-        +(f.noOptions?`<i class="rs-tab-warn" title="${f.noOptions} row${f.noOptions>1?'s':''} with nothing to shore against">!</i>`:'');
-      return `<button type="button" class="rs-tab${cur===f.key?' active':''}" data-rsf="${esc(f.key)}" title="What goes in under ${esc(installFloorName(f))}: the plan shaded by spacing, the regions that decide it">under <b>${esc(f.name)}</b>${f.zone?` <small>${esc(f.zone)}</small>`:''}${f.general!=null?` <span class="rs-tab-pat" style="--pc:${patColor(L,f,f.general)}">${esc(f.general)}</span>`:''}${pend}</button>`;
-    }).join('')}
-  </div>`;
-}
-function floorLegendHtml(L,f){
-  const sc=floorPatternScale(L,f);
-  if(!sc)return '';
-  const items=sc.list.map(e=>`<span class="lg-item" title="${esc(e.shores.join(' / ')||'shore t.b.c.')}${e.tighter?' — tighter than the floor\u2019s general pattern':e.general?' — the general pattern for this floor':' — looser than the general pattern'}"><i class="lg-sw" style="background:${e.color}"></i><b>${esc(e.pattern)}</b> <span class="lm-dim">${fmtArea(e.sf)}${e.shores.length?' · '+esc(e.shores.join(' / ')):''}${e.general?' · general':e.tighter?' · tighter':''}</span></span>`);
-  if(sc.pendSF>0)items.push(`<span class="lg-item"><i class="lg-sw lg-pend"></i><b>no shore yet</b> <span class="lm-dim">${fmtArea(sc.pendSF)}</span></span>`);
-  if(sc.absorbSF>0)items.push(`<span class="lg-item"><i class="lg-sw" style="background:${PAT_ABSORB}"></i><b>absorbed</b> <span class="lm-dim">${fmtArea(sc.absorbSF)} — no shores</span></span>`);
-  const laterSF=laterItems(L).filter(x=>x.st.level.name===f.name&&regionOnFloorTab(x.r,f,L)).reduce((n,x)=>n+x.g.sf,0);
-  if(laterSF>0)items.push(`<span class="lg-item" title="A later pour needs the reshoring under this floor tighter here; the tighter pattern is what goes in"><i class="lg-sw lg-later"></i><b>tightened by a later pour</b> <span class="lm-dim">${fmtArea(laterSF)}</span></span>`);
-  return `<div class="rs-legend">
-    <span class="rs-legend-h">Under ${esc(installFloorName(f))}${f.general!=null?` — install <b>${esc(f.general)}</b>`:''}${f.exceptions&&f.exceptions.length?`, tighten where shaded warm`:''}</span>
-    ${items.join('')}
-  </div>`;
-}
-// Show floor f's sheet on the plan (the sheet of f's floor that holds its cells).
-async function showFloorSheet(f){
-  if(!f||!f.level)return;
-  const li=state.levels.findIndex(l=>l.id===(f.level.defId||f.level.id));
-  if(li<0)return;
-  state.activeLevelIdx=li;state.activeZoneIdx=null;
-  if(state.pdf.pages){
-    const lv=state.levels[li];
-    const pg=levelSheets(lv).length>1&&f.cellList&&f.cellList.length?sheetForCells(levelZoneSheets(lv),f.cellList):lv.pdfPage;
-    if(pg!=null&&pg!==state.pdf.current)await goToPage(pg);
-  }
-  renderSidebar();renderCanvas();renderPageBar();
-}
-function setResultsFloor(L,key){
-  state.ui.resultsFloor=key||null;
-  const f=resultsFloor(L);
-  if(f)showFloorSheet(f).then(()=>renderSchedule());
-  else{
-    // back to the overview: the pour's own sheet
-    const li=state.levels.findIndex(l=>l.id===(L.pour.defId||L.pour.id));
-    if(li>=0){state.activeLevelIdx=li;const lv=state.levels[li];
-      if(state.pdf.pages&&lv.pdfPage!=null&&!levelHasPage(lv,state.pdf.current))goToPage(lv.pdfPage).then(()=>{renderSidebar();renderCanvas();renderPageBar()});}
-    renderCanvas();renderSchedule();
-  }
-}
-// ── NEXT: the rows still waiting for a shore, in reading order ──
-// zone (sheet order) → region (as listed) → floor (top down), then beams.
-const openCards=new Set();
-function cardKey(L,r){return L.pour.name+'|'+r.key}
-function beamCardKey(L,b){return L.pour.name+'|beam:'+b.beamId+'|'+b.regionKey}
-function outstandingItems(L){
-  const s=L&&L.solve;if(!s||!s.spatial)return [];
-  const zoned=pourIsZoned(L),zones=pourZoneSheets(L).map(z=>z.page);
-  const zi=pg=>{const i=zones.indexOf(pg);return i<0?zones.length:i};
-  const out=[];
-  s.regions.forEach((r,ri)=>{
-    const z=zoned?zi(regionZonePage(r,L)):0;
-    r.steps.forEach((st,si)=>{
-      if(st.open||st.grade||!(st.resultant>0)||!st.options||!st.options.length||st.chosen)return;
-      out.push({kind:'slab',ri,si,key:st.choiceKey,level:st.level,ord:z*1e6+ri*100+si,region:r,
-                floorKey:zoned?`${st.level.name}|${regionZonePage(r,L)}`:st.level.name,label:regionLabel(r,ri,L)});
-    });
-  });
-  (s.beams||[]).forEach((b,bi)=>{
-    const z=zoned?zi(beamZonePage(b,L)):0;
-    (b.rows||[]).forEach((row,si)=>{
-      if(row.open||row.grade||!(row.beamNet>0)||!row.options||!row.options.length||row.beamChosen)return;
-      out.push({kind:'beam',bi,si,key:row.beamKey,level:row.level,ord:z*1e6+5e5+bi*100+si,beam:b,
-                floorKey:zoned?`${row.level.name}|${beamZonePage(b,L)}`:row.level.name,label:beamLabel(b,bi)});
-    });
-  });
-  out.sort((a,b)=>a.ord-b.ord);
-  return out;
-}
-function nextHtml(L){
-  const items=outstandingItems(L);
-  if(!items.length)return '';
-  const ord=state.ui.nextOrd;
-  const at=ord==null?0:items.filter(x=>x.ord<=ord).length;
-  return `<div class="rs-next" title="Step through the rows that still need a shore: each one opens its card, lands on the plan and focuses the picker">
-    <b>${items.length} shore pick${items.length>1?'s':''} outstanding</b>
-    <button type="button" class="btn btn-sm" id="rsPrev" title="Previous row still needing a shore">\u25c2</button>
-    <span class="rs-next-n">${at?`${at} of ${items.length}`:`${items.length} to go`}</span>
-    <button type="button" class="btn btn-sm rs-next-go" id="rsNext" title="Next row still needing a shore">Next \u25b8</button>
-  </div>`;
-}
-function goOutstanding(L,dir){
-  const items=outstandingItems(L);
-  if(!items.length){toast('Every row has a shore.',2400);return}
-  const ord=state.ui.nextOrd;
-  let it;
-  if(dir<0)it=ord==null?items[items.length-1]:(items.slice().reverse().find(x=>x.ord<ord)||items[items.length-1]);
-  else it=ord==null?items[0]:(items.find(x=>x.ord>ord)||items[0]);
-  state.ui.nextOrd=it.ord;
-  // the tab follows the item, so the plan shows the floor being answered
-  if(resultsFloorKey()&&resultsFloorKey()!==it.floorKey){
-    const plan=pourInstallPlan(L);
-    state.ui.resultsFloor=plan&&plan.floors.some(f=>f.key===it.floorKey)?it.floorKey:null;
-  }
-  const obj=it.kind==='beam'?it.beam:it.region;
-  openCards.add(it.kind==='beam'?beamCardKey(L,it.beam):cardKey(L,it.region));
-  state.ui.highlight={cells:obj.cells,step:obj.cellStep,bb:obj.bb,label:it.label,_scroll:true,
-    regionKey:it.kind==='beam'?'beam:'+obj.beamId+'|'+obj.regionKey:obj.key,pour:L.pour.name,focusKey:it.key};
-  state.ui.regionMapPour=L.pour.name;
-  startAnts();
-  const li=state.levels.findIndex(l=>l.id===(it.level.defId||it.level.id));
-  renderSchedule();
-  // the sheet switch re-renders the schedule; the picker gets focus after
-  // the render that lasts
-  if(li>=0)showRegionOn(li,obj,it.label).then(()=>{
-    const h=state.ui.highlight;
-    if(h&&h.regionKey===(it.kind==='beam'?'beam:'+obj.beamId+'|'+obj.regionKey:obj.key)){h.focusKey=it.key;h._scroll=true}
-    renderSchedule();
-  });
-}
 function renderInstallSummary(L,host){
   const plan=pourInstallPlan(L);
   if(!plan){host.innerHTML='';return null}
   const hl=state.ui.highlight;
   const need=plan.floors.filter(f=>f.needsShores);
   const flName=f=>`${esc(f.name)}${f.zone?` <span class="inst-zone">${esc(f.zone)}</span>`:''}`;
-  const tabF=resultsFloor(L);                 // on a floor's tab, that floor's row alone
-  const rows=plan.floors.filter(f=>!tabF||f.key===tabF.key).map(f=>{
+  const rows=plan.floors.map(f=>{
     const lit=hl&&hl.regionKey==='floor:'+f.key&&hl.pour===plan.pour;
     if(!f.needsShores){
       const why=f.gradeSF?`on grade — takes the remaining ${f.gradePsf.toFixed(1)} PSF, nothing below it`
@@ -13279,9 +12437,7 @@ function renderInstallSummary(L,host){
       <div class="inst-fl">${flName(f)}<small>${f.rowCount} region${f.rowCount===1?'':'s'} above</small></div>
       ${installFloorSpec(f)}</div>`;
   }).join('');
-  // picks outstanding = rows with a legal shore not yet chosen; rows nothing
-  // reaches are counted on their own, after
-  const pend=plan.floors.reduce((n,f)=>n+Math.max(0,f.pending-f.noOptions),0);
+  const pend=plan.floors.reduce((n,f)=>n+f.pending,0);
   // "NOTHING TO SHORE AGAINST" used to be its own list above this summary.
   // Adolfo, Sep 17 2026: "very intrusive and takes up a lot of space. its
   // best if this is just relegated to stay within the items already shown in
@@ -13292,10 +12448,7 @@ function renderInstallSummary(L,host){
     <div class="rs-h">What goes in under each floor
       <span class="rs-hn">${need.length?`${need.length} floor${need.length>1?'s':''} to reshore`:'no reshoring needed'}${
         pend?` · <span class="lm-warn">${pend} shore pick${pend>1?'s':''} outstanding</span>`:''}${
-        ns?` · <span class="lm-warn" title="Rows where no shore reaches, or there is no slab under the pour — each is marked in red on its region below and opens on the plan when clicked">${ns} row${ns>1?'s':''} with nothing to shore against</span>`:''}${
-        (t=>t?` · <button type="button" class="rs-thru-n" id="rsThruNext" title="Shores that pass through an open floor to the slab below — each needs a look and an OK on its row">${t} through-shore${t>1?'s':''} to check</button>`:'')(throughItems(L).filter(x=>!x.accepted).length)}${
-        (t=>t?` · <button type="button" class="rs-later-n" id="rsLaterNext" title="Rows where a later pour needs the reshoring under the same floor tighter — the tighter pattern is what goes in">${t} row${t>1?'s':''} tightened by a later pour</button>`:'')(laterItems(L).length)}</span></div>
-    ${nextHtml(L)}
+        ns?` · <span class="lm-warn" title="Rows where no shore reaches, or there is no slab under the pour — each is marked in red on its region below and opens on the plan when clicked">${ns} row${ns>1?'s':''} with nothing to shore against</span>`:''}</span></div>
     ${need.length?bulkBarHtml(L):''}
     <div class="inst-list">${rows||'<p class="rs-empty">Nothing to reshore for this placement.</p>'}</div>
   </div>`;
@@ -13385,16 +12538,11 @@ function renderSchedule(){
     <span class="review-current">Calculated from current inputs</span>
     ${warnBits.length?`<div class="lm-conflicts">${warnBits.join('<br>')}</div>`:''}
     ${assumptionsHtml(L)}
-    ${importImpact?`<div class="review-impact"><b>Load import applied:</b> ${esc(importImpact)}. This result uses the updated loads.</div>`:''}
-    ${s.spatial?resultsTabsHtml(L):''}
-    ${s.spatial&&resultsFloor(L)?floorLegendHtml(L,resultsFloor(L)):''}`;
+    ${importImpact?`<div class="review-impact"><b>Load import applied:</b> ${esc(importImpact)}. This result uses the updated loads.</div>`:''}`;
 
   document.getElementById('schedPour').addEventListener('change',e=>{
-    schedPourIdx=+e.target.value;state.ui.assumptionOverlay=null;
-    state.ui.resultsFloor=null;state.ui.nextOrd=null;      // tabs and Next belong to a placement
-    renderSchedule();renderCanvas();
+    schedPourIdx=+e.target.value;state.ui.assumptionOverlay=null;renderSchedule();renderCanvas();
   });
-  head.querySelectorAll('.rs-tab').forEach(b=>b.addEventListener('click',()=>setResultsFloor(L,b.dataset.rsf||null)));
   const stepSel=document.getElementById('schedStep');
   if(stepSel)stepSel.addEventListener('change',e=>{
     state.project.solveStepFt=+e.target.value;persist();runSchedule();
@@ -13405,28 +12553,6 @@ function renderSchedule(){
   if(!s.spatial){host.innerHTML='';if(sumHost)sumHost.innerHTML='';return}
   if(sumHost){renderInstallSummary(L,sumHost);bindBulkBar(L);
     bindExcChips(sumHost,key=>{const plan=pourInstallPlan(L);return plan&&plan.floors.find(x=>x.key===key)},renderSchedule);
-    const ln=sumHost.querySelector('#rsLaterNext');
-    if(ln)ln.addEventListener('click',()=>{
-      const it=laterItems(L)[0];if(!it)return;
-      openCards.add(cardKey(L,it.r));
-      showPatchOn(it.st.level,it.g.cells,it.g.cellStep,it.g.bb,`${it.g.pattern} for the ${levelTagName(it.g.pour)} placement under ${it.st.level.name}`,'later:'+it.key,()=>{if(state.ui.highlight)state.ui.highlight._scroll=true;renderSchedule()});
-    });
-    const tn=sumHost.querySelector('#rsThruNext');
-    if(tn)tn.addEventListener('click',()=>{
-      const it=throughItems(L).find(x=>!x.accepted);if(!it)return;
-      const obj=it.beam?it.b:it.r;
-      openCards.add(it.beam?beamCardKey(L,it.b):cardKey(L,it.r));
-      const lbl=it.beam?beamLabel(it.b,it.bi):regionLabel(it.r,it.ri,L);
-      state.ui.highlight={cells:obj.cells,step:obj.cellStep,bb:obj.bb,label:lbl,_scroll:true,regionKey:it.beam?'beam:'+obj.beamId+'|'+obj.regionKey:obj.key,pour:L.pour.name};
-      state.ui.regionMapPour=L.pour.name;startAnts();
-      const lvl=it.beam?it.row.level:it.st.level;
-      const li=state.levels.findIndex(l=>l.id===(lvl.defId||lvl.id));
-      renderSchedule();
-      if(li>=0)showRegionOn(li,obj,lbl).then(()=>{if(state.ui.highlight)state.ui.highlight._scroll=true;renderSchedule()});
-    });
-    const nx=sumHost.querySelector('#rsNext'),pv=sumHost.querySelector('#rsPrev');
-    if(nx)nx.addEventListener('click',()=>goOutstanding(L,1));
-    if(pv)pv.addEventListener('click',()=>goOutstanding(L,-1));
     sumHost.querySelectorAll('.inst-row[data-fl]').forEach(el=>el.addEventListener('click',()=>{
       const plan=pourInstallPlan(L);
       const f=plan&&plan.floors.find(x=>x.key===el.dataset.fl);
@@ -13436,9 +12562,6 @@ function renderSchedule(){
 
   const defIdxOf=lv=>state.levels.findIndex(l=>l.id===(lv.defId||lv.id));
   const hl=state.ui.highlight;
-  const tabF=resultsFloor(L);                       // the floor tab, if one is open
-  const planFloors=(pourInstallPlan(L)||{floors:[]}).floors;
-  const chipFloors=r=>planFloors.filter(f=>(f.needsShores||f.pending||f.gradeSF||f.openSF||f.absorbedSF)&&regionOnFloorTab(r,f,L)&&stepForFloor(r,f));
   const regionCards=s.regions.map((r,ri)=>{
     // THE ANSWER, THEN THE ARITHMETIC. The strip is one line per floor —
     // what arrives, how tall the shore is, which shore, what spacing — and
@@ -13446,9 +12569,6 @@ function renderSchedule(){
     // The shore control lives in the strip, once: two copies of the same
     // select is two things to keep in step and no more useful than one.
     const strip=r.steps.map((st,si)=>{
-      // on a floor's tab the strip is that floor's row alone — the card is
-      // the explanation of one answer, not the whole cascade
-      if(tabF&&st.level&&st.level.name!==tabF.name)return '';
       const rowAttr=`data-ri="${ri}" data-lv="${defIdxOf(st.level)}" title="Show this region on ${esc(st.level.name)}'s sheet"`;
       // where the load goes when this floor has no slab here: the next floor
       // down that does (what the old "nothing to shore against" list said)
@@ -13467,21 +12587,14 @@ function renderSchedule(){
         ? `<select class="sched-shore" data-key="${esc(st.choiceKey)}">
              <option value="">— choose (${st.options.length} legal) —</option>${opts}</select>`
         : `<span class="lm-warn">${st.supportLevel?`no shore in the catalog reaches ${st.shoreHeightFt!=null?esc(feetToStr(st.shoreHeightFt)):'this height'}`:'no floor below to stand on'}</span>`;
-      const later=laterGoverns(L,r,st);
-      const laterHtml=later?`<div class="ra-later">\u2191 <b>${esc(later.pattern)} goes in here</b> — this placement needs ${esc(st.chosen.pattern)}, but the ${esc(levelTagName(later.pour))} placement needs ${esc(later.pattern)} under ${esc(st.level.name)} over ${later.whole?'this whole area':fmtArea(later.sf)+' of it'}, and the reshoring goes in once for both
-          <button type="button" class="later-go" data-later="${esc(st.choiceKey)}" title="Show on the plan where the ${esc(levelTagName(later.pour))} placement needs it tighter">${later.whole?'show':'show where'}</button></div>`:'';
-      const thru=isThrough(st),thruOk=thru&&throughAccepted(st.choiceKey);
-      const thruHtml=thru?`<div class="ra-thru${thruOk?' ok':''}">${thruOk?'\u2713 ':'\u26a0 '}<b>${esc(feetToStr(st.shoreHeightFt))} through-shore</b> — ${esc(throughText(r,st))}: nothing to stand on directly under ${esc(st.level.name)}${
-          thruOk?` <button type="button" class="ss-undo" data-thru="${esc(st.choiceKey)}" data-thru-on="0" title="Flag this through-shore again">recheck</button>`
-                :` <button type="button" class="btn btn-sm ss-ok" data-thru="${esc(st.choiceKey)}" data-thru-on="1" title="Accept that the reshore under ${esc(st.level.name)} runs ${esc(feetToStr(st.shoreHeightFt))} down to ${esc(st.supportLevel.name)} here">OK \u2014 shore through</button>`}</div>`:'';
-      return`<div class="ra-row${ch?'':' pend'}${thru&&!thruOk?' thru':''} sched-go" ${rowAttr}>${fl}
+      return`<div class="ra-row${ch?'':' pend'} sched-go" ${rowAttr}>${fl}
         <div class="ra-res" title="${st.capacity} PSF capacity taken off what arrives"><b>${st.resultant.toFixed(1)}</b> psf</div>
         <div class="ra-pick">
-          <span class="rs-dim${thru?' rs-thru':''}" title="${st.supportLevel?`stands on ${esc(st.supportLevel.name)}${st.spansOpen?` through ${st.spansOpen} open floor${st.spansOpen>1?'s':''}`:''}`:'nothing below to stand on'}">${
-            st.shoreHeightFt!=null?esc(feetToStr(st.shoreHeightFt)):'—'}${thru?' \u2193'+esc(st.supportLevel.name):''}</span>
+          <span class="rs-dim" title="${st.supportLevel?`stands on ${esc(st.supportLevel.name)}${st.spansOpen?` through ${st.spansOpen} open floor${st.spansOpen>1?'s':''}`:''}`:'nothing below to stand on'}">${
+            st.shoreHeightFt!=null?esc(feetToStr(st.shoreHeightFt)):'—'}</span>
           ${pick}
           ${ch?`<span class="rs-pat" title="${Math.round(ch.sfPerShore)} SF per shore">${esc(ch.pattern)}</span>`:''}
-        </div>${laterHtml}${thruHtml}</div>`;
+        </div></div>`;
     }).join('');
     const rows=r.steps.map(st=>{
       const rowAttr=`data-ri="${ri}" data-lv="${defIdxOf(st.level)}" title="Show this region on ${esc(st.level.name)}'s sheet"`;
@@ -13515,19 +12628,12 @@ function renderSchedule(){
         <td class="sched-num"><b>${ch?ch.pattern:'—'}</b></td></tr>`;
     }).join('');
     const lit=hl&&hl.regionKey===r.key&&hl.pour===L.pour.name;
-    const ck=cardKey(L,r);
-    const open=lit||openCards.has(ck);
-    const chips=chipFloors(r).map(f=>floorChip(r,f,L,!!tabF&&tabF.key===f.key)).join('');
-    return `<div class="sched-region${lit?' lit':''}${open?'':' folded'}" data-card-ri="${ri}" data-card="${esc(ck)}">
+    return `<div class="sched-region${lit?' lit':''}" data-card-ri="${ri}">
       <div class="sched-region-head sched-go" data-ri="${ri}" data-lv="${defIdxOf(L.pour)}" title="Show this region on the pour level's sheet${r.loadingMarks.length?` · pour-level mark${r.loadingMarks.length>1?'s':''} ${esc(r.loadingMarks.join(', '))}`:''}">
-        <button type="button" class="card-fold" data-fold="${esc(ck)}" title="${open?'Fold this region back to one line':'Open this region: the strip, the numbers, the diagram'}">${open?'\u25be':'\u25b8'}</button>
         <span class="lm-swatch" style="background:${regionColorCss(regionColorIdx(r,ri,L),0.9)}" title="This colour marks the region on the plan and in the print legend"></span>
         <b>${esc(regionLabel(r,ri,L))}</b>
-        <span class="card-sf">${fmtArea(r.areaSF)}</span>
-        <span class="card-chips">${chips}</span>
+        <span class="sched-stat">${(t=>t?esc(t)+' · ':'')(regionGridTag(r))}${(m=>m.length?esc(m.join('/'))+' · ':'')(regionMarks(r))}${fmtArea(r.areaSF)} · placement ${r.placementLoad.toFixed(1)} PSF · ${r.reshoreLevels} reshore level${r.reshoreLevels===1?'':'s'}${r.edgeSF?` · <span title="${fmtArea(r.edgeSF)} of this region lies just outside where a lower floor's slab is drawn, within the ${edgeToleranceFt()} ft slab edge tolerance (Settings), and is taken as bearing on that floor">${r.edgeSF>=r.areaSF*0.995?'within':fmtArea(r.edgeSF)+' within'} edge tolerance</span>`:''}${r.sliverSF?` · <span class="lm-dim" title="${r.sliverCount} sliver region${r.sliverCount>1?'s':''} under ${minRegionSF()} SF (Settings: minimum region size) merged into this one: each shares the most boundary with it AND reads the same way down the stack. A patch with a different load path — no slab below, an opening, on grade — is never merged, however small">absorbs ${fmtArea(r.sliverSF)} of slivers</span>`:''}</span>
       </div>
-      <div class="card-more">
-        <span class="sched-stat card-stat">${(t=>t?esc(t)+' · ':'')(regionGridTag(r))}${(m=>m.length?esc(m.join('/'))+' · ':'')(regionMarks(r))}${fmtArea(r.areaSF)} · placement ${r.placementLoad.toFixed(1)} PSF · ${r.reshoreLevels} reshore level${r.reshoreLevels===1?'':'s'}${r.edgeSF?` · <span title="${fmtArea(r.edgeSF)} of this region overhangs a lower floor's edge by ${OVERHANG_BEAR_FT} ft or less; falsework brings that load back to the slab edge, so it bears on that floor">${r.edgeSF>=r.areaSF*0.995?'overhang':fmtArea(r.edgeSF)+' overhang'} \u2264 ${OVERHANG_BEAR_FT} ft, bearing</span>`:''}${r.sliverSF?` · <span class="lm-dim" title="${r.sliverCount} sliver region${r.sliverCount>1?'s':''} under ${minRegionSF()} SF (Settings: minimum region size) merged into this one: each shares the most boundary with it AND reads the same way down the stack. A patch with a different load path — no slab below, an opening, on grade — is never merged, however small">absorbs ${fmtArea(r.sliverSF)} of slivers</span>`:''}</span>
       <div class="ra-strip">${strip}</div>
       <div class="rs-tools">
         <input class="sched-rlabel" data-rkey="${esc(r.key)}" value="${esc(regionCustomLabel(L.pour.name,r.key))}" placeholder="name this region — West half, Podium, core…" title="Give this region a name of your own. Leave it empty and it is named from the grid bays it covers and the mark carrying it.">
@@ -13537,22 +12643,11 @@ function renderSchedule(){
         <thead><tr><th title="The shore under this floor's slab, standing on the floor below">Reshore under</th><th title="Loading mark of the floor that carries the load here (from its tagged area or its level default)">Mark</th><th>Capacity<br><span>PSF</span></th><th>Resultant<br><span>PSF</span></th>
           <th title="Floor below T.O.S. up to this soffit">Shore height</th><th>Shore</th><th>SF/shore</th><th>Pattern</th></tr></thead>
         <tbody>${rows}</tbody>
-      </table>${diagOpen.has('r|'+L.pour.name+'|'+r.key)?`<div class="dg-wrap">${loadPathSvg(r,L)}</div>`:''}
-      </div></div>`;
+      </table>${diagOpen.has('r|'+L.pour.name+'|'+r.key)?`<div class="dg-wrap">${loadPathSvg(r,L)}</div>`:''}</div>`;
   });
   const beamCards=(s.beams||[]).map((b,bi)=>beamBlock(b,bi,L,hl));
   const BEAMS_HEAD=`<div class="sched-beams-head">Beams — stem line loads, shored separately from the slab grid above</div>`;
-  if(tabF){
-    // one floor's tab: the regions (and beams) that decide what goes in
-    // under it, its zone only
-    const ris=s.regions.map((r,ri)=>ri).filter(ri=>regionOnFloorTab(s.regions[ri],tabF,L)&&stepForFloor(s.regions[ri],tabF));
-    const bis=(s.beams||[]).map((b,bi)=>bi).filter(bi=>(!pourIsZoned(L)||beamZonePage(s.beams[bi],L)===tabF.zonePage)&&(s.beams[bi].rows||[]).some(row=>row.level&&row.level.name===tabF.name));
-    host.innerHTML=`<div class="sched-zone-head" title="The regions of this placement over ${esc(installFloorName(tabF))} — each card's chip is what goes in under ${esc(tabF.name)} there">
-        <b>Under ${esc(installFloorName(tabF))}</b><span class="sched-stat">${ris.length} region${ris.length===1?'':'s'}${bis.length?` · ${bis.length} beam${bis.length===1?'':'s'}`:''} · click a card for its numbers</span></div>`
-      +ris.map(ri=>regionCards[ri]).join('')
-      +(bis.length?BEAMS_HEAD+bis.map(bi=>beamCards[bi]).join(''):'')
-      +(!ris.length&&!bis.length?`<p class="rs-empty">Nothing of this placement is carried by ${esc(installFloorName(tabF))}.</p>`:'');
-  }else if(pourIsZoned(L)){
+  if(pourIsZoned(L)){
     // one block per zone, in sheet order: its regions, then its beams
     const zones=pourZoneSheets(L);
     host.innerHTML=zones.map(z=>{
@@ -13576,51 +12671,18 @@ function renderSchedule(){
   }
 
   groupAnswerCards(host,L);
-  // the fold arrow opens or closes a card without touching the plan
-  host.querySelectorAll('button.card-fold').forEach(b=>b.addEventListener('click',e=>{
-    e.stopPropagation();
-    const k=b.dataset.fold;
-    const card=b.closest('.sched-region');
-    const isOpen=card&&!card.classList.contains('folded');
-    if(isOpen){openCards.delete(k);if(card.classList.contains('lit')){setResultHighlight(null)}}
-    else openCards.add(k);
-    renderSchedule();
-  }));
-  host.querySelectorAll('button[data-later]').forEach(b=>b.addEventListener('click',e=>{
-    e.stopPropagation();
-    const it=laterItems(L).find(x=>x.key===b.dataset.later);if(!it)return;
-    openCards.add(cardKey(L,it.r));
-    showPatchOn(it.st.level,it.g.cells,it.g.cellStep,it.g.bb,`${it.g.pattern} for the ${levelTagName(it.g.pour)} placement under ${it.st.level.name}`,'later:'+it.key,renderSchedule);
-  }));
-  host.querySelectorAll('button[data-thru]').forEach(b=>b.addEventListener('click',e=>{
-    e.stopPropagation();
-    setThroughOk(b.dataset.thru,b.dataset.thruOn==='1');
-    runSchedule();renderCanvas();          // the acceptance is part of the job, like a shore pick
-  }));
-  // click a region or a row: show where on the plan it is (and open the card)
+  // click a region or a row: show where on the plan it is
   host.querySelectorAll('.sched-go').forEach(el=>{
     el.addEventListener('click',e=>{
       if(e.target.closest('select,input,button'))return;
       const isBeam=el.dataset.bi!=null;
       const r=isBeam?s.beams[+el.dataset.bi]:s.regions[+el.dataset.ri];const li=+el.dataset.lv;
       if(!r||li<0)return;
-      const card=el.closest('.sched-region');
-      if(card&&card.dataset.card)openCards.add(card.dataset.card);
       const lbl=isBeam?beamLabel(r,+el.dataset.bi):regionLabel(r,+el.dataset.ri,L);
       state.ui.highlight={cells:r.cells,step:r.cellStep,bb:r.bb,label:lbl,regionKey:isBeam?'beam:'+r.beamId+'|'+r.regionKey:r.key,pour:L.pour.name};
       state.ui.regionMapPour=L.pour.name;
       startAnts();
       showRegionOn(li,r,lbl).then(()=>renderSchedule());
-    });
-  });
-  // a beam out of its group gets its own row and picks; regroup puts it back
-  host.querySelectorAll('button.beam-breakout,button.beam-regroup').forEach(btn=>{
-    btn.addEventListener('click',e=>{
-      e.stopPropagation();
-      const on=btn.classList.contains('beam-breakout');
-      history.record(on?'Break beam out of its group':'Regroup beam');
-      setBeamBreakout(L,btn.dataset.member,on);
-      persist();renderSchedule();renderCanvas();
     });
   });
   host.querySelectorAll('input.sched-rlabel').forEach(inp=>{
@@ -13670,15 +12732,9 @@ function renderSchedule(){
   if(hlNow&&hlNow._scroll){
     delete hlNow._scroll;
     const lit=host.querySelector('.sched-region.lit');
-    if(lit&&lit.scrollIntoView)lit.scrollIntoView({block:'center'});
-  }
-  if(hlNow&&hlNow.focusKey){
-    const sel=host.querySelector(`select.sched-shore[data-key="${cssEsc(hlNow.focusKey)}"]`);
-    if(sel){try{sel.focus({preventScroll:true})}catch(e){sel.focus()}}
-    delete hlNow.focusKey;
+    if(lit&&lit.scrollIntoView)lit.scrollIntoView({block:'nearest'});
   }
 }
-function cssEsc(v){return (window.CSS&&CSS.escape)?CSS.escape(String(v)):String(v).replace(/["\\]/g,'\\$&')}
 
 // Beam stem: a line load along the beam, carried by its own line of shores
 // (or clusters) — shown on its own, not mixed into the slab grid it sits
@@ -13688,7 +12744,7 @@ function cssEsc(v){return (window.CSS&&CSS.escape)?CSS.escape(String(v)):String(
 // cluster x shore capacity / PLF, capped at 10 ft.
 // Beams are named the same way, size first: 48"×20" Beam – L2 54 PSF – 1B SOG
 function beamPathName(b){
-  return `${b.widthIn}"×${b.depthIn}" Beam${b.stemSplit?` (${inchStr(b.stemIn)} stem)`:''}`+((b.rows||[]).length?' – '+b.rows.map(pathStepName).join(' – '):'');
+  return `${b.widthIn}"×${b.depthIn}" Beam`+((b.rows||[]).length?' – '+b.rows.map(pathStepName).join(' – '):'');
 }
 function beamNamesFor(L){
   if(L._beamNames)return L._beamNames;
@@ -13803,46 +12859,26 @@ function beamBlock(b,bi,L,hl){
       <td>${Math.round(r.beamIn)}</td>
       ${spareCell}
       <td class="sched-num"><b>${Math.round(r.beamNet)}</b></td>
-      <td title="${r.supportLevel?`stands on ${esc(r.supportLevel.name)}${r.spansOpen?' through an open floor':''}${b.below&&b.below[r.levelIdx]?` · to the soffit of the ${b.below[r.levelIdx].widthIn}" beam below`:''}`:'nothing below to stand on'}">${r.shoreHeightFt!=null?feetToStr(r.shoreHeightFt):'—'}${b.below&&b.below[r.levelIdx]&&r.beamPerCluster>=2&&b.below[r.levelIdx].widthIn<b.widthIn?` <span class="lm-warn" title="outer shores may stand on the slab beside the ${b.below[r.levelIdx].widthIn}\u2033 beam below">\u26a0</span>`:''}${r.spansOpen&&r.supportLevel?` <span class="${throughAccepted(r.beamKey)?'lm-dim':'lm-warn'}">↓${esc(r.supportLevel.name)}</span>${
-          throughAccepted(r.beamKey)?` <button type="button" class="ss-undo" data-thru="${esc(r.beamKey)}" data-thru-on="0" title="Flag this through-shore again">recheck</button>`
-          :` <button type="button" class="btn btn-sm ss-ok" data-thru="${esc(r.beamKey)}" data-thru-on="1" title="Accept that these beam shores run through the open floor down to ${esc(r.supportLevel.name)}">OK</button>`}`:''}</td>
+      <td title="${r.supportLevel?`stands on ${esc(r.supportLevel.name)}`:'nothing below to stand on'}">${r.shoreHeightFt!=null?feetToStr(r.shoreHeightFt):'—'}${r.spansOpen?` <span class="lm-dim">↓${esc(r.supportLevel.name)}</span>`:''}</td>
       <td>${r.options.length?`<select class="sched-shore" data-key="${esc(r.beamKey)}"><option value="">— choose (${r.options.length} legal) —</option>${opts}</select>`:`<span class="lm-warn">${r.supportLevel?'no shore fits this height':'no floor below to stand on'}</span>`}</td>
       <td><select class="sched-beam-n sel-styled" data-key="${esc(r.beamKey)}">${nOpts}</select></td>
       <td class="sched-num"><b>${r.beamSpacingFt!=null?feetToStr(r.beamSpacingFt)+' o.c.':'—'}</b></td></tr>`;
   }).join('');
   const lit=hl&&hl.regionKey==='beam:'+b.beamId+'|'+b.regionKey&&hl.pour===L.pour.name;
-  const ck=beamCardKey(L,b);
-  const open=lit||openCards.has(ck);
-  const tabF=resultsFloor(L);
-  const chips=b.rows.map(row=>{
-    const who=`<span class="pc-fl">${esc(row.level.name)}</span>`,act=tabF&&tabF.name===row.level.name?' active':'';
-    if(row.open)return `<span class="pat-chip quiet${act}">${who}${row.noSlab?'no slab':'opening'}</span>`;
-    if(row.grade)return `<span class="pat-chip quiet${act}">${who}SOG</span>`;
-    if(!(row.beamNet>0))return `<span class="pat-chip quiet${act}" title="absorbed by the slab here">${who}absorbed</span>`;
-    if(!row.beamChosen)return `<span class="pat-chip ${row.options&&row.options.length?'pend':'warn'}${act}">${who}${row.options&&row.options.length?'pick a shore':'no shore reaches'}</span>`;
-    return `<span class="pat-chip${act}" style="--pc:${PAT_GENERAL}" title="${esc(row.beamChosen.shore.name)}${row.beamPerCluster>1?' · '+row.beamPerCluster+' per cluster':''}">${who}<b>${row.beamSpacingFt!=null?esc(feetToStr(row.beamSpacingFt))+' o.c.':esc(row.beamChosen.shore.name)}</b></span>`;
-  }).join('');
-  return `<div class="sched-region sched-beam${lit?' lit':''}${open?'':' folded'}" data-card="${esc(ck)}">
+  return `<div class="sched-region sched-beam${lit?' lit':''}">
     <div class="sched-region-head sched-go" data-bi="${bi}" data-lv="${defIdxOf(L.pour)}" title="Show this beam on the pour level's sheet">
-      <button type="button" class="card-fold" data-fold="${esc(ck)}" title="${open?'Fold this beam back to one line':'Open this beam: its rows and the diagram'}">${open?'\u25be':'\u25b8'}</button>
       <span class="lm-swatch" style="background:${slabInkHex(b.zone)}"></span>
-      ${b.group?`<span class="beam-count" title="${b.count} beams with the same size, stem, slab condition and shore heights (within an inch) share this row — one pick covers all of them">${b.count}×</span>`:''}<b>${esc(beamLabel(b,bi))}</b>${b.brokenOut?` <span class="beam-tag" title="This beam has its own row and picks; regroup it below">broken out</span>`:''}
-      <span class="card-sf">${b.lengthFt!=null?b.lengthFt+' LF':fmtArea(b.areaSF)}${b.group?` · ${b.count} beams`:''}</span>
-      <span class="card-chips">${chips}</span>
-    </div>
-    <div class="card-more">
+      <b>${esc(beamLabel(b,bi))}</b>
       ${diagToggleHtml('b|'+L.pour.name+'|'+b.beamId+'|'+b.regionKey)}
-      <span class="sched-stat card-stat">${(t=>t?esc(t)+' · ':'')(gridTagForBB(b.bb))}${b.lengthFt!=null?b.lengthFt+' LF · ':''}stem ${inchStr(b.stemIn)} below the ${inchStr(b.thicknessIn)} slab → <b>${b.plf} PLF</b> · ${b.beamLevels} reshore level${b.beamLevels===1?'':'s'}${b.absorbedAt?` · absorbed at ${esc(b.absorbedAt.name)}`:(b.beamUnresolved?' · <span class="lm-warn">not absorbed in the defined stack</span>':'')}</span>
-    ${b.group?`<div class="beam-members"><span class="lm-dim">Members — one pick covers all of them:</span>${b.members.map(m=>`<span class="beam-member" title="${esc(m.label||'')}${m.below&&b.belowDiffers?' · meets something different below — check':''}">${esc(m.label||(m.widthIn+'\u2033\u00d7'+m.depthIn+'\u2033'))}${(t=>t?' · '+esc(t):'')(gridTagForBB(m.bb))}${m.lengthFt!=null?' · '+m.lengthFt+' LF':''}<button type="button" class="ss-undo beam-breakout" data-member="${esc(m.memberId)}" title="Give this beam its own row, shore pick and effective width">break out</button></span>`).join('')}</div>`:''}
-    ${b.brokenOut?`<div class="beam-members"><button type="button" class="btn btn-sm beam-regroup" data-member="${esc(b.memberId)}" title="Put this beam back with the identical beams it was broken out of">Regroup with the identical beams</button></div>`:''}
+      <span class="sched-stat">${(t=>t?esc(t)+' · ':'')(gridTagForBB(b.bb))}${b.lengthFt!=null?b.lengthFt+' LF · ':''}stem ${inchStr(b.stemIn)} below the ${inchStr(b.thicknessIn)} slab → <b>${b.plf} PLF</b> · ${b.beamLevels} reshore level${b.beamLevels===1?'':'s'}${b.absorbedAt?` · absorbed at ${esc(b.absorbedAt.name)}`:(b.beamUnresolved?' · <span class="lm-warn">not absorbed in the defined stack</span>':'')}</span>
+    </div>
     ${beamAnswerStrip(b)}
     <table class="sched-table sched-beam-table">
       <thead><tr><th title="The beam-line shores under this floor's slab">Reshore under</th><th title="Stem load arriving at this floor">Stem in<br><span>PLF</span></th>
         <th title="What this floor's slab can still take under the beam: (capacity − slab load arriving) PSF × effective width ft">Slab spare<br><span>PSF × eff. width ft = PLF</span></th>
         <th title="Stem load the beam shores must carry here">Shore<br><span>PLF</span></th><th>Shore height</th><th>Shore</th><th title="Shores per cluster along the beam">Per cluster</th><th title="Cluster spacing along the beam, capped at 10 ft">Spacing o.c.</th></tr></thead>
       <tbody>${rows}</tbody>
-    </table>${diagOpen.has('b|'+L.pour.name+'|'+b.beamId+'|'+b.regionKey)?`<div class="dg-wrap">${beamPathSvg({...b,index:bi},L)}</div>`:''}
-    </div></div>`;
+    </table>${diagOpen.has('b|'+L.pour.name+'|'+b.beamId+'|'+b.regionKey)?`<div class="dg-wrap">${beamPathSvg({...b,index:bi},L)}</div>`:''}</div>`;
 }
 
 
@@ -14182,21 +13218,7 @@ function sequencePlan(all){
       o.floorPlan=f;
       o.own=seqGeneralFrom(o.cells,cellArea,thrPct);
       o.firstInstall=f&&f.installBefore===e.pour.name;
-      o.tighterThanNeeded=!!(f&&f.general!=null&&o.own.general!=null&&patternArea(f.general)<patternArea(o.own.general));
-      // the cells where another placement's pattern is tighter than this
-      // one's — the ground the warning points at
-      if(f){
-        const cells=[];let bb=null;const pours=new Set();
-        for(const [k,c] of o.cells){
-          if(!c.pat)continue;
-          const g=f.cells.get(k);
-          if(!g||!g.pat||!(patternArea(g.pat)<patternArea(c.pat)))continue;
-          const [a,b]=k.split(',').map(Number);const x=a*step,y=b*step;
-          cells.push(x,y);(g.pours||[]).forEach(p=>{if(p!==e.pour.name)pours.add(p)});
-          if(!bb)bb={minX:x,minY:y,maxX:x,maxY:y};else{if(x<bb.minX)bb.minX=x;if(x>bb.maxX)bb.maxX=x;if(y<bb.minY)bb.minY=y;if(y>bb.maxY)bb.maxY=y}
-        }
-        o.later=cells.length?{cells,bb,cellStep:step,sf:cells.length/2*cellArea,pours:[...pours]}:null;
-      }
+      o.tighterThanNeeded=!!(f&&f.general!=null&&o.own.general!=null&&f.general<o.own.general);
     }
     e.releases=[...floors.values()].filter(f=>f.releaseAfter===e.pour.name).map(f=>f.name);
     // the same floors, with what they are and what they carried, so the strip
@@ -14314,8 +13336,7 @@ function renderSequence(){
           const beamTxt=bms.length?`<div class="seq-beam">${bms.map(b=>`beam ${esc(b.label.replace(/^B\d+ · /,''))}: ${b.shore?esc(b.shore):'<span class="lm-warn">shore t.b.c.</span>'}${b.per>1?` · ${b.per} per cluster`:''}${b.spacingFt!=null?` at ${feetToStr(b.spacingFt)} o.c.`:''}`).join('<br>')}</div>`:'';
           if(o.firstInstall){
             return `<div class="seq-floor"><span class="seq-tag seq-install">install</span> under <b>${esc(o.level.name)}</b> — ${seqFloorSpec(f)}
-              ${o.tighterThanNeeded||o.later?`<div class="seq-note seq-later">\u2191 this placement alone would need only ${patStr(o.own.general)}; the ${esc((o.later&&o.later.pours.length?o.later.pours:(f.governedBy||[])).join(', '))} placement governs${
-                o.later?` over ${fmtArea(o.later.sf)} <button type="button" class="later-go" data-seqlater="${esc(e.pour.name)}|${esc(o.level.name)}" title="Show on the plan where the later placement needs it tighter">show where</button>`:''}</div>`:''}
+              ${o.tighterThanNeeded?`<div class="seq-note">this placement alone would need only ${patStr(o.own.general)}; the ${esc((f.governedBy||[]).join(', '))} placement governs</div>`:''}
               ${beamTxt}</div>`;
           }
           return `<div class="seq-floor"><span class="seq-tag seq-keep">leave</span> under <b>${esc(o.level.name)}</b> — ${patStr(f&&f.general)} already in (installed for ${esc(f&&f.installBefore||'?')})${beamTxt}</div>`;
@@ -14343,13 +13364,6 @@ function renderSequence(){
   const pr=document.getElementById('seqPrint');
   if(pr)pr.addEventListener('click',printSequence);
   bindExcChips(host,name=>(P.floors||[]).find(f=>f.name===name),renderSequence);
-  host.querySelectorAll('button[data-seqlater]').forEach(b=>b.addEventListener('click',e=>{
-    e.stopPropagation();
-    const [pour,floor]=b.dataset.seqlater.split('|');
-    const en=P.placements.find(x=>x.pour.name===pour);const o=en&&en.floors.find(x=>x.level.name===floor);
-    if(!o||!o.later)return;
-    showPatchOn(o.level,o.later.cells,o.later.cellStep,o.later.bb,`tighter for the ${o.later.pours.map(levelTagName).join(', ')} placement under ${floor}`,'later:'+b.dataset.seqlater,renderSequence);
-  }));
 }
 // ── MCC BRAND ──
 // The approved primary logo as a data: URI. Empty until the art is dropped
@@ -14526,7 +13540,7 @@ function printSchedule(){
   <p class="note">Capacity = SDL + 1.6/1.3 &times; LL (&times; 0.6 on the live-load term where reduced per code), truncated.
      Placement load = slab thickness / 12 &times; 150 + construction dead load. Shore spacing capped at 10 &times; 10 ft.
      "Reshore under LX" is the shore between the T.O.S. of the floor below and the underside of the LX slab; its height is measured that way.
-     A floor with a floor edge drawn exists only inside it; an overhang of ${OVERHANG_BEAR_FT} ft or less past that edge bears on the floor (falsework carries it back to the slab edge), a wider one is no slab and the shore above spans through to the next slab, flagged for review. A floor without an edge exists everywhere. Where loading areas overlap, the smaller area cuts out of the larger one and governs its own space.
+     A floor with a floor edge drawn exists only inside it (plus a ${edgeToleranceFt()} ft slab edge tolerance); a floor without one exists everywhere. Where loading areas overlap, the smaller area cuts out of the larger one and governs its own space.
      Where no drawn area covers a point, the floor's typical capacity applies; the floor being poured contributes its slab and construction load only, never a capacity.
      On the floor being poured, the floor edge decides where the concrete goes; with no edge drawn, its loading areas and its slab areas together are the extent and an opening punches out of both.
      Regions are named by the grid bays they cover and the mark carrying them, unless named by hand; the colour is keyed to the region's own conditions, so it stays with the same piece of floor across revisions.
@@ -15481,8 +14495,13 @@ function mountFlow(){
     };
     renderKindColors();
     adv.insertBefore(colBox,dlRow.nextSibling);
-    // the slab-edge tolerance row is gone: overhangs of 3 ft or less bear, wider ones are flagged (see OVERHANG_BEAR_FT)
-    const tolNote=dlRow;                // the next rows still anchor after the dead-load row
+    const tolRow=document.createElement('label');tolRow.className='adv-row';
+    tolRow.title='A pour sample this far outside where a lower floor\'s slab is drawn — its floor edge, or its loading areas where it has no edge — still counts as bearing on that floor (small overhangs, drafting slop). 0 turns it off.';
+    tolRow.innerHTML=`Slab edge tolerance <input id="advEdgeTol" type="number" step="0.5" min="0" style="width:56px"> ft`;
+    adv.insertBefore(tolRow,dlRow.nextSibling);
+    const tolNote=document.createElement('div');tolNote.className='adv-note';
+    tolNote.textContent='Where the slab you are pouring overhangs the floor below by up to this much, the overhang is still taken as bearing on that floor instead of being flagged as having nothing under it. Covers real overhangs and drafting slop. 0 turns it off.';
+    adv.insertBefore(tolNote,tolRow.nextSibling);
     const minRow=document.createElement('label');minRow.className='adv-row';
     minRow.title='A region smaller than this is absorbed by the neighbour it shares the most boundary with — but only one that reads the same way down the stack.';
     minRow.innerHTML=`Minimum region size <input id="advMinRegion" type="number" step="50" min="0" style="width:56px"> SF`;
@@ -15496,6 +14515,14 @@ function mountFlow(){
       if(isNaN(v)||v<0){toast('Minimum region size must be 0 or more');minIn.value=minRegionSF();return}
       if(v===minRegionSF())return;
       history.record('Set minimum region size');state.project.minRegionSF=v;state.results=null;
+      persist();if(curStep==='results')runSchedule();
+    });
+    const tolIn=tolRow.querySelector('#advEdgeTol');tolIn.value=edgeToleranceFt();
+    tolIn.addEventListener('change',()=>{
+      const v=parseFloat(tolIn.value);
+      if(isNaN(v)||v<0){toast('Edge tolerance must be 0 or more feet');tolIn.value=edgeToleranceFt();return}
+      if(v===edgeToleranceFt())return;
+      history.record('Set slab edge tolerance');state.project.edgeTolFt=v;state.results=null;
       persist();if(curStep==='results')runSchedule();
     });
     const dlIn=dlRow.querySelector('#advDL');dlIn.value=projectDL();
@@ -19770,7 +18797,7 @@ const collapsedAnswerGroups=new Set();
 // levels, the shore catalog and the project settings, and nothing else.
 // zones, the sheets still to check and the levels confirmation are bookkeeping
 // for the Building step, not inputs to the calculation
-const NON_INPUT_PROJECT_KEYS=['shoreChoices','regionLabels','name','zones','sheetUnsure','levelsConfirmed','beamBreakout'];
+const NON_INPUT_PROJECT_KEYS=['shoreChoices','regionLabels','name','zones','sheetUnsure','levelsConfirmed'];
 function calculationKey(doc){
   const d=doc||serializeDoc();
   // project is small: sort it, and drop the empty maps lazy getters leave
@@ -19964,7 +18991,7 @@ function assumptionItems(L){
     cells:(a.cells&&a.cells.length)?a.cells:(a.mp?mpCells(a.mp,L.solve.step):[])}));
 }
 function assumptionText(a){
-  const titles={extent:'No floor edge: slab assumed to extend everywhere',edge:`Overhang of ${OVERHANG_BEAR_FT} ft or less taken as bearing on the floor below`,capacity:'Typical capacity used outside tagged loading areas'};
+  const titles={extent:'No floor edge: slab assumed to extend everywhere',edge:'Bearing accepted through slab-edge tolerance',capacity:'Typical capacity used outside tagged loading areas'};
   return a.floor+': '+titles[a.type]+' · '+fmtArea(a.areaSF);
 }
 function assumptionsHtml(L,printed=false){
@@ -20027,24 +19054,10 @@ function drawAssumptionOverlay(lv){
   drawCtx.save();drawCtx.fillStyle='rgba(224,137,20,.42)';
   drawCtx.fill(regionCellPath(a.cells,a.step,T,new Set(),false));drawCtx.restore();
 }
-// A wide beam over a narrower one: the shores are read at the centerline,
-// but with two or more per cluster the outer ones may set down beside the
-// beam below, on the slab, where the height is greater. Adolfo, Sep 18 2026:
-// "unless the beam is very wide and deep, then we might end up installing
-// the shore out a bit wider." Said, never assumed.
-function beamBelowNote(b,r){
-  const bl=b.below&&b.below[r.levelIdx];
-  if(!bl||r.open||r.grade||!(r.beamNet>0))return '';
-  const onBeam=`stands on the ${bl.widthIn}" beam below`;
-  if(r.beamPerCluster>=2&&bl.widthIn<b.widthIn)
-    return `<span class="lm-warn beam-below-warn" title="Read at the beam's centerline. With ${r.beamPerCluster} per cluster the outer shores may set down on the slab beside the ${bl.widthIn}" beam below, where the shore is ${bl.slabHeightFt!=null?esc(feetToStr(bl.slabHeightFt)):'taller'}">\u26a0 outer shores may stand on the slab beside the ${bl.widthIn}" beam below${bl.slabHeightFt!=null?` \u2014 ${esc(feetToStr(bl.slabHeightFt))} there`:''}</span>`;
-  return `<span class="lm-dim" title="Read at the beam's centerline; the ${bl.widthIn}" beam below carries it">${onBeam}</span>`;
-}
 function beamAnswerStrip(b){
   return `<div class="ra-strip">${b.rows.map(r=>{
     const text=r.open?(r.noSlab?'No slab — load passes through':'Opening — load passes through'):r.grade?'On grade — no shores below':r.beamNet<=0?'Absorbed — no beam shores':`${Math.round(r.beamNet)} PLF · ${r.shoreHeightFt!=null?feetToStr(r.shoreHeightFt):'no support height'} · ${r.beamChosen?r.beamChosen.shore.name+' · '+r.beamPerCluster+' per cluster · '+feetToStr(r.beamSpacingFt)+' o.c.':'Choose a shore in the table below'}`;
-    const note=beamBelowNote(b,r);
-    return `<div class="ra-row"><div class="ra-fl">under ${esc(r.level.name)}</div><div class="ra-msg">${esc(text)}${note?' · '+note:''}</div></div>`;
+    return `<div class="ra-row"><div class="ra-fl">under ${esc(r.level.name)}</div><div class="ra-msg">${esc(text)}</div></div>`;
   }).join('')}</div>`;
 }
 function loadSourceTag(c){

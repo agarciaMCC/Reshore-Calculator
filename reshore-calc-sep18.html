@@ -658,11 +658,6 @@ input[readonly],input.derived{background:var(--derived-bg);color:var(--text-seco
 .card-fold{background:none;border:none;padding:0 2px;color:var(--text-secondary);cursor:pointer;font:inherit;font-size:12px;line-height:1;width:14px}
 .card-fold:hover{color:var(--text)}
 .card-chips{display:inline-flex;flex-wrap:wrap;gap:4px;margin-left:4px}
-.beam-count{font-weight:700;color:#fff;background:var(--mcc-red,#CF0A2C);border-radius:9px;padding:0 6px;margin-right:6px;font-size:.8em;line-height:1.5}
-.beam-tag{font-size:.72em;color:var(--text-tertiary,#8A8A8D);border:1px solid currentColor;border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:middle}
-.beam-members{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;margin:4px 0 6px;font-size:.82em}
-.beam-member{display:inline-flex;align-items:center;gap:6px;padding:2px 6px;border:1px solid var(--border,#D9D9D9);border-radius:4px;background:var(--surface-raised,rgba(0,0,0,.03))}
-.beam-member .ss-undo{font-size:.9em}
 .card-sf{color:var(--text-secondary);font-family:var(--font-mono);font-size:11px;white-space:nowrap}
 .card-stat{display:block;margin:2px 0 4px}
 .pat-chip{display:inline-flex;align-items:center;gap:4px;padding:0 6px 0 0;border-radius:9px;font-size:10.5px;line-height:1.7;
@@ -11769,19 +11764,11 @@ function floorCuts(lv,within,listsSlab,listsLoad){
 }
 const EXACT_MAX_PIECES=4000;
 // Split `extent` along every boundary that matters, from the pour down.
-// CUT ONLY AS DEEP AS THE LOAD GOES. Every floor from the pour to the ground
-// used to cut every piece, so on a 42-level model a tower pour was split by
-// the openings and beams of twenty floors its load never reaches: 4 s per
-// pour and eleven regions with one answer between them (Kalae, Sep 18 2026).
-// `settled(mp,k)` says whether a piece's cascade is fully decided by floors
-// 0..k — absorbed, on grade, or at the bottom — and a settled piece passes
-// the floors below untouched. Deeper cuts could not change its answer.
-function exactPartition(extent,belowLevels,slabLists,capLists,settled){
+function exactPartition(extent,belowLevels,slabLists,capLists){
   let pieces=[{mp:extent}];
   for(let k=0;k<belowLevels.length;k++){
     const next=[];
     for(const piece of pieces){
-      if(piece.done){next.push(piece);continue}
       // A BEAM IS READ ALONG ITS CENTERLINE (Adolfo, Sep 18 2026): "if a
       // beam above is slightly wider than a beam below, it will take the
       // shore height of the slab outside of the narrower beam below. usually
@@ -11807,7 +11794,6 @@ function exactPartition(extent,belowLevels,slabLists,capLists,settled){
         next.push({mp:c.mp,beam:m?m[1]:(piece.beam||null)});
       }
     }
-    if(settled&&k>=1)for(const piece of next){if(!piece.done&&!piece.beam&&settled(piece.mp,k))piece.done=true}
     pieces=next;
     if(pieces.length>EXACT_MAX_PIECES)break;
   }
@@ -12072,65 +12058,7 @@ function solvePourLevel(stack,pourIdx,opts){
   // each piece once at a point inside it. A piece only has to be uniform;
   // pieces that read the same are merged below, so the number of cuts never
   // shows up in the answer.
-  // What the floors 1..kmax say at (x,y): fills belowLevels[k]._slabAt/_capAt/
-  // _codeAt for the cascade and returns the region signature so far.
-  const readColumn=(x,y,thick,kmax)=>{
-    const sig=[thick];
-    let edgeHits=0;
-    const pointAssumptions=[];
-    for(let k=1;k<=kmax;k++){
-      let sl=slabStateAt(belowLevels[k],slabLists[k],x,y);
-      let hit=capZoneAt(capLists[k],x,y);
-      // SLAB EXTENT: where the floor has edge shapes it exists only inside
-      // them — or within the edge tolerance of one (small overhangs,
-      // drafting slop). Outside, there is no slab and the shore above spans
-      // past it. A floor with no edge shapes exists everywhere.
-      let atEdge=false;
-      const edges=edgeLists[k];
-      if(edges&&edges.length&&!sl.open&&!insideAny(edges,x,y)){
-        if(capZoneNear(edges,x,y,edgeTol))atEdge=true;
-        else sl={open:true,noSlab:true,thick:0,off:0,soffitIn:0,beam:null,zone:null};
-      }
-      if(atEdge){edgeHits++;if(!hit)hit=capZoneNear(capLists[k],x,y,edgeTol)}
-      belowLevels[k]._slabAt=sl;
-      if(sl.open){belowLevels[k]._capAt=0;sig.push(sl.noSlab?'none':'open');continue}
-      // on grade: the cascade ends here, so floors further down (if any —
-      // the stack warnings flag them) play no part in this point's signature
-      if(sl.grade){belowLevels[k]._capAt=Infinity;sig.push('grade');break}
-      if(!edges||!edges.length)pointAssumptions.push({k,type:'extent'});
-      if(atEdge)pointAssumptions.push({k,type:'edge'});
-      if(!hit)pointAssumptions.push({k,type:'capacity'});
-      const cap=hit?hit.zone.capacityPSF:levelDefaultCapacity(belowLevels[k]);
-      belowLevels[k]._capAt=cap;
-      const code=hit?zoneCode(hit.zone):levelDefaultCode(belowLevels[k]);
-      belowLevels[k]._codeAt=code;
-      // The MARK belongs in the signature, not just the capacity: 9" slab
-      // over B2 and 9" slab over C2 are two conditions on the plan even at
-      // the same PSF, so each gets its own region, row and pattern.
-      const tag=`${cap}${code?'/'+code:''}`;
-      const odd=sl.thick!==belowLevels[k].slabThickness||sl.off||sl.beam;
-      sig.push(odd?`${tag}@${sl.thick}/${sl.off}${sl.beam?'B'+sl.soffitIn:''}`:tag);
-    }
-    return{sig,edgeHits,pointAssumptions};
-  };
-  // Is a piece's answer decided by floors 0..k alone? Read its inside point
-  // down to floor k and cascade over just those floors: decided when the load
-  // is absorbed (or on grade) AND the floor the last shore stands on is known,
-  // or when floor k is the bottom of the stack.
-  const settledBy=(mp,k)=>{
-    const pt=mpInnerPoint(mp);if(!pt)return true;
-    const ps=slabStateAt(pour,pourSlabs,pt.x,pt.y);
-    if(ps.open||ps.grade)return true;
-    readColumn(pt.x,pt.y,ps.thick,k);
-    if(k>=belowLevels.length-1)return true;
-    const res=cascadeAtPoint(belowLevels.slice(0,k+1),0,ps.thick,dl,shores);
-    if(res.unresolved)return false;
-    const last=res.steps[res.steps.length-1];
-    if(!last)return true;
-    if(last.grade)return true;
-    return last.supportIdx!=null&&last.supportIdx>=0&&last.supportIdx<=k;
-  };
-  const rawPieces=exactPartition(readMP,belowLevels,slabLists,capLists,settledBy);
+  const rawPieces=exactPartition(readMP,belowLevels,slabLists,capLists);
   // what the floors below say at a point, as a key — the beam centerline is
   // split where this changes (the same reading the main loop makes)
   const lowerSig=(x,y)=>{
@@ -12202,23 +12130,50 @@ function solvePourLevel(stack,pourIdx,opts){
     // resolve each floor's capacity and slab state at this point, then cascade.
     // The slab signature ignores a beam on the pour: the slab around a beam
     // is the same slab, and the beam gets its own block.
-    const {sig,edgeHits,pointAssumptions}=readColumn(x,y,thick,belowLevels.length-1);
-    // the key reaches as far down as the cascade does — the floor that
-    // absorbs the load and the floor its last shore stands on — and no
-    // further, so floors the load never reaches cannot split a region
-    const res=cascadeAtPoint(belowLevels,0,thick,dl,shores);
-    let depth=belowLevels.length-1;
-    if(!res.unresolved&&res.steps.length){
-      const last=res.steps[res.steps.length-1];
-      depth=Math.max(last.levelIdx,(last.supportIdx!=null&&last.supportIdx>=0)?last.supportIdx:last.levelIdx);
+    const sig=[thick];
+    let edgeHits=0;
+    const pointAssumptions=[];
+    for(let k=1;k<belowLevels.length;k++){
+      let sl=slabStateAt(belowLevels[k],slabLists[k],x,y);
+      let hit=capZoneAt(capLists[k],x,y);
+      // SLAB EXTENT: where the floor has edge shapes it exists only inside
+      // them — or within the edge tolerance of one (small overhangs,
+      // drafting slop). Outside, there is no slab and the shore above spans
+      // past it. A floor with no edge shapes exists everywhere.
+      let atEdge=false;
+      const edges=edgeLists[k];
+      if(edges&&edges.length&&!sl.open&&!insideAny(edges,x,y)){
+        if(capZoneNear(edges,x,y,edgeTol))atEdge=true;
+        else sl={open:true,noSlab:true,thick:0,off:0,soffitIn:0,beam:null,zone:null};
+      }
+      if(atEdge){edgeHits++;if(!hit)hit=capZoneNear(capLists[k],x,y,edgeTol)}
+      belowLevels[k]._slabAt=sl;
+      if(sl.open){belowLevels[k]._capAt=0;sig.push(sl.noSlab?'none':'open');continue}
+      // on grade: the cascade ends here, so floors further down (if any —
+      // the stack warnings flag them) play no part in this point's signature
+      if(sl.grade){belowLevels[k]._capAt=Infinity;sig.push('grade');break}
+      if(!edges||!edges.length)pointAssumptions.push({k,type:'extent'});
+      if(atEdge)pointAssumptions.push({k,type:'edge'});
+      if(!hit)pointAssumptions.push({k,type:'capacity'});
+      const cap=hit?hit.zone.capacityPSF:levelDefaultCapacity(belowLevels[k]);
+      belowLevels[k]._capAt=cap;
+      const code=hit?zoneCode(hit.zone):levelDefaultCode(belowLevels[k]);
+      belowLevels[k]._codeAt=code;
+      // The MARK belongs in the signature, not just the capacity: 9" slab
+      // over B2 and 9" slab over C2 are two conditions on the plan even at
+      // the same PSF, so each gets its own region, row and pattern.
+      const tag=`${cap}${code?'/'+code:''}`;
+      const odd=sl.thick!==belowLevels[k].slabThickness||sl.off||sl.beam;
+      sig.push(odd?`${tag}@${sl.thick}/${sl.off}${sl.beam?'B'+sl.soffitIn:''}`:tag);
     }
-    const key=sig.slice(0,depth+1).join('|');
+    const key=sig.join('|');
     let reg=regions.get(key);
     if(!reg){
+      const res=cascadeAtPoint(belowLevels,0,thick,dl,shores);
       reg={key,thicknessIn:thick,slabZone:slabZ&&slabZ.zone,
            openBelow:res.steps.some(s=>s.open),
            toGrade:res.steps.some(s=>s.grade&&s.remaining>0),
-           loadingMarks:new Set(),caps:sig.slice(1,depth+1),stepCodes:{},edgeSamples:0,
+           loadingMarks:new Set(),caps:sig.slice(1),stepCodes:{},edgeSamples:0,
            placementLoad:res.placementLoad,steps:res.steps,
            reshoreLevels:res.reshoreLevels,unresolved:res.unresolved,
            samples:0,cells:[],cellStep:step,mp:null,areaSF:0,edgeSF:0,
@@ -12368,7 +12323,7 @@ function solvePourLevel(stack,pourIdx,opts){
       if(stems.size>1)for(const x of combined.values())if(x.beamId===l[0].beamId)x.stemSplit=true;
     }
   }
-  const rawBeams=[...combined.values()].map(it=>{
+  const beams=[...combined.values()].map(it=>{
     const regOut=out.find(r=>r.key===it.regionKey);
     const chain=beamChain(it,pour.name);
     it.cells=mpCells(it.mp,step);it.cellStep=step;
@@ -12376,8 +12331,6 @@ function solvePourLevel(stack,pourIdx,opts){
            lengthFt:it.widthFt>0?Math.round(it.areaSF/it.widthFt):null,
            rows:chain.rows,beamUnresolved:chain.unresolved,beamLevels:chain.levels,absorbedAt:chain.absorbedAt};
   }).sort((a,b)=>b.areaSF-a.areaSF);
-  // identical beams share a row (Adolfo, Sep 18 2026) — see groupBeamItems
-  const beams=groupBeamItems(rawBeams,pour.name,shores,step);
 
   const needChoice=out.reduce((n,r)=>n+r.steps.filter(s=>s.resultant>0&&!s.chosen&&s.options.length).length,0)
                   +beams.reduce((n,b)=>n+b.rows.filter(r=>r.beamKey&&r.beamNet>0&&!r.beamChosen&&r.options.length).length,0);
@@ -12391,127 +12344,12 @@ function solvePourLevel(stack,pourIdx,opts){
          pourFromEdge,pourFromSlabs,hadLoading:!!(pourLoading&&pourLoading.length),
          areaSF:sampledSF,openAreaSF:openSF,gradeAreaSF:gradeSF,outsideEdgeSF:outsideSF,fromSlabsSF,
          hasGrade:belowLevels.slice(1).some(l=>levelOnGrade(l)||zonesOf(l,'slab').some(isGradeZone)),
-         regions:out,beams,rawBeams,assumptions:[...assumptionSamples.values()],
+         regions:out,beams,assumptions:[...assumptionSamples.values()],
          sliverSF:out.reduce((n,r)=>n+(r.sliverSF||0),0),
          maxReshoreLevels:out.reduce((m,r)=>Math.max(m,r.reshoreLevels),0),
          anyUnresolved:out.some(r=>r.unresolved)||beams.some(b=>b.beamUnresolved),
          pendingChoices:needChoice,
          noShoreRows:out.reduce((n,r)=>n+r.steps.filter(s=>s.noOptions).length,0)+beams.reduce((n,b)=>n+b.rows.filter(r=>r.noOptions).length,0)};
-}
-
-// ════════════════════════════════════════════════════════════
-//  IDENTICAL BEAMS SHARE A ROW  (Adolfo, Sep 18 2026: "the beams could be
-//  grouped if they're the same type of beam and fall under the same shore
-//  height and load capacity conditions")
-//
-//  A row is a condition, not an object — the slab regions have always worked
-//  that way, and a floor with 55 beams was asking the same question 55 times.
-//  Beam items of one pour group when they are the same size, carry the same
-//  stem load over the same slab condition (the region key carries the marks,
-//  so "do not merge loading conditions" holds for beams too), and on every
-//  carrying floor see the same capacity, the same slab load arriving and the
-//  same support — with shore heights within an inch of the group's anchor,
-//  the row showing the tallest (his Sep 10 call: inches of height do not
-//  change the answer). Reinforcement marks (LB1 / LB3) are listed, not split
-//  on. One shore pick, effective width and shores-per-cluster apply to every
-//  member; a member can be broken out to get its own values and stays out
-//  until it is regrouped. A pick every member already agreed on before this
-//  existed is carried into the group so old jobs open as they were.
-// ════════════════════════════════════════════════════════════
-const BEAM_GROUP_TOL_FT=1/12;
-function beamBreakouts(){const p=state.project;if(!p.beamBreakout)p.beamBreakout={};return p.beamBreakout}
-function beamMemberId(pourName,it){return `${pourName}|${it.beamId}|${it.regionKey}`}
-function beamCondSig(it){
-  const rows=(it.profile||[]).map(r=>r.open?`o${r.noSlab?'n':''}:${r.level.name}`
-    :r.grade?`g:${r.level.name}`
-    :`${r.level.name}:${r.capacity}:${(+r.slabRemaining||0).toFixed(1)}:${r.supportLevel?r.supportLevel.name:'-'}:${r.spansOpen||0}`);
-  return `${it.widthIn}x${it.depthIn}|${it.stemIn}|${it.plf}|${it.thicknessIn}|${it.regionKey}|`+rows.join('|');
-}
-function beamHeights(it){return (it.profile||[]).map(r=>(r.open||r.grade||r.shoreHeightFt==null)?-1:r.shoreHeightFt)}
-function strHash(str){let h=5381;for(let i=0;i<str.length;i++)h=((h<<5)+h+str.charCodeAt(i))|0;return (h>>>0).toString(36)}
-function groupBeamItems(items,pourName,shores,step){
-  const bo=beamBreakouts();
-  const buckets=new Map(),out=[];
-  for(const it of items){
-    const sig=beamCondSig(it);it.groupSig=sig;it.memberId=beamMemberId(pourName,it);
-    if(bo[it.memberId]){it.brokenOut=true;out.push(it);continue}
-    (buckets.get(sig)||buckets.set(sig,[]).get(sig)).push(it);
-  }
-  for(const [sig,list] of buckets){
-    list.sort((a,b)=>b.areaSF-a.areaSF);           // the largest anchors its cluster
-    const used=list.map(()=>false);
-    for(let i=0;i<list.length;i++){
-      if(used[i])continue;used[i]=true;
-      const anchor=list[i],ha=beamHeights(anchor),members=[anchor];
-      for(let j=i+1;j<list.length;j++){
-        if(used[j])continue;
-        const hj=beamHeights(list[j]);
-        const close=hj.length===ha.length&&hj.every((h,q)=>(h<0&&ha[q]<0)||(h>=0&&ha[q]>=0&&Math.abs(h-ha[q])<=BEAM_GROUP_TOL_FT+1e-9));
-        if(close){used[j]=true;members.push(list[j])}
-      }
-      // a lone item whose signature has broken-out siblings can be regrouped — say so
-      if(members.length<2){anchor.canRegroup=items.some(x=>x!==anchor&&x.brokenOut&&x.groupSig===sig);out.push(anchor);continue}
-      out.push(makeBeamGroup(members,sig,pourName,shores,step));
-    }
-  }
-  for(const it of out)if(it.brokenOut)it.canRegroup=true;
-  return out.sort((a,b)=>b.areaSF-a.areaSF);
-}
-function makeBeamGroup(members,sig,pourName,shores,step){
-  const a=members[0];
-  // the row shows the tallest height in the group, and the shores legal at it
-  const heights=a.profile.map((r,q)=>Math.max(...members.map(m=>{const x=m.profile[q];return x&&!x.open&&!x.grade&&x.shoreHeightFt!=null?x.shoreHeightFt:-1})));
-  const profile=a.profile.map((r,q)=>{
-    if(r.open||r.grade)return{...r};
-    const h=heights[q]>=0?heights[q]:null;
-    return{...r,shoreHeightFt:h,options:h!=null?shoreOptionsFor(h,0,shores):[]};
-  });
-  const id='grp:'+strHash(sig+'|'+heights.map(h=>Math.round(h*48)).join(','));
-  let mp=null,cells=[],areaSF=0,samples=0,lengthFt=0;
-  const bb={minX:Infinity,minY:Infinity,maxX:-Infinity,maxY:-Infinity};
-  const labels=new Set();
-  for(const m of members){
-    mp=mpUnion(mp,m.mp);cells.push(...m.cells);areaSF+=m.areaSF;samples+=m.samples||0;lengthFt+=m.lengthFt||0;
-    bb.minX=Math.min(bb.minX,m.bb.minX);bb.maxX=Math.max(bb.maxX,m.bb.maxX);bb.minY=Math.min(bb.minY,m.bb.minY);bb.maxY=Math.max(bb.maxY,m.bb.maxY);
-    if(m.label)labels.add(m.label);
-  }
-  const g={...a,beamId:id,group:true,members,count:members.length,groupSig:sig,memberId:null,brokenOut:false,canRegroup:false,
-           label:[...labels].sort().join(', '),mp,cells,cellStep:step,areaSF,samples,bb,profile,lengthFt:lengthFt||null,
-           stemSplit:members.some(m=>m.stemSplit),
-           // the beam below is read off the anchor; members that meet something else keep their own note
-           belowDiffers:members.some(m=>JSON.stringify(m.below||{})!==JSON.stringify(a.below||{}))};
-  // adopt a unanimous member pick into the group's key, once
-  const ch=shoreChoices();
-  for(const r of profile){
-    if(r.open||r.grade)continue;
-    const gk=beamRowKey(pourName,g,r.levelIdx);
-    for(const suf of ['','|W','N']){
-      if(ch[gk+suf]!=null)continue;
-      const vals=members.map(m=>ch[beamRowKey(pourName,m,r.levelIdx)+suf]);
-      if(vals.every(v=>v!=null)&&vals.every(v=>String(v)===String(vals[0])))ch[gk+suf]=vals[0];
-    }
-  }
-  const chain=beamChain(g,pourName);
-  g.rows=chain.rows;g.beamUnresolved=chain.unresolved;g.beamLevels=chain.levels;g.absorbedAt=chain.absorbedAt;
-  return g;
-}
-// Break a member out of its group (or put it back) without re-solving: the
-// geometry has not changed, only how the beam items are gathered.
-function regroupBeamsOf(L){
-  if(!L||!L.solve||!L.solve.rawBeams)return;
-  const s=L.solve;
-  s.beams=groupBeamItems(s.rawBeams,L.pour.name,state.shores,s.step||SOLVE_STEP_FT);
-  L._beamNames=null;
-  s.pendingChoices=s.regions.reduce((n,r)=>n+r.steps.filter(x=>x.resultant>0&&!x.chosen&&x.options.length).length,0)
-                  +s.beams.reduce((n,b)=>n+b.rows.filter(r=>r.beamKey&&r.beamNet>0&&!r.beamChosen&&r.options.length).length,0);
-  s.anyUnresolved=s.regions.some(r=>r.unresolved)||s.beams.some(b=>b.beamUnresolved);
-  s.noShoreRows=s.regions.reduce((n,r)=>n+r.steps.filter(x=>x.noOptions).length,0)+s.beams.reduce((n,b)=>n+b.rows.filter(r=>r.noOptions).length,0);
-  if(s._cellIdx)s._cellIdx=null;
-}
-function setBeamBreakout(L,memberId,on){
-  const bo=beamBreakouts();
-  if(on)bo[memberId]=true;else delete bo[memberId];
-  regroupBeamsOf(L);
 }
 
 // Solve every level that can be poured.
@@ -13613,16 +13451,6 @@ function renderSchedule(){
       showRegionOn(li,r,lbl).then(()=>renderSchedule());
     });
   });
-  // a beam out of its group gets its own row and picks; regroup puts it back
-  host.querySelectorAll('button.beam-breakout,button.beam-regroup').forEach(btn=>{
-    btn.addEventListener('click',e=>{
-      e.stopPropagation();
-      const on=btn.classList.contains('beam-breakout');
-      history.record(on?'Break beam out of its group':'Regroup beam');
-      setBeamBreakout(L,btn.dataset.member,on);
-      persist();renderSchedule();renderCanvas();
-    });
-  });
   host.querySelectorAll('input.sched-rlabel').forEach(inp=>{
     inp.addEventListener('click',e=>e.stopPropagation());
     inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();inp.blur()}});
@@ -13826,15 +13654,13 @@ function beamBlock(b,bi,L,hl){
     <div class="sched-region-head sched-go" data-bi="${bi}" data-lv="${defIdxOf(L.pour)}" title="Show this beam on the pour level's sheet">
       <button type="button" class="card-fold" data-fold="${esc(ck)}" title="${open?'Fold this beam back to one line':'Open this beam: its rows and the diagram'}">${open?'\u25be':'\u25b8'}</button>
       <span class="lm-swatch" style="background:${slabInkHex(b.zone)}"></span>
-      ${b.group?`<span class="beam-count" title="${b.count} beams with the same size, stem, slab condition and shore heights (within an inch) share this row — one pick covers all of them">${b.count}×</span>`:''}<b>${esc(beamLabel(b,bi))}</b>${b.brokenOut?` <span class="beam-tag" title="This beam has its own row and picks; regroup it below">broken out</span>`:''}
-      <span class="card-sf">${b.lengthFt!=null?b.lengthFt+' LF':fmtArea(b.areaSF)}${b.group?` · ${b.count} beams`:''}</span>
+      <b>${esc(beamLabel(b,bi))}</b>
+      <span class="card-sf">${b.lengthFt!=null?b.lengthFt+' LF':fmtArea(b.areaSF)}</span>
       <span class="card-chips">${chips}</span>
     </div>
     <div class="card-more">
       ${diagToggleHtml('b|'+L.pour.name+'|'+b.beamId+'|'+b.regionKey)}
       <span class="sched-stat card-stat">${(t=>t?esc(t)+' · ':'')(gridTagForBB(b.bb))}${b.lengthFt!=null?b.lengthFt+' LF · ':''}stem ${inchStr(b.stemIn)} below the ${inchStr(b.thicknessIn)} slab → <b>${b.plf} PLF</b> · ${b.beamLevels} reshore level${b.beamLevels===1?'':'s'}${b.absorbedAt?` · absorbed at ${esc(b.absorbedAt.name)}`:(b.beamUnresolved?' · <span class="lm-warn">not absorbed in the defined stack</span>':'')}</span>
-    ${b.group?`<div class="beam-members"><span class="lm-dim">Members — one pick covers all of them:</span>${b.members.map(m=>`<span class="beam-member" title="${esc(m.label||'')}${m.below&&b.belowDiffers?' · meets something different below — check':''}">${esc(m.label||(m.widthIn+'\u2033\u00d7'+m.depthIn+'\u2033'))}${(t=>t?' · '+esc(t):'')(gridTagForBB(m.bb))}${m.lengthFt!=null?' · '+m.lengthFt+' LF':''}<button type="button" class="ss-undo beam-breakout" data-member="${esc(m.memberId)}" title="Give this beam its own row, shore pick and effective width">break out</button></span>`).join('')}</div>`:''}
-    ${b.brokenOut?`<div class="beam-members"><button type="button" class="btn btn-sm beam-regroup" data-member="${esc(b.memberId)}" title="Put this beam back with the identical beams it was broken out of">Regroup with the identical beams</button></div>`:''}
     ${beamAnswerStrip(b)}
     <table class="sched-table sched-beam-table">
       <thead><tr><th title="The beam-line shores under this floor's slab">Reshore under</th><th title="Stem load arriving at this floor">Stem in<br><span>PLF</span></th>
@@ -19770,7 +19596,7 @@ const collapsedAnswerGroups=new Set();
 // levels, the shore catalog and the project settings, and nothing else.
 // zones, the sheets still to check and the levels confirmation are bookkeeping
 // for the Building step, not inputs to the calculation
-const NON_INPUT_PROJECT_KEYS=['shoreChoices','regionLabels','name','zones','sheetUnsure','levelsConfirmed','beamBreakout'];
+const NON_INPUT_PROJECT_KEYS=['shoreChoices','regionLabels','name','zones','sheetUnsure','levelsConfirmed'];
 function calculationKey(doc){
   const d=doc||serializeDoc();
   // project is small: sort it, and drop the empty maps lazy getters leave

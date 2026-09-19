@@ -1,0 +1,50 @@
+using cached extraction extract-2b11f007e169.json
+rotate auto: number gridlines run at 38.13°, rotating 51.87° so they are vertical
+sheet 36x24 in, scale 20 ft per inch, 0.13889 ft/px; building extents 318 x 367 ft
+grid: 8 vertical + 7 horizontal lines kept; 83 tags not orthogonal after rotation (drawn, not in the project grid): 10, 10'', 11, 11', 9, 9', 9'', 9''-2, 9a, 9a', 9c, 9c', 9d, 9e, 9f, A, A1, A11, A14, A2…
+shared→project elevation datum: +98.250 ft
+wrote out/1268_KALAE-revit-plans.pdf (42 pages)
+wrote out/1268_KALAE-revit.reshore.json
+
+     1  T.O.S.    100'-0"  typ 5"  edge 68,889 SF  openings 21  slab areas 6  beams 1  ON GRADE
+     2  T.O.S.    111'-6"  typ 7.5"  edge 60,654 SF  openings 10  slab areas 6  beams 25  [upturned / above slab (skipped): 1]
+     3  T.O.S.    120'-8"  typ 7.5"  edge 57,093 SF  openings 20  slab areas 4  beams 46
+     4  T.O.S.   129'-10"  typ 7.5"  edge 53,878 SF  openings 9  slab areas 2  beams 36  [depth from geometry: 1; width from geometry: 1]
+   4.5  T.O.S.    139'-0"  typ 10"  edge 54,184 SF  openings 3  slab areas 7  beams 53  [width from geometry: 6; upturned / above slab (skipped): 2]
+     5  T.O.S.   143'-10"  typ 8"  edge 14,732 SF  openings 5  slab areas 7  beams 16  (slab top -0'-2" vs Revit level 144'-0")
+     6  T.O.S.    159'-0"  typ 7.5"  edge 15,048 SF  openings 5  slab areas 2  beams 5
+     7  T.O.S.  168'-8.5"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 4
+     8  T.O.S.    178'-5"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 2
+     9  T.O.S.  188'-1.5"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 2
+    10  T.O.S.   197'-10"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 2
+    11  T.O.S.  207'-6.5"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 2
+    12  T.O.S.    217'-3"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 2
+    13  T.O.S. 226'-11.5"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 2
+    14  T.O.S.    236'-8"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 2
+    15  T.O.S.  246'-6.5"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 0
+    16  T.O.S.    256'-3"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 2
+    17  T.O.S. 265'-11.5"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 2
+    18  T.O.S.    275'-8"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 2
+    19  T.O.S.  285'-4.5"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 2
+    20  T.O.S.    295'-1"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 2
+    21  T.O.S.  304'-9.5"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 2
+    22  T.O.S.    314'-6"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 2
+    23  T.O.S.  324'-2.5"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 2
+    24  T.O.S.    334'-1"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 0
+    25  T.O.S.  343'-9.5"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 4
+    26  T.O.S.    353'-6"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 4
+    27  T.O.S.  363'-2.5"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 4
+    28  T.O.S.   372'-11"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 4
+    29  T.O.S.  382'-7.5"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 4
+    30  T.O.S.    392'-4"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 4
+    31  T.O.S.  402'-0.5"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 4
+    32  T.O.S.    411'-9"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 4
+    33  T.O.S.  421'-7.5"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 0
+    34  T.O.S.    431'-4"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 4
+    35  T.O.S.  441'-0.5"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 4
+    36  T.O.S.    450'-9"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 4
+    37  T.O.S.  460'-5.5"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 4
+    38  T.O.S.    471'-2"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 4
+  ROOF  T.O.S.    483'-8"  typ 7.5"  edge 15,101 SF  openings 4  slab areas 1  beams 0
+ELEV MECH RM  T.O.S.    492'-4"  typ 10"  edge 2,310 SF  openings 2  slab areas 0  beams 5
+MECH ROOF  T.O.S.    501'-2"  typ 7.5"  edge 2,380 SF  openings 0  slab areas 1  beams 2  (slab top -0'-6" vs Revit level 501'-8")
