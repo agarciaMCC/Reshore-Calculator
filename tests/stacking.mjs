@@ -1,3 +1,4 @@
+// @rules UI-11, UI-12  (see DECISIONS.md)
 // DO THE FLOORS LINE UP? (Kinect, Sep 17 2026)
 // Adolfo: "The calculator is not recognizing a floor below when it does in
 // fact exist... we need to be able to line up the floors and loading areas.
@@ -9,10 +10,13 @@
 //  C. a load-map area over ground no sheet of that floor shows is left out
 //     rather than piled onto the first sheet
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

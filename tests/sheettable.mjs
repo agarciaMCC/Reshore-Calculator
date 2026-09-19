@@ -1,3 +1,4 @@
+// @rules BLD-04  (see DECISIONS.md)
 // EVERY SHEET, ONE ROW, LEVEL AND ZONE (Sep 17 2026)
 // Adolfo: "The sheet assigning is still clunky. We need to be able to assign
 // level and zone for each sheet. The calculator incorrectly assumes some
@@ -12,10 +13,13 @@
 //  D. a floor on two sheets reads as that, and taking a sheet off says what
 //     it takes with it
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

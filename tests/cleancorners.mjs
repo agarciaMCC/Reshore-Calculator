@@ -1,11 +1,15 @@
+// @rules EDG-01, EDG-02  (see DECISIONS.md)
 // Clean corners, on a shape that already exists: the button is there, it
 // rebuilds the outline on the drafted lines, a spurious mid-edge vertex like
 // the one Adolfo screenshotted goes away, and one undo puts it all back.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

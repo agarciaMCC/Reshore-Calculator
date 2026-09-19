@@ -1,12 +1,16 @@
+// @rules BLD-02, UI-04  (see DECISIONS.md)
 // Reading the sheets: auto-match a floor from its grid bubbles, read T/SLAB
 // elevations and thicknesses, and the ortho tracking line's perpendicular
 // lock. Run against Adolfo's own test set, so the numbers are checked
 // against what he entered by hand.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

@@ -1,11 +1,15 @@
+// @rules JOB-03  (see DECISIONS.md)
 // The shared build: inside a sandboxed frame a download and a second window
 // are inert, so Save job hands you the job as text and Print uses an in-page
 // preview. Opened from disk, neither route changes.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 const appPath = path.resolve(here, '..', 'reshore-calc.html');

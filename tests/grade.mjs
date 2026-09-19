@@ -1,10 +1,14 @@
+// @rules MDL-02, MDL-03, MDL-04  (see DECISIONS.md)
 // Slab-on-grade behaviour: whole-level flag, per-area kind, warnings,
 // schedule rows, persistence, and a Kalae regression check.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 
-const file = 'file://' + path.resolve(new URL('.', import.meta.url).pathname, '..', 'reshore-calc.html');
+const file = 'file://' + path.resolve(decodeURIComponent(new URL('.', import.meta.url).pathname), '..', 'reshore-calc.html');
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 const eq = (a, b, m) => ok(Math.abs(a - b) < 1e-6, `${m}: got ${a}, want ${b}`);

@@ -1,11 +1,15 @@
+// @rules UI-01, UI-02, UI-04, UI-05, UI-07, UI-09, UI-10, BEM-02  (see DECISIONS.md)
 // Interaction update (Sep 4, evening): Slab wording + beam offset, unified
 // Escape, Shift+click vertex delete / Alt+click insert, Shift ortho, copy
 // markups between floors, slab-condition colours, entry flow.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 
-const file = 'file://' + path.resolve(new URL('.', import.meta.url).pathname, '..', 'reshore-calc.html');
+const file = 'file://' + path.resolve(decodeURIComponent(new URL('.', import.meta.url).pathname), '..', 'reshore-calc.html');
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 const eq = (a, b, m) => ok(Math.abs(a - b) < 1e-6, `${m}: got ${a}, want ${b}`);

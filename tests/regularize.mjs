@@ -1,10 +1,11 @@
+// @rules EDG-01, EDG-02, EDG-03  (see DECISIONS.md)
 // The outline regularizer, on synthetic outlines where the right answer is
 // known exactly: a traced rectangle with rounded corners must come back as
 // four corners ON the drafted line ends, a jog smaller than a real step must
 // be absorbed, a real step must survive, and a curve must stay a curve.
 import fs from 'node:fs';
 import path from 'node:path';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 const html = fs.readFileSync(path.resolve(here, '..', 'reshore-calc.html'), 'utf8');
 
 const grab = (startMark, endMark, label) => {

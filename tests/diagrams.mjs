@@ -1,12 +1,16 @@
+// @rules LOD-01, LOD-02  (see DECISIONS.md)
 // A set that states its loads as LOADING DIAGRAMS instead of a schedule
 // table: one key plan per level per load type, with the value written inside
 // each area. Run against Reshore Calculator Test 3 (Perkins&Will, WWU
 // Interdisciplinary Science Building), fixtures/test3.pdf.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

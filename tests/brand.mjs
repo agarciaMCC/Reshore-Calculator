@@ -1,3 +1,4 @@
+// @rules BRD-01  (see DECISIONS.md)
 // THE McCLONE BRAND & DOCUMENT STYLE GUIDE, v1.3.
 // Two brand colors — MCC Red #CF0A2C and MCC Grey #8A8A8D — plus black, white
 // and the working tints #F2F2F2 / #D9D9D9; Calibri for everything a team
@@ -10,9 +11,12 @@
 // and not on plain UI state, and not on the colors that carry meaning on the
 // drawing, which the guide's own two colors could never keep apart.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

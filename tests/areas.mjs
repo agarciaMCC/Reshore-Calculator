@@ -1,10 +1,14 @@
+// @rules ARE-01, ARE-02, ARE-04, ARE-05, ARE-06, ARE-07, UI-08, UI-10, LOD-06  (see DECISIONS.md)
 // The Areas panel: per-layer Draw buttons that arm the tool themselves, the
 // slab kind menu, derived shape names, grouping by type, and the help behind
 // the ? on the title.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path'; import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass=0,fail=0; const ok=(c,m)=>{if(c)pass++;else{fail++;console.log('  FAIL',m)}};
 const browser=await chromium.launch(); const page=await browser.newPage({viewport:{width:1500,height:950}});
 page.on('pageerror',e=>{fail++;console.log('  PAGEERROR',e.message)});

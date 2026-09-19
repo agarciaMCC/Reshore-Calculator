@@ -1,3 +1,4 @@
+// @rules RES-01, RES-05, RES-06, RES-07, RES-08, RGN-09, RGN-10, BEM-01, BEM-05  (see DECISIONS.md)
 // The rebuilt Results step (Sep 10, 2026).
 //
 //  A. the plan and the schedule side by side, with a draggable, remembered
@@ -11,10 +12,13 @@
 //  E. plan -> schedule: click a region where it is on the floor
 //  F. the printed sheet leads with the same per-floor answer
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 const eq = (a, b, m) => ok(Math.abs(a - b) < 1e-6, `${m}: got ${a}, want ${b}`);

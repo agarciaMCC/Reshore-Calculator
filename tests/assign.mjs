@@ -1,12 +1,16 @@
+// @rules BLD-04, BLD-07, JOB-01  (see DECISIONS.md)
 // Assign sheets to levels: read every page in the set once and work out what
 // it is — which floor each plan shows, and which sheets are sections,
 // elevations, details, schedules or load maps that never need a floor.
 // Run against Adolfo's own test set and the WWU set.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

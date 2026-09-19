@@ -1,3 +1,4 @@
+// @rules MDL-10  (see DECISIONS.md)
 // A SHORE THROUGH AN OPEN FLOOR (Kinect L4 pour, Sep 18 2026)
 // Adolfo, on "11" Slab – L3 39 PSF – L2 opening – 1B SOG": "this incorrectly
 // assumes that there is slab beneath L3 when there is an opening at L2
@@ -8,10 +9,13 @@
 //  B. the chip and the summary count carry the flag; the floor tab outlines it
 //  C. OK accepts it (row, chip, count), recheck brings it back; it is in the save
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

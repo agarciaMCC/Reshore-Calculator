@@ -1,3 +1,4 @@
+// @rules BEM-03  (see DECISIONS.md)
 // A BEAM'S STEM FOLLOWS THE SLAB IT SITS IN, PIECE BY PIECE (Sep 18 2026)
 // Adolfo: "if I have a beam that is the same depth as an adjacent slab for a
 // portion of it, the calculator will assume no extra stem load for the
@@ -9,9 +10,12 @@
 //  B. the two items are named apart by stem
 //  C. a beam wholly over one slab is still one item
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

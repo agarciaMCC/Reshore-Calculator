@@ -1,3 +1,4 @@
+// @rules LOD-01, LOD-03, LOD-04, LOD-05  (see DECISIONS.md)
 // THE LOAD CHART CAN BE TYPED IN OR BROUGHT IN (Adolfo, Sep 14, 2026):
 // "we need a way to enter in loads manually for the load chart or to upload
 //  an excel file"
@@ -11,10 +12,13 @@
 // A row remembers where it came from, so reading the drawings again keeps
 // what he typed and FLAGS a disagreement instead of quietly resolving it.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 const eq = (a, b, m) => ok(a === b, `${m}: got ${JSON.stringify(a)}, want ${JSON.stringify(b)}`);

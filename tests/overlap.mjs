@@ -1,11 +1,15 @@
+// @rules MDL-05, RGN-01, RGN-02, RGN-05, RES-06  (see DECISIONS.md)
 // Overlapping loading areas behave as a CUTOUT (the smaller area governs its
 // own space, the larger one governs everywhere else), conditions split by
 // mark, and the Results highlight is green and layer-independent.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 const file = 'file://' + path.resolve(here, '..', 'reshore-calc.html');
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };

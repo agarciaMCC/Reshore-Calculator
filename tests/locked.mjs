@@ -1,3 +1,4 @@
+// @rules ARE-11  (see DECISIONS.md)
 // THE MARKUP IS LOCKED ON RESULTS AND SEQUENCE (Adolfo, Sep 10, 2026):
 // "loading/slab areas should not be editable in the results/sequence tabs.
 // they should be locked."
@@ -7,11 +8,14 @@
 // Delete and arming a drawing tool all do nothing, and the first attempt says
 // where to go instead. Areas (step 5) is unaffected — the control case here.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });

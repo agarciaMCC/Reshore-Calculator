@@ -1,3 +1,4 @@
+// @rules EDG-01, UI-03  (see DECISIONS.md)
 // THE FLOOR EDGE, READ FOR THE WHOLE JOB AND CONFIRMED (Adolfo, Sep 14, 2026):
 // "can we have the floor edge be automatically done and then confirmed by the
 //  user? then the option to redraw floor edge in case the floorplan gets
@@ -11,10 +12,13 @@
 // floor already has an edge the row says WHAT CHANGES: the area either side,
 // how far the outline moves, and how many drawn areas would fall outside it.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

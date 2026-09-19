@@ -1,3 +1,4 @@
+// @rules BLD-10  (see DECISIONS.md)
 // THE PLAN'S SCALE, NOT THE DETAILS' (Sep 17 2026)
 // Adolfo: "the scales are pretty off. take a look at kinect4 file. the scale
 // is 3/32" = 1'-0" on all the plan views. what's happening here?" The scale
@@ -7,10 +8,13 @@
 // one under the plan's own title; a grid found at the wrong scale is
 // reported and rescaled in one click.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

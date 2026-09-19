@@ -1,12 +1,16 @@
+// @rules MDL-03, RES-10  (see DECISIONS.md)
 // Regression on Adolfo's saved test job (tests/fixtures/test-job.reshore.json):
 // Level 1 is half suspended (B2 area, east) and half on grade (west). The
 // pour on Level 3 must see Level 1 as GRADE over the west half, not "no slab".
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
 
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 const file = 'file://' + path.resolve(here, '..', 'reshore-calc.html');
 const job = JSON.parse(fs.readFileSync(path.resolve(here, 'fixtures', 'test-job.reshore.json'), 'utf8'));
 let pass = 0, fail = 0;

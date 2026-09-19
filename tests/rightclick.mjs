@@ -1,3 +1,4 @@
+// @rules UI-02  (see DECISIONS.md)
 // RIGHT-CLICK TAKES BACK A POINT (Sep 17 2026).
 // Adolfo: "add a function to right click to undo drawing a point when
 // drawing a shape."
@@ -10,9 +11,12 @@
 //  - Backspace still does the same thing, and still falls through to
 //    delete when nothing is being drawn
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path'; import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass=0,fail=0; const ok=(c,m)=>{if(c)pass++;else{fail++;console.log('  FAIL',m)}};
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });

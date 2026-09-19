@@ -1,3 +1,4 @@
+// @rules BLD-01, BLD-02, BLD-03, EDG-07  (see DECISIONS.md)
 // THE BUILDING STEP RUNS ITSELF, IN ORDER (Sep 17 2026)
 // Adolfo: "have the read levels from drawings be an automatic step instead of
 // hitting the button. the user then will hit a confirm levels info button to
@@ -14,10 +15,13 @@
 //  E. Areas auto-detect refuses a sheet with no confirmed edge and clips to it
 //  F. matching pairs sheets by level and zone with the sheet below
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

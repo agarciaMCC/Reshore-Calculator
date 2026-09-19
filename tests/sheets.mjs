@@ -1,12 +1,16 @@
+// @rules BLD-11  (see DECISIONS.md)
 // A FLOOR DRAWN ACROSS SEVERAL SHEETS.
 // Big plans are split by area — grids 1-8 on one sheet, 8-15 on the next, the
 // grid running through the match line. Each sheet is matched on its own; the
 // project grid is labelled positions in BUILDING feet, so two sheets of one
 // floor land in the same frame and the solver never learns there was a split.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

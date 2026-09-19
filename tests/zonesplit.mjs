@@ -1,3 +1,4 @@
+// @rules ARE-10, ARE-03, UI-11  (see DECISIONS.md)
 // ONE LOADING AREA, TWO ZONE SHEETS + THAT GROUND IS ON GRADE (Sep 17 2026)
 // Adolfo: "if a loading area is split by a floor edge and appears in multiple
 // zones as a result, draw the loading area in both zones. right now it only
@@ -17,10 +18,13 @@
 //  F. an overshoot with no on-grade drawn: OK accepts it, it persists,
 //     a bigger overshoot brings it back, recheck takes it back
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

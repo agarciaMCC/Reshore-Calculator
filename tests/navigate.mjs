@@ -1,3 +1,4 @@
+// @rules RES-02, RES-03  (see DECISIONS.md)
 // READING THE RESULTS (Sep 18 2026)
 // Adolfo: "we need a much easier way to navigate/interpret results." Chose:
 // floor tabs with the plan shaded by pattern, one-line region cards, and a
@@ -12,10 +13,13 @@
 //  D. Next: steps through outstanding rows in order — card open, plan on the
 //     floor's sheet, picker focused; a pick shrinks the list and Next moves on
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

@@ -1,3 +1,4 @@
+// @rules BLD-05, ARE-03  (see DECISIONS.md)
 // A FLOOR DRAWN ACROSS SEVERAL SHEETS (Kinect, Sep 16 2026).
 // Adolfo: "if you have 2 sheets for a level and want them as north and south,
 // one sheet will get assigned a floor and when you try to assign the other
@@ -12,10 +13,13 @@
 //  D. a load-map area lands on the sheet it actually falls on, not the first
 //  E. the Areas list splits by sheet zone, the one on screen first
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

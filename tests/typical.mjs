@@ -1,13 +1,17 @@
+// @rules ARE-08, MDL-15  (see DECISIONS.md)
 // The typical capacity, drawn from the floor edge rather than stored as a
 // second shape: it covers the slab, the drawn areas read as exceptions cut out
 // of it, it follows the edge through any edit because it IS the edge, and it
 // changes nothing the solver does.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });

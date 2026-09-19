@@ -1,3 +1,4 @@
+// @rules RGN-07, RGN-08, RES-09  (see DECISIONS.md)
 // How regions are designated: a name that IS the load path — the pour's slab
 // thickness, then each floor below with its capacity (Adolfo, Sep 17 2026:
 // "Slab Thickness - Level below load capacity - Level below that load
@@ -6,10 +7,13 @@
 // signature so neither churns when the list is re-sorted; and a label you
 // can type over the top.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

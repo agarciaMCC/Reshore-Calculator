@@ -1,3 +1,4 @@
+// @rules RGN-03, RGN-04, MDL-11  (see DECISIONS.md)
 // A SLIVER MAY ONLY JOIN A REGION IT AGREES WITH (Adolfo, Sep 10, 2026).
 //
 // He looked at the plan and said of a corner patch: "this area is incorrectly
@@ -12,10 +13,13 @@
 // has one, grade where it ends. Capacity and shore-height differences still
 // merge; a structural one never does.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 const eq = (a, b, m) => ok(Math.abs(a - b) < 1e-6, `${m}: got ${a}, want ${b}`);

@@ -1,11 +1,15 @@
+// @rules UI-14  (see DECISIONS.md)
 // PDF fidelity: device-pixel-ratio canvases, no PNG round trip, a sharp patch
 // re-rendered when you zoom in, and the ink the detector reads at full raster
 // resolution — with the faster morphology proved equal to the old one.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 const pdf = fs.readFileSync(path.resolve(here, 'fixtures', 'test-set.pdf')).toString('base64');

@@ -1,11 +1,15 @@
+// @rules UI-06, LOD-06  (see DECISIONS.md)
 // Auto-trace review on the test set's load-map sheet (page 1): traced fills
 // are editable on the sheet, a missed area can be drawn, and every plan can
 // take extra match points.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

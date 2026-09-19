@@ -1,3 +1,4 @@
+// @rules BLD-07, BLD-11  (see DECISIONS.md)
 // The Match step, three complaints (Adolfo, Sep 10, 2026):
 //   "we need to be able to clear the match. redo doesnt clear anything and
 //    creating new points doesnt work unless they match a previous floor. I
@@ -13,12 +14,15 @@
 //  C. a named zone per sheet, shown wherever the app names a sheet, saved
 //     with the job
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 const eq = (a, b, m) => ok(Math.abs(a - b) < 1e-6, `${m}: got ${a}, want ${b}`);
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });

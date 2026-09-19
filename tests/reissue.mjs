@@ -1,3 +1,4 @@
+// @rules BLD-09  (see DECISIONS.md)
 // THE DRAWING SET, RE-ISSUED (Sep 17 2026)
 // Adolfo: "what happens if I update the PDF and a new sheet is added somewhere
 // within the existing set? Like if I forgot to add a level or zone?"
@@ -14,10 +15,13 @@
 //  C. a bound sheet REMOVED from the set is reported, not guessed at
 //  D. the same set loaded again moves nothing
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

@@ -1,3 +1,4 @@
+// @rules ARE-02, ARE-09, EDG-06  (see DECISIONS.md)
 // AN OPENING HAS ITS OUTLINE DRAWN (Sep 17 2026)
 // Adolfo: "there are many instances of misreading crossing lines/dimension
 // lines as openings." A diagonal dimension line crossing a grid line makes an
@@ -5,10 +6,13 @@
 // now checked for a drawn outline along the four sides of its hull; a bare
 // crossing is not offered, a tagged one is kept and says so.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

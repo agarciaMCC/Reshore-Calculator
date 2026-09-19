@@ -1,3 +1,4 @@
+// @rules LOD-07  (see DECISIONS.md)
 // EVERY LOAD MAP IN ONE PASS (Sep 17 2026)
 // Adolfo: "the trace loading areas and adding to floors flow is clunky. partly
 // because the loading diagrams are spread across multiple pages. requires a
@@ -5,10 +6,13 @@
 // sheet, each plan filed under the floor its title names (with a zone picker),
 // one review grouped by floor, areas landing on whichever sheet they fall in.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

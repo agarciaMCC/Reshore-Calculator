@@ -1,3 +1,4 @@
+// @rules RES-04, RGN-07  (see DECISIONS.md)
 // RESULTS BY ZONE + THE NAME IS THE LOAD PATH (Kinect, Sep 17 2026)
 // Adolfo: "this type of view is not helpful. ideally the results would be
 // split in north and south. its very confusing to try and understand the
@@ -16,10 +17,13 @@
 //  E. clicking a row opens the sheet of that floor that actually holds it
 //  F. a pour drawn on one sheet has no zone headers
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

@@ -1,3 +1,4 @@
+// @rules SEQ-02  (see DECISIONS.md)
 // CLICK THE TIGHTER PATCH (Sep 17 2026)
 // Adolfo: "in the sequence, it would be good to be able to click on the areas
 // that need reshore to be tightened due to heavier loads in those areas."
@@ -7,10 +8,13 @@
 //     sits under — with the marching outline, and the button lights up
 //  C. the highlight survives the switch between the Results and Sequence tabs
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

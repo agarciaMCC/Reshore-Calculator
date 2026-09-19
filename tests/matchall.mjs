@@ -1,3 +1,4 @@
+// @rules BLD-07, RES-08  (see DECISIONS.md)
 // Match every floor in one pass (Sep 10, 2026), and the no-shore alert
 // saying WHERE.
 //
@@ -10,10 +11,13 @@
 //  F. "no shore in the catalog reaches" names the floor, the region and the
 //     height, and clicking a line puts that area on the plan
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

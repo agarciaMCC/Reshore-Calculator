@@ -1,12 +1,16 @@
+// @rules EDG-03  (see DECISIONS.md)
 // Curves. Every consumer works in straight segments, so the question is how
 // finely a Bezier gets chopped — and whether Simplify can tell a traced curve
 // from drafting litter. fixtures/curve.pdf is a generated sheet with a filled
 // disc, a stroked circle and a plain square.
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

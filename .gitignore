@@ -12,3 +12,6 @@ node_modules/
 # Browser/test scratch
 test-results/
 playwright-report/
+
+# Playwright install + browser cache (local test runs)
+.pw-browsers/

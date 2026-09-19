@@ -1,3 +1,4 @@
+// @rules MDL-07, MDL-09  (see DECISIONS.md)
 // TIGHTENED BY A LATER POUR (Kinect, Sep 18 2026)
 // Adolfo: "we need something that tells us if the pattern needs to be
 // tighter under a floor for another pour in the area." Chose: the floor
@@ -11,10 +12,13 @@
 //  D. the floor tab legend carries it; Sequence's install note is amber with
 //     a show-where button that puts the patch on the plan
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

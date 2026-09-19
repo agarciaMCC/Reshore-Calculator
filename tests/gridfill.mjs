@@ -1,3 +1,4 @@
+// @rules BLD-08  (see DECISIONS.md)
 // THE WHOLE GRID, NOT JUST THE CROSSINGS YOU CLICKED (Sep 17 2026)
 // Adolfo: "why is the floor grid matching so far off? I think that it has to
 // do with the north and south nature of the drawings."
@@ -14,10 +15,13 @@
 //  C. where the grid already has a line, the grid wins and the difference is
 //     reported on that sheet, and shows up in the stacking check
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
 import fs from 'node:fs';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

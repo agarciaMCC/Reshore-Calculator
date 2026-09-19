@@ -1,12 +1,16 @@
+// @rules EDG-08  (see DECISIONS.md)
 // EDGE EDITS AFTER THE BUILDING STEP CONFIRM THEMSELVES (Sep 18 2026)
 // Adolfo: "the floor edge asks for confirmation all the way back in step one
 // if you make a change to slab edge later on. this is not necessary. assume
 // that the changes to slab edge after the building step are an assumed
 // confirmation."
 import { createRequire } from 'node:module';
-const { chromium } = createRequire('/home/claude/x.js')('playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import path from 'node:path';
-const here = new URL('.', import.meta.url).pathname;
+const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 const browser = await chromium.launch();
