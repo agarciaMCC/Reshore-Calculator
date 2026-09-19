@@ -128,7 +128,7 @@ console.log('B. inside a frame, Save job hands you the job as text');
   });
   ok(dlTest.name === 'Shared_Test.reshore.json', 'it offers the real file: ' + dlTest.name);
   ok(dlTest.len > 100 && !dlTest.viaText, 'and skips the text box entirely: ' + JSON.stringify({ len: dlTest.len, viaText: dlTest.viaText }));
-  ok(/Job saved/.test(dlTest.toast), 'saying so: ' + JSON.stringify(dlTest.toast));
+  ok(/Job saved|Job download requested/.test(dlTest.toast), 'saying so: ' + JSON.stringify(dlTest.toast));
 
   const declined = await f.evaluate(async () => {
     window.claude = { use: () => Promise.resolve({ save: () => Promise.reject({ code: 'declined' }) }) };

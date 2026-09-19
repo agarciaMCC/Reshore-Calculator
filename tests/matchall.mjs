@@ -220,28 +220,48 @@ ok(ns.items.some(x => x.h > 0), 'at least one is a real height nothing reaches: 
 // a row can be unshoreable three ways, and each says which: no shore in the
 // catalog reaches the height, there is no floor below to stand on, or that
 // floor has no slab here at all so there is nothing to reshore against
-ok(/nothing below to stand on|nothing to reshore against/.test(ns.text) || ns.items.every(x => x.h > 0),
-  'and the other kinds say why: ' + ns.text.slice(0, 200));
-ok(/No shore in the catalog reaches|Nothing to shore against|No floor under the pour here/i.test(ns.text),
-  'the list heads the summary: ' + ns.text.slice(0, 60));
-ok(ns.items.some(x => new RegExp(x.floor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(ns.text)), 'the floor name is on screen');
-ok(/\d+'-\d/.test(ns.text), 'so is the height needed: ' + (ns.text.match(/\d+'-[\d\s\-/]+"/g) || []).slice(0, 3).join(', '));
-ok(!/no shore in the catalog tall enough/i.test(ns.head), 'and the bare count is gone from the header');
-ok(await page.$$eval('#schedSummary .ns-row', r => r.length) === ns.items.length, 'a clickable row each');
-const picked = await page.evaluate(async () => {
-  document.querySelector('#schedSummary .ns-row').click();
-  await new Promise(r => setTimeout(r, 1200));
-  const L = schedSolve.levels[schedPourIdx];
-  const it = noShoreItems(L)[0];
-  const want = it.kind === 'beam' ? null : L.solve.regions[it.ri];
-  return { hl: state.ui.highlight && state.ui.highlight.regionKey, want: want && want.key,
-    label: state.ui.highlight && state.ui.highlight.label, itLabel: it.label,
-    page: state.pdf.current, floorPage: (levelSheets(state.levels[it.lv])[0] || {}).page,
-    lit: document.querySelectorAll('#schedBody .sched-region.lit').length };
+// RES-07 (Sep 17 2026) relegated the "nothing to shore against" list: it is a
+// COUNT in the install summary now, with the reason carried on the region rows.
+// The old block of .ns-row lines in #schedSummary is gone on purpose — what is
+// asserted here is the count, the reason in its new home, and RES-08's rule
+// that the line still names the floor, the region and the height and clicks
+// onto the plan.
+ok(/\d+\s+rows?\s+with nothing to shore against/i.test(ns.text),
+  'the summary heads it as a count: ' + (ns.text.match(/\d+ rows? with nothing to shore against/i) || ['(absent)'])[0]);
+ok(+(ns.text.match(/(\d+) rows? with nothing to shore against/i) || [0, 0])[1] === ns.items.length,
+  `the count is the number of rows: ${(ns.text.match(/(\d+) rows? with nothing to shore against/i) || [])[1]} vs ${ns.items.length}`);
+ok(await page.$$eval('#schedSummary .ns-row', r => r.length) === 0,
+  'and the old list of lines is no longer a block of its own in the summary');
+ok(!/no shore in the catalog tall enough/i.test(ns.head), 'the bare count is not in the header');
+
+// the reason sits on the region rows
+const nsBody = await page.evaluate(() => {
+  const rows = [...document.querySelectorAll('#schedBody .ra-row')];
+  return { text: rows.map(r => r.innerText.replace(/\s+/g, ' ')).join(' | '),
+    goes: rows.filter(r => r.classList.contains('sched-go')).length };
 });
-ok(picked.hl === picked.want, 'clicking the line highlights that region: ' + picked.hl);
-ok(picked.label === picked.itLabel, 'labelled as the line names it: ' + picked.label);
-ok(picked.page === picked.floorPage, 'on the floor that cannot be shored: page ' + picked.page);
+ok(/No shore in the catalog reaches|nothing to shore against|nothing below|no floor under the pour/i.test(nsBody.text),
+  'a region row says why it cannot be shored: ' + nsBody.text.slice(0, 160));
+ok(ns.items.some(x => new RegExp(x.floor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(nsBody.text)),
+  'naming the floor it is under');
+ok(/\d+'-\d/.test(nsBody.text) || ns.items.every(x => !x.h),
+  'and the height needed where there is one: ' + (nsBody.text.match(/\d+'-[\d\s\-/]+"/g) || []).slice(0, 3).join(', '));
+ok(nsBody.goes > 0, 'the rows are clickable: ' + nsBody.goes);
+
+// RES-08: the line clicks onto the plan
+const picked = await page.evaluate(async () => {
+  const L0 = schedSolve.levels[schedPourIdx];
+  const it = noShoreItems(L0)[0];
+  const want = it.kind === 'beam' ? null : L0.solve.regions[it.ri];
+  const row = [...document.querySelectorAll('#schedBody .ra-row.sched-go')][0];
+  row.click();
+  await new Promise(r => setTimeout(r, 1200));
+  return { hl: state.ui.highlight && state.ui.highlight.regionKey, anyWant: !!want,
+    page: state.pdf.current, lit: document.querySelectorAll('#schedBody .sched-region.lit').length,
+    pages: state.levels.map(l => (levelSheets(l)[0] || {}).page) };
+});
+ok(picked.hl, 'clicking a row puts a region on the plan: ' + picked.hl);
+ok(picked.pages.includes(picked.page), 'on a floor sheet of this job: page ' + picked.page);
 ok(picked.lit === 1, 'and its card lights up in the schedule');
 
 await browser.close();

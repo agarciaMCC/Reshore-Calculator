@@ -274,7 +274,7 @@ await page.evaluate(() => {
   runSchedule();
 });
 let mk = await page.evaluate(() => { const L = schedSolve.levels[0].solve; return L.regions.map(r => ({ label: regionLabel(r, 0), codes: r.steps.map(s => s.code) })); });
-ok(mk.every(r => !/A1/.test(r.label) && /7½" slab/.test(r.label)), 'region label has no pour mark: ' + mk.map(r => r.label).join(' | '));
+ok(mk.every(r => !/A1/.test(r.label) && /7½" slab/i.test(r.label)), 'region label has no pour mark: ' + mk.map(r => r.label).join(' | '));
 ok(mk.some(r => r.codes[0] === 'E2') && mk.some(r => r.codes[0] === 'A1'), 'L1 rows carry the carrying floor\'s mark: ' + JSON.stringify(mk.map(r => r.codes)));
 ok(await page.$eval('#schedBody', e => { const th = [...e.querelectorAll ? [] : e.querySelectorAll('thead th')].map(t => t.textContent.trim()); return th[1] === 'Mark' && th[2].startsWith('Capacity'); }), 'Mark column sits before Capacity');
 ok(await page.$eval('#schedBody', e => e.querySelectorAll('tbody tr').length && [...e.querySelectorAll('tbody tr')].every(tr => tr.querySelectorAll('td').length === 8 || [...tr.querySelectorAll('td')].reduce((n, td) => n + (+td.colSpan || 1), 0) === 8)), 'every row spans 8 columns');
@@ -304,35 +304,43 @@ ok(await page.evaluate(() => { const s = canvasToScreen(300, 400); const h = hit
 ok(await page.evaluate(() => { escapeOnce({}); return state.ui.highlight === null && hitTest(canvasToScreen(500, 400).x, canvasToScreen(500, 400).y) !== null; }), 'Esc clears and everything is back');
 await page.evaluate(() => renderCanvas());
 
-console.log('9. Slab edge tolerance');
+console.log('9. Overhang past the floor below (MDL-11)');
+// The "Slab edge tolerance" setting this section used to drive was removed on
+// Sep 18 2026 (MDL-11): an overhang of 3 ft or less bears on the floor below,
+// because falsework carries it back to the slab edge, and anything wider reads
+// as no slab and spans through. There is no setting to poke any more.
 await setup();
 await page.evaluate(() => {
   const sq = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
   state.levels[0].slabZones = [];
   state.levels[0].zones[0].polygon = sq(0, 0, 100, 20);
-  // L1 is at 0.5 ft/px, so 0..196 px = 0..98 ft: the pour overhangs by 2 ft.
+  // L1 is at 0.5 ft/px, so 0..196 px = 0..98 ft: the pour overhangs it by 2 ft.
   // Extent comes from the FLOOR EDGE shape; the loading area is capacity only.
   state.levels[1].zones.push({ id: sid(), polygon: sq(0, 0, 196, 40), capacityPSF: 54, mark: '1', label: '', colorIdx: 0 });
   state.levels[1].slabZones.push({ id: sid(), polygon: sq(0, 0, 196, 40), kind: 'edge', thicknessIn: null, offsetIn: 0, label: '' });
 });
 let tol = await page.evaluate(() => {
   const run = () => { const L = solveAll({ step: 1 }).levels[0].solve; return L.regions.map(r => ({ area: r.areaSF, edge: r.edgeSamples, none: r.steps.some(s => s.open && s.noSlab), h: r.steps[0].shoreHeightFt, label: regionLabel(r, 0) })); };
-  state.project.minRegionSF = 0;        // keep slivers so the tolerance itself is visible
-  const a = run();
-  state.project.edgeTolFt = 0; const b = run();
-  state.project.edgeTolFt = 1; const c = run();
+  state.project.minRegionSF = 0;   // keep slivers so the band itself is visible
+  const near = run();
+  // pull the floor below back to 0..184 px = 0..92 ft, an 8 ft overhang
+  const pullBack = poly => poly.forEach(pt => { if (pt.x === 196) pt.x = 184; });
+  pullBack(state.levels[1].zones[state.levels[1].zones.length - 1].polygon);
+  pullBack(state.levels[1].slabZones[state.levels[1].slabZones.length - 1].polygon);
+  const far = run();
+  // a tolerance saved in an older job must be ignored, not honoured
+  state.project.edgeTolFt = 1;
+  const ignored = edgeToleranceFt();
   delete state.project.edgeTolFt; delete state.project.minRegionSF;
-  return { a, b, c };
+  return { near, far, bearFt: edgeToleranceFt(), ignored };
 });
-ok(tol.a.length === 1 && tol.a[0].edge === 40 && !tol.a[0].none && Math.abs(tol.a[0].h - 9.375) < 1e-6, 'default 2 ft: one region, 40 edge samples bear on L1: ' + JSON.stringify(tol.a));
-ok(tol.b.length === 2 && tol.b.some(r => r.none && r.area === 40 && /past a floor edge/.test(r.label)), 'tolerance 0: overhang spans past L1: ' + JSON.stringify(tol.b));
-ok(tol.c.length === 2 && tol.c.some(r => r.none && r.area === 20) && tol.c.some(r => r.edge === 20 && !r.none), 'tolerance 1 ft: only the nearer strip is caught: ' + JSON.stringify(tol.c));
-ok(tol.b.every(r => !/at slab edge/.test(r.label)) && tol.c.every(r => !/at slab edge/.test(r.label)), 'edge samples merge into the region they match; no edge label unless the whole region is at the edge');
-ok(await page.$eval('#advEdgeTol', e => e.value === '2'), 'Advanced shows the default');
-await page.evaluate(() => { const i = document.getElementById('advEdgeTol'); i.value = '3'; i.dispatchEvent(new Event('change')); });
-ok(await page.evaluate(() => state.project.edgeTolFt === 3 && edgeToleranceFt() === 3), 'Advanced sets it');
-await page.evaluate(() => history.undo());
-ok(await page.evaluate(() => edgeToleranceFt() === 2), 'undo restores default');
+ok(tol.near.length === 1 && tol.near[0].edge === 40 && !tol.near[0].none && Math.abs(tol.near[0].h - 9.375) < 1e-6,
+   'a 2 ft overhang bears on the floor below, one region: ' + JSON.stringify(tol.near));
+ok(tol.far.some(r => r.none), 'an 8 ft overhang reads as no slab and spans through: ' + JSON.stringify(tol.far));
+ok(tol.far.some(r => r.none && r.area < 400) && tol.far.some(r => !r.none && r.area > 1500), 'and it is the band that does, not the whole pour: ' + JSON.stringify(tol.far.map(r => r.area)));
+ok(tol.bearFt === 3, 'the rule is a constant 3 ft: ' + tol.bearFt);
+ok(tol.ignored === 3, 'an edgeTolFt saved in an older job is ignored: ' + tol.ignored);
+ok(await page.evaluate(() => !document.getElementById('advEdgeTol')), 'and the Settings row for it is gone');
 
 console.log('10. Sliver merge');
 await setup();
@@ -402,7 +410,11 @@ ok(await page.$eval('#schedBody select.sched-beam-n', e => e.classList.contains(
 ok(await page.$eval('#schedBody .sched-region:not(.sched-beam) .sched-table tbody', e => e.querySelectorAll('tr').length === 2), 'slab table has its two rows only');
 // print includes the beam block
 const pr = await page.evaluate(async () => { let html = ''; const w = { document: { write: s => { html += s; }, close() {} }, print() {} }; const o = window.open; window.open = () => w; try { printSchedule(); } finally { window.open = o; } return html; });
-ok(/B1 · 24&quot;×36&quot; beam · GB-1 · over R1/.test(pr) && /Slab spare PSF × eff. width ft = PLF/.test(pr), 'print has the beam block');
+// The exact heading is RGN-07 / BEM-06 business and is asserted in naming.mjs;
+// what matters here is that the beam prints as its own block, identified by
+// size and label, with the effective-width arithmetic shown (BEM-01).
+ok(/24&quot;×36&quot;/.test(pr) && /GB-1/.test(pr) && /Slab spare PSF × eff. width ft = PLF/.test(pr),
+   'print has the beam block: ' + (pr.match(/[^>]*24&quot;×36&quot;[^<]*/) || ['(no beam heading found)'])[0]);
 
 console.log('12. Load-path diagram');
 await setup();
@@ -442,10 +454,12 @@ ok(await page.$eval('#btnAdv', e => /Settings/.test(e.textContent) && !/Advanced
 await page.click('#btnAdv');
 ok(await page.$eval('#advPop', e => e.classList.contains('open')), 'it opens');
 ok(await page.$eval('#advPop', e => /Default slab condition colors/.test(e.textContent)), 'colours heading renamed');
-ok(await page.$eval('#advPop', e => e.querySelectorAll('.adv-note').length === 2), 'both solver settings carry an explanation');
-ok(await page.$eval('#advPop', e => /overhangs the floor below/.test(e.textContent)
-   && /absorbed by the neighbour/.test(e.textContent)
-   && /same loading marks/.test(e.textContent)), 'the explanations say what the settings mean, marks included');
+// The edge-tolerance setting went with MDL-11 (Sep 18 2026), so the minimum
+// region size is the only solver setting left.
+ok(await page.$eval('#advPop', e => e.querySelectorAll('.adv-note').length === 1), 'the solver setting carries an explanation');
+ok(await page.$eval('#advPop', e => /absorbed by the neighbour/.test(e.textContent)
+   && /same loading marks/.test(e.textContent)), 'the explanation says what it means, marks included');
+ok(await page.$eval('#advPop', e => !/overhang/i.test(e.textContent)) && await page.evaluate(() => !document.getElementById('advEdgeTol')), 'and no edge-tolerance setting survives here');
 // picking colours must not close it — the re-render detaches the clicked node
 for (const i of [1, 2]) {
   await page.evaluate(() => { const b = document.querySelectorAll('#advSlabColors .swatch[data-kind-color]'); b[b.length - 1].click(); });
@@ -453,7 +467,7 @@ for (const i of [1, 2]) {
   ok(await page.$eval('#advPop', e => e.classList.contains('open')), 'still open after colour pick ' + i);
 }
 ok(await page.evaluate(() => Object.keys(state.project.slabKindColors || {}).length > 0), 'the colour was actually applied');
-await page.click('#advEdgeTol'); await page.waitForTimeout(60);
+await page.click('#advMinRegion'); await page.waitForTimeout(60);   // was #advEdgeTol, removed with MDL-11
 ok(await page.$eval('#advPop', e => e.classList.contains('open')), 'clicking a field keeps it open');
 await page.keyboard.press('Escape'); await page.waitForTimeout(60);
 await page.keyboard.press('Escape'); await page.waitForTimeout(60);

@@ -69,6 +69,11 @@ ok(B.span > 240 && B.span < 270, `grid 1 to 11 spans about 256 ft, not 64: ${B.f
 console.log('C. kinect4, matched at a quarter scale: the grid is reported 4× off and rescaled in one click');
 const C2 = await page.evaluate(async ([job]) => {
   applyOpenedJob(JSON.parse(job), 'kinect4');
+  // kinect4.json has since been re-saved with the grid put right, so the state
+  // Adolfo reported no longer exists in the file. Rebuild it with the app's own
+  // inverse — a grid and every match defined at a quarter of the plan's scale,
+  // which is what a 3/8" detail note produced — and then assert the repair.
+  rescaleGrid(0.25);
   setStep('match'); renderMatchPanel();
   for (let i = 0; i < 300 && !(gridScaleCheck && gridScaleCheck.ready); i++) await new Promise(r => setTimeout(r, 100));
   const gx = () => state.project.grid.x, span = () => +(gx()[gx().length - 1].pos - gx()[0].pos).toFixed(1);
@@ -87,7 +92,7 @@ const C2 = await page.evaluate(async ([job]) => {
 }, [job]);
 ok(Math.abs(C2.before.k - 4) < 0.02 && C2.before.n === 7, 'all seven matched sheets disagree with their plan notes by the same 4×: ' + C2.before.k);
 ok(/4× too small/.test(C2.before.banner) && /Rescale ×4/.test(C2.before.banner), 'the Match step says so and offers the fix: ' + C2.before.banner.slice(0, 80));
-ok(/4.00× off/.test(C2.before.status), 'and the step is held open until it is fixed: ' + C2.before.status);
+ok(/4(\.00)?×\s*off/.test(C2.before.status), 'and the step is held open until it is fixed: ' + C2.before.status);
 ok(C2.before.span < 70 && C2.after.span > 240 && C2.after.span < 270, `one click: grid 1→11 ${C2.before.span} ft → ${C2.after.span} ft`);
 ok(Math.abs(C2.after.fpi - 10.667) < 0.01 && Math.abs(C2.after.ratio - C2.before.k) < 0.01, 'every match now reads 1" = 10.67\' and places the same pixel 4× further out: ' + JSON.stringify([C2.after.fpi, C2.after.ratio]));
 ok(C2.after.matched === 7 && !C2.after.banner && C2.after.k == null, 'the seven matches are kept, and the warning is gone: ' + C2.after.status);

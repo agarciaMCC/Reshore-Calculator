@@ -38,6 +38,16 @@ await page.evaluate(async ([b64, d]) => {
   deserializeDoc(d); sortLevelsByElevation();
   document.getElementById('upload-prompt').style.display = 'none';
   setStep('areas');
+  // This section is about the CHECK, and the job has since had the faults it
+  // describes put right (1B is drawn North/South now, and Level 2 South has an
+  // edge). Rebuild them here so the check has something to catch: 1B back to
+  // its north sheet only, and Level 2 South's floor edge taken off.
+  const l1b = state.levels.find(l => l.name === '1B');
+  if (l1b && (l1b.sheets || []).length) l1b.sheets = [];
+  const l2 = state.levels.find(l => l.name === '2');
+  const south = levelSheets(l2).map(s => s.page).sort((a, b) => a - b)[1];
+  l2.slabZones = l2.slabZones.filter(z => !(z.kind === 'edge' && zonePage(l2, z) === south));
+  window.__southPage = south;
   await warmSheetSizes(state.levels.flatMap(l => levelSheets(l).map(s => s.page)));
 }, [pdf.toString('base64'), job]);
 
@@ -58,10 +68,28 @@ ok(s2n && s2s && s3s && s1b, 'the split floors are listed by their zone names');
 ok(s2s.edges === 0 && s2s.issues.some(t => /no floor edge/.test(t)),
   'Level 2 South is called out for having no floor edge: ' + JSON.stringify(s2s.issues));
 ok(s2n.edges === 1 && !s2n.issues.length, 'Level 2 North is clean: ' + JSON.stringify(s2n.issues));
-ok(s3s.issues.some(t => /ft south of anything 2 describes/.test(t)),
-  'Level 3 South is told it stands past what Level 2 describes: ' + JSON.stringify(s3s.issues));
-ok(s2s.issues.some(t => /ft south of anything 1B describes/.test(t)),
-  'and Level 2 South past what 1B describes — 1B has only its north sheet: ' + JSON.stringify(s2s.issues));
+// UI-12 (Sep 17 2026): the overshoot warning auto-clears where the ground
+// outside the lower floor is slab on grade. This job's bottom is on grade, so
+// standing past what the floor below describes is fine here — and must be
+// raised again the moment that is not true.
+ok(!s3s.issues.some(t => /south of anything/.test(t)) && !s2s.issues.some(t => /south of anything/.test(t)),
+  'standing past the floor below is not flagged while the ground there is on grade: ' + JSON.stringify([s3s.issues, s2s.issues]));
+const noGrade = await page.evaluate(() => {
+  // the auto-clear reads the on-grade AREAS drawn there, not just the flag
+  const marks = state.levels.map(l => ({ og: l.onGrade, ok: l.stackOk, kinds: (l.slabZones || []).map(z => z.kind) }));
+  state.levels.forEach(l => { l.onGrade = false; delete l.stackOk;
+    (l.slabZones || []).forEach(z => { if (z.kind === 'grade') z.kind = 'slab'; }); });
+  const out = sheetStackRows().map(r => ({ level: r.level, zone: r.zone, issues: r.issues }));
+  state.levels.forEach((l, i) => { l.onGrade = marks[i].og; if (marks[i].ok) l.stackOk = marks[i].ok;
+    (l.slabZones || []).forEach((z, j) => { z.kind = marks[i].kinds[j]; }); });
+  return out;
+});
+const n3s = noGrade.find(r => r.level === '3' && r.zone === 'South') || { issues: [] };
+const n2s = noGrade.find(r => r.level === '2' && r.zone === 'South') || { issues: [] };
+ok(n3s.issues.some(t => /south of anything 2 describes/.test(t)),
+  'with nothing on grade below, Level 3 South is told it stands past what Level 2 describes: ' + JSON.stringify(n3s.issues));
+ok(n2s.issues.some(t => /south of anything 1B describes/.test(t)),
+  'and Level 2 South past what 1B describes — 1B has only its north sheet: ' + JSON.stringify(n2s.issues));
 ok(!s1b.issues.length, 'the bottom floor answers to nothing below it');
 // the numbers are the ground, not the page
 ok(s2n.bb[3] - s2n.bb[2] > 150 && s3s.bb[2] > s2n.bb[2],
@@ -69,7 +97,7 @@ ok(s2n.bb[3] - s2n.bb[2] > 150 && s3s.bb[2] > s2n.bb[2],
 // two sheets of one floor on the SAME ground is the other failure it catches
 const dup = await page.evaluate(() => {
   const lv = state.levels.find(l => l.name === '2');
-  const sh = lv.sheets.find(s => s.page === 8);
+  const sh = lv.sheets.find(s => s.page === window.__southPage) || lv.sheets[0];
   const keep = sh.alignment;
   sh.alignment = JSON.parse(JSON.stringify(lv.alignment));   // South matched as if it were North
   const got = sheetStackRows().filter(r => r.level === '2').map(r => r.issues.join(' | '));
@@ -89,7 +117,7 @@ const P = await page.evaluate(async () => {
            warnHead: !!host.querySelector('.ss-head.warn'), ghostBox: !!host.querySelector('#ssGhost') };
 });
 ok(P.shown && P.rows === 6, 'the panel lists every floor-sheet: ' + JSON.stringify(P));
-ok(P.bad >= 2 && P.warnHead, 'the ones to look at are marked, and the header says so: ' + JSON.stringify(P));
+ok(P.bad >= 1 && P.warnHead, 'the ones to look at are marked, and the header says so: ' + JSON.stringify(P));
 ok(P.ghostBox, 'with the ghost switch on it');
 const jumped = await page.evaluate(async () => {
   const rows = sheetStackRows();
@@ -98,7 +126,8 @@ const jumped = await page.evaluate(async () => {
   await new Promise(r => setTimeout(r, 400));
   return { page: state.pdf.current, level: state.levels[state.activeLevelIdx].name };
 });
-ok(jumped.page === 8 && jumped.level === '2', 'clicking a row goes to that floor on that sheet: ' + JSON.stringify(jumped));
+const l2pages = await page.evaluate(() => levelSheets(state.levels.find(l => l.name === '2')).map(s => s.page).sort((a, b) => a - b));
+ok(jumped.page === l2pages[1] && jumped.level === '2', `clicking a row goes to that floor on that sheet: ${JSON.stringify(jumped)} want page ${l2pages[1]}`);
 
 // ── B. the ghost ───────────────────────────────────────────────────────
 console.log('B. the floor below, drawn under the sheet you are on');
@@ -136,9 +165,10 @@ const C = await page.evaluate(async () => {
   const lv = state.levels[li];
   const arr = zonesOf(lv, 'loading');
   const n0 = arr.length;
-  // one area on ground sheet 7 shows, one on ground sheet 8 shows, one a mile away
+  // one area on each of this floor's own sheets, and one a mile away
   const boxAt = (x, y) => [{x:x-8,y:y-8},{x:x+8,y:y-8},{x:x+8,y:y+8},{x:x-8,y:y+8}];
-  const f7 = sheetFootprintFt(lv, 7), f8 = sheetFootprintFt(lv, 8);
+  const [pgN, pgS] = levelSheets(lv).map(sh => sh.page).sort((a, b) => a - b);
+  const f7 = sheetFootprintFt(lv, pgN), f8 = sheetFootprintFt(lv, pgS);
   const c = b => [(b.minX+b.maxX)/2, (b.minY+b.maxY)/2];
   autoTrace = { page: 1, plans: [{ title: 'KEY PLAN', levelIdx: li, match: { ok: true },
     fills: [
@@ -149,10 +179,10 @@ const C = await page.evaluate(async () => {
   await acceptAutoTrace();
   const got = arr.slice(n0).map(z => z.page);
   history.undo();
-  return { got, n0, after: arr.length };
+  return { got, n0, after: arr.length, pgN, pgS };
 });
 ok(C.got.length === 2, 'the two areas a sheet shows are added, the third is not: ' + JSON.stringify(C));
-ok(C.got.includes(7) && C.got.includes(8), 'each landing on the sheet that shows it: ' + JSON.stringify(C.got));
+ok(C.got.includes(C.pgN) && C.got.includes(C.pgS), `each landing on the sheet that shows it: ${JSON.stringify(C.got)} want ${C.pgN}/${C.pgS}`);
 
 await browser.close();
 console.log(`\n${pass} passed, ${fail} failed`);

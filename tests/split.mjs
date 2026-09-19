@@ -34,7 +34,10 @@ await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
 // North/South across two plan sheets
 const KIN = path.resolve(here, '..', 'Kinect');
 const pdf = fs.readFileSync(path.join(KIN, '2026.06.17 - 1326 - Reshore - Plans - AI.pdf'));
-const job = JSON.parse(fs.readFileSync(path.join(KIN, 'Kinect Calcs.json'), 'utf8'));
+// 'Kinect Calcs.json' is no longer in the folder; kinect4.json is the same job
+// (levels 2 and 3 each drawn North/South across two plan sheets).
+const jobFile = ['Kinect Calcs.json', 'kinect4-new.json', 'kinect4.json'].find(f => fs.existsSync(path.join(KIN, f)));
+const job = JSON.parse(fs.readFileSync(path.join(KIN, jobFile), 'utf8'));
 await page.evaluate(async ([b64, d]) => {
   const bin = atob(b64); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
   const doc = await pdfjsLib.getDocument({ data: u8 }).promise;
@@ -46,7 +49,8 @@ await page.evaluate(async ([b64, d]) => {
 
 const L = await page.evaluate(() => state.levels.map((l, i) => ({ i, name: l.name, pages: levelSheets(l).map(s => s.page) })));
 console.log('   ' + JSON.stringify(L));
-const li2 = L.find(l => l.name === '2').i;   // North sheet 7 / South sheet 8
+const li2 = L.find(l => l.name === '2').i;   // level 2 is drawn North/South
+const [pgN, pgS] = L.find(l => l.name === '2').pages;   // page numbers come from the job, not hardcoded
 const li3 = L.find(l => l.name === '3').i;   // North sheet 9 / South sheet 10
 
 // ── A. a second sheet is ADDED, never a swap ───────────────────────────
@@ -109,16 +113,16 @@ ok(JSON.stringify(A3) === '[97,98]', 'the sheet-assignment review keeps both: ' 
 
 // ── B. an area belongs to ONE sheet ────────────────────────────────────
 console.log('B. each area stays on its own sheet');
-const B = await page.evaluate((li) => {
+const B = await page.evaluate(([li, pgN, pgS]) => {
   const lv = state.levels[li];
   const arr = zonesOf(lv, 'slab');
   const byPage = {};
   for (const z of arr) { const p = zonePage(lv, z); byPage[p] = (byPage[p] || 0) + 1; }
   const vis = pg => { state.pdf.current = pg; return arr.filter(z => zoneOnSheet(lv, z)).length; };
-  return { byPage, on7: vis(7), on8: vis(8), total: arr.length };
-}, li2);
-ok(B.on7 + B.on8 === B.total, 'every area of the split floor shows on exactly one of its sheets: ' + JSON.stringify(B));
-ok(B.on7 > 0 && B.on8 > 0, 'and both sheets have some: ' + JSON.stringify(B));
+  return { byPage, onN: vis(pgN), onS: vis(pgS), total: arr.length };
+}, [li2, pgN, pgS]);
+ok(B.onN + B.onS === B.total, 'every area of the split floor shows on exactly one of its sheets: ' + JSON.stringify(B));
+ok(B.onN > 0 && B.onS > 0, 'and both sheets have some: ' + JSON.stringify(B));
 // the unstamped scan output is healed from the sheet it was read off
 ok(await page.evaluate((li) => {
   const lv = state.levels[li];
@@ -149,7 +153,7 @@ ok(JSON.stringify(C) === '[7,8,8]', 'each accepted shape carries the sheet it wa
 
 // ── D. a load-map area lands on the sheet it falls on ──────────────────
 console.log('D. a pending load-map area picks its own sheet');
-const D = await page.evaluate((li) => {
+const D = await page.evaluate(([li, pgN, pgS]) => {
   const lv = state.levels[li];
   // where each sheet's match crossings actually sit, in building feet
   const box = pg => {
@@ -157,28 +161,28 @@ const D = await page.evaluate((li) => {
     const pts = a.points.map(q => pixelToBuilding(q.px, q.py, a.transform));
     return { x: pts.reduce((s, p) => s + p.bx, 0) / pts.length, y: pts.reduce((s, p) => s + p.by, 0) / pts.length };
   };
-  const c7 = box(7), c8 = box(8);
+  const c7 = box(pgN), c8 = box(pgS);
   const near = c => [{x:c.x-1,y:c.y-1},{x:c.x+1,y:c.y-1},{x:c.x+1,y:c.y+1},{x:c.x-1,y:c.y+1}];
   const arr = zonesOf(lv, 'loading');
   const n0 = arr.length;
   arr.push({ id: 'pend7', bPoly: near(c7), polygon: [], capacityPSF: 100, fromLoadMap: true });
   arr.push({ id: 'pend8', bPoly: near(c8), polygon: [], capacityPSF: 100, fromLoadMap: true });
   // the first sheet is the one "just matched" — the old code gave it both
-  materializeLevelZones(lv, 7);
+  materializeLevelZones(lv, pgN);
   const got = { p7: arr.find(z => z.id === 'pend7').page, p8: arr.find(z => z.id === 'pend8').page,
                 apart: Math.round(Math.hypot(c7.x - c8.x, c7.y - c8.y)) };
   arr.length = n0;
   return got;
-}, li2);
+}, [li2, pgN, pgS]);
 ok(D.apart > 20, 'the two sheets really do cover different ground: ' + D.apart + ' ft apart');
-ok(D.p7 === 7 && D.p8 === 8, 'each pending area materialises onto the sheet it falls on: ' + JSON.stringify(D));
+ok(D.p7 === pgN && D.p8 === pgS, 'each pending area materialises onto the sheet it falls on: ' + JSON.stringify(D) + ' want ' + pgN + '/' + pgS);
 
 // ── E. the Areas list is exactly the sheet on screen ───────────────────
 console.log('E. the Areas list shows only the sheet on screen');
-await page.evaluate((li) => {
+await page.evaluate(([li, pgN, pgS]) => {
   setStep('areas'); state.activeLevelIdx = li; setLayer('slab');
-  setSheetZone(state.levels[li], 7, 'North'); setSheetZone(state.levels[li], 8, 'South');
-}, li2);
+  setSheetZone(state.levels[li], pgN, 'North'); setSheetZone(state.levels[li], pgS, 'South');
+}, [li2, pgN, pgS]);
 const onSheet = async (pg) => page.evaluate((pg) => {
   state.pdf.current = pg; state.activeZoneIdx = null; renderSidebar();
   const lv = getActiveLevel();
@@ -188,17 +192,19 @@ const onSheet = async (pg) => page.evaluate((pg) => {
   return { rows, here, total: zonesOf(lv, 'slab').length, note: el ? el.textContent.trim() : null,
            jump: el ? [...el.querySelectorAll('button[data-gosheet]')].map(b => +b.dataset.gosheet) : [] };
 }, pg);
-const E7 = await onSheet(7), E8 = await onSheet(8);
+const E7 = await onSheet(pgN), E8 = await onSheet(pgS);
 ok(E7.rows === E7.here && E8.rows === E8.here,
   'only this sheet\'s areas are listed: ' + JSON.stringify([E7.rows, E7.here, E8.rows, E8.here]));
 ok(E7.rows + E8.rows === E7.total, 'and between them they account for the floor: ' + JSON.stringify([E7.rows, E8.rows, E7.total]));
-ok(/South/.test(E7.note || '') && /\b\d+ more area/.test(E7.note || ''), 'sheet 7 says what is waiting on South: ' + E7.note);
-ok(/North/.test(E8.note || ''), 'sheet 8 says what is waiting on North: ' + E8.note);
-ok(JSON.stringify(E7.jump) === '[8]' && JSON.stringify(E8.jump) === '[7]', 'with a button onto that sheet: ' + JSON.stringify([E7.jump, E8.jump]));
+ok(/South/.test(E7.note || '') && /\b\d+ more area/.test(E7.note || ''), `sheet ${pgN} says what is waiting on South: ` + E7.note);
+ok(/North/.test(E8.note || ''), `sheet ${pgS} says what is waiting on North: ` + E8.note);
+ok(JSON.stringify(E7.jump) === JSON.stringify([pgS]) && JSON.stringify(E8.jump) === JSON.stringify([pgN]), 'with a button onto that sheet: ' + JSON.stringify([E7.jump, E8.jump]));
 // a single-sheet floor says nothing extra
+// whichever floor of this job really is drawn on one sheet (1B has two now)
 const E1 = await page.evaluate(() => {
-  const i = state.levels.findIndex(l => l.name === '1B');
-  state.activeLevelIdx = i; state.pdf.current = 6; state.activeZoneIdx = null; renderSidebar();
+  const i = state.levels.findIndex(l => levelSheets(l).length === 1 && zonesOf(l, 'slab').length);
+  state.activeLevelIdx = i; state.pdf.current = levelSheets(state.levels[i])[0].page;
+  state.activeZoneIdx = null; renderSidebar();
   return { note: !!document.querySelector('#zoneList .sb-elsewhere'),
            rows: [...document.querySelectorAll('#zoneList .sb-item')].length };
 });

@@ -75,27 +75,35 @@ const areaPages = () => page.evaluate(() => Object.fromEntries(state.levels.map(
 console.log('A. a sheet inserted at page 7');
 await openBase();
 const before = await sheetsNow(), aBefore = await areaPages();
-ok(before === '4:11 3:9,10 2:7,8 1B:6', 'the job starts bound to the old numbering: ' + before);
+// The job's binding is read from the job, not pinned: kinect4.json has been
+// re-matched since this was written (1B is drawn North/South now too).
+const shiftFrom = (s, at) => s.split(' ').map(t => { const [n, ps] = t.split(':');
+  return n + ':' + ps.split(',').map(x => +x >= at ? +x + 1 : +x).join(','); }).join(' ');
+const boundPages = before.split(' ').flatMap(t => t.split(':')[1].split(',').map(Number));
+const movedN = boundPages.filter(x => x >= 7).length, sameN = boundPages.length - movedN;
+console.log('   bound as ' + before + ` (${boundPages.length} sheets, ${movedN} of them at or past page 7)`);
+ok(/^4:\d+ 3:[\d,]+ 2:[\d,]+ 1B:[\d,]+$/.test(before) && boundPages.length >= 6, 'the job starts bound to the set as issued: ' + before);
 const R = await reissue(ins);
 console.log('   ' + R.rows.map(r => `${r.level}${r.zone ? ' ' + r.zone : ''} ${r.from}→${r.to}`).join('  '));
-ok(R.moved === 5 && R.same === 1 && R.missing === 0, 'five sheets moved, one did not, none lost: ' + JSON.stringify([R.moved, R.same, R.missing]));
+ok(R.moved === movedN && R.same === sameN && R.missing === 0, `the sheets at or past the insert move, the rest do not, none lost: ${JSON.stringify([R.moved, R.same, R.missing])} want ${JSON.stringify([movedN, sameN, 0])}`);
 ok(R.rows.every(r => r.to != null && r.how === 'its title block'), 'each one recognised by its own title block');
 ok(R.rows.every(r => r.to === (r.from >= 7 ? r.from + 1 : r.from)), 'everything after the insert shifts by one: ' + JSON.stringify(R.rows.map(r => [r.from, r.to])));
-ok(await page.$$eval('#remapPanel .rm-row', r => r.length) === 6, 'the panel shows a row per bound sheet');
-ok(/Re-number 5 sheets/.test(await page.$eval('#rmApply', b => b.textContent)), 'and offers to re-number the five that moved');
-ok(await page.$$eval('#remapPanel .rm-row.move', r => r.length) === 5, 'with the movers marked');
+ok(await page.$$eval('#remapPanel .rm-row', r => r.length) === boundPages.length, 'the panel shows a row per bound sheet');
+ok(new RegExp('Re-number ' + movedN + ' sheets?').test(await page.$eval('#rmApply', b => b.textContent)), 'and offers to re-number the ones that moved: ' + await page.$eval('#rmApply', b => b.textContent));
+ok(await page.$$eval('#remapPanel .rm-row.move', r => r.length) === movedN, 'with the movers marked');
 // nothing is written until applied
 ok(await sheetsNow() === before, 'nothing has changed yet: ' + await sheetsNow());
 await page.evaluate(() => applySetRemap());
-ok(await sheetsNow() === '4:12 3:10,11 2:8,9 1B:6', 'applying re-numbers them: ' + await sheetsNow());
+ok(await sheetsNow() === shiftFrom(before, 7), `applying re-numbers them: ${await sheetsNow()} want ${shiftFrom(before, 7)}`);
 const aAfter = await areaPages();
-ok(JSON.stringify(aAfter['3']) === '[10,11]' && JSON.stringify(aAfter['2']) === '[8,9]' && JSON.stringify(aAfter['1B']) === '[6]',
+const shiftArr = a => a.map(x => x >= 7 ? x + 1 : x);
+ok(Object.keys(aBefore).every(k => JSON.stringify(aAfter[k]) === JSON.stringify(shiftArr(aBefore[k]))),
   'and every area travels with its sheet: ' + JSON.stringify(aAfter) + ' was ' + JSON.stringify(aBefore));
 const rc = await page.evaluate(() => state.levels.flatMap(l => levelSheets(l).map(s =>
   [l.name + '/' + s.page, !!(s.alignment && s.alignment.transform), !!(s.alignment && s.alignment.recheck)])));
 ok(rc.every(x => x[1]), 'every match survives the move: ' + JSON.stringify(rc));
-ok(rc.filter(x => x[2]).length === 5 && !rc.find(x => x[0] === '1B/6')[2],
-  'the five that moved are flagged for a look, the one that did not is not: ' + JSON.stringify(rc));
+ok(rc.filter(x => x[2]).length === movedN && !rc.find(x => x[0] === '1B/6')[2],
+  'the ones that moved are flagged for a look, the one that did not is not: ' + JSON.stringify(rc));
 ok((await page.evaluate(() => sheetStackRows().flatMap(r => r.issues))).some(t => /carried over when the drawing set was re-issued/.test(t)),
   'and the stacking check says so');
 ok(await page.evaluate(() => { history.undo(); return state.levels.map(l => l.name + ':' + levelSheets(l).map(s => s.page).join(',')).join(' '); }) === before,
@@ -128,7 +136,7 @@ ok(kept.after === kept.n, 'applying leaves that sheet and its areas alone rather
 console.log('D. the same set loaded again');
 await openBase();
 const S = await reissue(base);
-ok(S.moved === 0 && S.missing === 0 && S.same === 6, 'nothing moves: ' + JSON.stringify([S.moved, S.same, S.missing]));
+ok(S.moved === 0 && S.missing === 0 && S.same === boundPages.length, 'nothing moves: ' + JSON.stringify([S.moved, S.same, S.missing]));
 ok(S.newSheets.length === 0, 'and nothing is called new: ' + JSON.stringify(S.newSheets));
 
 await browser.close();

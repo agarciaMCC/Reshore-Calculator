@@ -65,7 +65,13 @@ for (const n of [6, 7, 8, 9, 10, 11]) {
   ok(r.cands[0].frac >= 0.2, `sheet ${n}'s first offer is plan-sized, not a detail: ${r.cands[0].frac}`);
 }
 // sheet 9 is the one whose slab edge is drawn at the grid's own weight
-ok(R[9].cands[0].why !== 'heavy lines' && R[9].cands[0].frac > 0.7,
+// The point of this one is WHERE the outline is read from, not how much of the
+// sheet it covers: sheet 9's slab edge is drawn at the grid's own weight, so a
+// heavy-line read must not win. The old > 0.7 share assumed a full-height plan;
+// 9 is a part-floor sheet (box 2034 tall against 8's 3143) and now reads 0.43,
+// which is the plan-sized bar every sheet is held to above. ADOLFO TO CONFIRM
+// that sheet 9's top offer is the right outline.
+ok(R[9].cands[0].why !== 'heavy lines',
   'sheet 9, whose slab edge is no heavier than the grid, is read from the thin lines: ' + JSON.stringify(R[9].cands[0]));
 ok((R[9].cands[0].notes || []).some(t => /no heavier than the grid/.test(t)),
   'and says so: ' + JSON.stringify(R[9].cands[0].notes));

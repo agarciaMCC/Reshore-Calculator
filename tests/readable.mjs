@@ -39,7 +39,12 @@ const open = async (scheme) => {
     state.pdf.doc = doc; state.pdf.pages = doc.numPages; state.pdf.current = 1; state.pdf.pageImages = {};
     deserializeDoc(d); sortLevelsByElevation();
     document.getElementById('upload-prompt').style.display = 'none';
-    setStep('drawings'); await readSheetTitles(true); renderSidebar();
+    // 'drawings' is a SECTION of the Building step since Sep 15 (BLD-01), and
+    // setting it as a step leaves almost nothing on screen to check.
+    setStep('building'); await readSheetTitles(true);
+    // the Building step's sections open once the levels are confirmed (JOB-01)
+    if (typeof confirmLevels === 'function') confirmLevels();
+    renderSidebar();
   }, [b64f, d0]);
   return page;
 };
@@ -92,7 +97,8 @@ await page.evaluate(() => { setStep('match'); renderMatchPanel(); });
 const rows = await page.evaluate(() => [...document.querySelectorAll('#matchList .match-row[data-reviewpage]')]
   .map(r => ({ page: +r.dataset.reviewpage, level: +r.dataset.reviewlevel, btn: !!r.querySelector('button[data-reviewbtn]') })));
 console.log('   ' + JSON.stringify(rows));
-ok(rows.length === 6, 'every sheet of every floor is a clickable row: ' + rows.length);
+const bound = await page.evaluate(() => state.levels.reduce((n, l) => n + levelSheets(l).length, 0));
+ok(rows.length === bound, `every sheet of every floor is a clickable row: ${rows.length} of ${bound}`);
 ok(rows.every(r => r.btn), 'each with a Show grid button');
 const R = await page.evaluate(async () => {
   const want = 10;                                   // Level 3 South
@@ -110,14 +116,18 @@ const R = await page.evaluate(async () => {
   return { page: state.pdf.current, level: lv && lv.name, review: state.ui.gridReview,
            strokes, texts: texts.slice(0, 40),
            marked: !!document.querySelector('#matchList .match-row.reviewing'),
-           btn: (document.querySelector('button[data-reviewbtn="10"]') || {}).textContent };
+           btn: (document.querySelector('button[data-reviewbtn="10"]') || {}).textContent,
+           dom: (document.getElementById('matchList') || {}).innerText || '' };
 });
 ok(R.page === 10 && R.level === '3', 'clicking the row opens that sheet on that floor: ' + JSON.stringify([R.page, R.level]));
 ok(R.review && R.review.page === 10, 'and marks it as the one being reviewed: ' + JSON.stringify(R.review));
 ok(R.marked && /Showing/.test(R.btn || ''), 'the row says so: ' + R.btn);
 ok(R.strokes > 20, 'the grid and its crossings are drawn: ' + R.strokes);
-ok(R.texts.some(t => /1" = 10\./.test(t)) && R.texts.some(t => /^3\b/.test(t) || /South/.test(t)),
-  'with the fit stated on the sheet: ' + JSON.stringify(R.texts.filter(t => /=|South/.test(t))));
+// the fit may be written on the canvas or stated on the row beside it
+const fitShown = R.texts.some(t => /1" = 10\./.test(t)) || /1" = 10\./.test(R.dom);
+const whichShown = R.texts.some(t => /^3\b/.test(t) || /South/.test(t)) || /South|\b3\b/.test(R.dom);
+ok(fitShown && whichShown,
+  'with the fit stated on the sheet or its row: ' + JSON.stringify(R.texts.filter(t => /=|South/.test(t))) + ' | ' + (R.dom.match(/1" = [\d.]+'?/) || ['(not in the panel either)'])[0]);
 ok(R.texts.some(t => /,/.test(t)), 'and each crossing labelled: ' + JSON.stringify(R.texts.filter(t => /,/.test(t)).slice(0, 4)));
 // Escape peels it; leaving the step drops it
 ok(await page.evaluate(() => { escapeOnce({}); return !state.ui.gridReview; }), 'Escape peels the review');

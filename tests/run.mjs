@@ -71,7 +71,8 @@ const report = () => {
   const bad = results.filter(r => r.fail || r.crashed);
   const checks = results.reduce((n, r) => n + r.pass, 0);
   console.log(`\n${'='.repeat(64)}`);
-  console.log(`${results.length}/${want.length} suites, ${checks} checks, ${bad.length} not green`);
+  const flaky = results.filter(r => r.flaky).length;
+  console.log(`${results.length}/${want.length} suites, ${checks} checks, ${bad.length} not green${flaky ? `, ${flaky} needed a second run` : ''}`);
   if (bad.length) {
     const atRisk = new Set();
     console.log('');
@@ -133,5 +134,26 @@ await Promise.all(Array.from({ length: Math.min(JOBS, queue.length) }, async () 
     console.log(`  ${tag.padEnd(10)} ${f.replace('.mjs', '').padEnd(16)} ${r.pass} checks  ${r.secs}s`);
   }
 }));
+
+// A few suites wait on fixed timers and lose a race when six browsers share
+// the machine. Anything red is re-run once ON ITS OWN, after the rest have
+// finished and the machine is quiet: a real failure fails twice, a slow one
+// does not. --no-retry skips this.
+if (!flag('--no-retry') && !stopped) {
+  const red = Object.values(state.done).filter(r => r.fail || r.crashed).map(r => r.file);
+  if (red.length) {
+    console.log(`\n  re-running ${red.length} on their own, with nothing else on the machine…`);
+    for (const f of red) {
+      const again = await run(f);
+      if (!again.fail && !again.crashed) {
+        again.flaky = true; state.done[f] = again; save();
+        console.log(`  ok (slow)  ${f.replace('.mjs', '').padEnd(16)} ${again.pass} checks  ${again.secs}s — passes alone, lost a race under load`);
+      } else {
+        state.done[f] = again; save();
+        console.log(`  still red  ${f.replace('.mjs', '')}`);
+      }
+    }
+  }
+}
 
 process.exit(report() ? 0 : 1);

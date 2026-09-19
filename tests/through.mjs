@@ -36,6 +36,7 @@ await page.evaluate(async ([b64, d]) => {
   resetGeometry(); if (typeof resetPageTextCache === 'function') resetPageTextCache();
   state.pdf.doc = doc; state.pdf.pages = doc.numPages; state.pdf.current = 1; state.pdf.pageImages = {};
   deserializeDoc(d); sortLevelsByElevation();
+  state.project.throughOk = {};   // start from nothing accepted; part of the calc key since Sep 18
   document.getElementById('upload-prompt').style.display = 'none';
   await warmSheetSizes(state.levels.flatMap(l => levelSheets(l).map(s => s.page)));
   setStep('results');
@@ -45,7 +46,7 @@ await page.waitForFunction(() => schedSolve && schedSolve.levels.length && sched
 console.log('A. the row under 3 over the L2 opening');
 const A = await page.evaluate(() => {
   schedPourIdx = schedSolve.levels.findIndex(L => L.pour.name === '4');
-  state.project.throughOk = {}; state.ui.highlight = null; renderSchedule();
+  state.ui.highlight = null; renderSchedule();
   const L = schedSolve.levels[schedPourIdx];
   const items = throughItems(L);
   const it = items.find(x => !x.beam && x.st.level.name === '3' && x.r.steps.some(s => s.level.name === '2' && s.open && !s.noSlab));
