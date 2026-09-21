@@ -49,7 +49,7 @@ const all = fs.readdirSync(here).filter(f =>
 
 const rulesOf = f => {
   const m = /^\/\/ @rules (.+)$/m.exec(fs.readFileSync(path.join(here, f), 'utf8').slice(0, 400));
-  return m ? (m[1].match(/[A-Z]{3}-\d{2}/g) || []) : [];
+  return m ? (m[1].match(/[A-Z]{2,3}-\d{2}/g) || []) : [];
 };
 
 let want = all;

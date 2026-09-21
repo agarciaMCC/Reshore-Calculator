@@ -20,7 +20,7 @@ const superseded = md.split(/^## Superseded/m)[1] || '';
 
 const rules = new Map();
 for (const line of md.split(/\r?\n/)) {
-  const m = /^\|\s*([A-Z]{3}-\d{2})\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*$/.exec(line);
+  const m = /^\|\s*([A-Z]{2,3}-\d{2})\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*$/.exec(line);
   if (m) rules.set(m[1], { text: m[2], decided: m[3], tests: [] });
 }
 
@@ -30,7 +30,7 @@ for (const fn of fs.readdirSync(path.join(root, 'tests')).sort()) {
   const head = fs.readFileSync(path.join(root, 'tests', fn), 'utf8').slice(0, 400);
   const m = /^\/\/ @rules (.+)$/m.exec(head);
   if (!m) continue;
-  for (const id of m[1].match(/[A-Z]{3}-\d{2}/g) || []) {
+  for (const id of m[1].match(/[A-Z]{2,3}-\d{2}/g) || []) {
     if (rules.has(id)) rules.get(id).tests.push(fn);
     else orphans.push({ id, file: fn });
   }
