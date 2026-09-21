@@ -1,4 +1,4 @@
-// @rules EDG-05, MDL-15  (see DECISIONS.md)
+// @rules EDG-05, MDL-15, EDG-04  (see DECISIONS.md)
 // Detect floor edge on the test set (tests/fixtures/test-set.pdf) + the
 // Floor edge shape kind and extent rule.
 import { createRequire } from 'node:module';

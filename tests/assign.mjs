@@ -1,4 +1,4 @@
-// @rules BLD-04, BLD-07, JOB-01  (see DECISIONS.md)
+// @rules BLD-04, BLD-07, JOB-01, BLD-06  (see DECISIONS.md)
 // Assign sheets to levels: read every page in the set once and work out what
 // it is — which floor each plan shows, and which sheets are sections,
 // elevations, details, schedules or load maps that never need a floor.
