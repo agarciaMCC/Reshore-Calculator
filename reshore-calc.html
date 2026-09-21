@@ -462,6 +462,24 @@ input[readonly],input.derived{background:var(--derived-bg);color:var(--text-seco
 .page-bar.visible~#alignStatusBar.visible{top:48px}
 .align-status-bar .align-cancel{border:none;background:transparent;cursor:pointer;color:var(--text-tertiary);font-size:16px;padding:0 4px;line-height:1}
 .align-status-bar .align-cancel:hover{color:var(--danger)}
+/* ── THE APP IS WAITING FOR YOU, ON THE SHEET ── (Adolfo, Sep 21 2026)
+   "the selection menu should show up inline in the viewing window … it
+   doesnt automatically make it obvious that you need to pick from the left
+   pane." One ring on the canvas and one bar over it, for every state that
+   waits for a click on the plan. */
+#canvas-wrap.armed::after{content:'';position:absolute;inset:0;z-index:15;pointer-events:none;border:2px solid var(--accent);border-radius:3px}
+.pending-bar{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:21;max-width:min(720px,calc(100% - 24px));background:var(--surface-raised);border:1px solid var(--accent);border-radius:6px;padding:6px 12px;font-size:13px;color:var(--text-primary);box-shadow:0 2px 12px rgba(0,0,0,.16);display:none;align-items:center;gap:10px;flex-wrap:wrap}
+.pending-bar.visible{display:flex}
+.pending-bar .pb-title{font-weight:600;color:var(--accent)}
+.pending-bar .pb-hint{font-size:12px;color:var(--text-secondary)}
+.pending-bar .pb-nav{display:flex;align-items:center;gap:3px}
+.pending-bar .pb-nav span{font-family:var(--font-mono);font-size:12px;color:var(--text-secondary);min-width:54px;text-align:center}
+.pending-bar .pb-step{border:1px solid var(--border);background:var(--surface);border-radius:4px;cursor:pointer;color:var(--text-primary);font-size:13px;line-height:1;padding:3px 7px}
+.pending-bar .pb-step:hover{border-color:var(--accent);color:var(--accent)}
+.pending-bar .pb-x{border:none;background:transparent;cursor:pointer;color:var(--text-tertiary);font-size:16px;padding:0 2px;line-height:1}
+.pending-bar .pb-x:hover{color:var(--danger)}
+.pb-sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px}
+.page-bar.visible~#pendingBar.visible{top:48px}
 .align-popup{position:absolute;z-index:25;background:var(--surface-raised);border:1px solid var(--border);border-radius:6px;padding:8px 10px;box-shadow:0 4px 16px rgba(0,0,0,.15);display:none;flex-direction:column;gap:6px;font-size:12px;min-width:230px}
 .align-popup-row{display:flex;align-items:center;gap:6px}
 .align-hint{font-size:11px;color:var(--text-tertiary)}
@@ -1097,6 +1115,7 @@ select.sched-shore option,select.sel-styled option{background:var(--surface-rais
         <canvas id="drawCanvas" tabindex="-1" style="outline:none"></canvas>
         <div class="align-status-bar page-bar" id="pageBar"></div>
         <div class="align-status-bar" id="alignStatusBar"><span id="alignStatusText">Click a grid intersection</span><button class="btn btn-sm" id="alignDone" style="display:none">Done</button><button class="align-cancel" id="alignCancel" title="Cancel alignment">&times;</button></div>
+        <div class="pending-bar" id="pendingBar"></div>
         <div class="align-popup" id="alignPopup">
           <div class="align-popup-row"><span class="align-hint" id="alignHint">grid crossing</span></div>
           <div class="align-popup-row">
@@ -3440,6 +3459,7 @@ function drawFrame(){
   }else if(tipEl){
     tipEl.classList.remove('show');
   }
+  if(typeof renderPendingBar==='function')renderPendingBar();
 }
 
 // ════════════════════════════════════════════════════════════
@@ -5489,6 +5509,7 @@ function cursorFor(){
   if(ptr.mode==='erase'||ptr.mode==='vbox')return 'crosshair';
   if(ptr.mode==='pan')return 'grabbing';
   if(state.tool==='pan')return 'grab';
+  if(typeof edgeCandHover==='function'&&edgeCandHover()>=0)return 'pointer';
   if(state.align.active||state.tool==='polygon'||state.tool==='fill')return 'crosshair';
   const h=state.ui.hover;
   if(!h)return 'default';
@@ -5529,6 +5550,12 @@ drawCvs.addEventListener('pointermove',e=>{
     if(!ptr.didDrag&&ptr.moved>DRAG_THRESH){ptr.didDrag=true;beginDrag()}
     if(ptr.didDrag){updateDrag(s);ptr.lastS=s;renderCanvas();return}
     ptr.lastS=s;
+  }
+
+  // While the floor-edge candidates are on the plan the sheet IS the menu:
+  // the outline under the cursor lights up and nothing else is hoverable.
+  if(!ptr.down&&typeof edgeCandActive==='function'&&edgeCandActive()){
+    updateEdgeCandHover(cp);applyCursor();return;
   }
 
   // hover / snap preview
@@ -5859,6 +5886,19 @@ function handleClick(e,s){
     return;
   }
 
+  // ── PICK THE FLOOR EDGE ON THE PLAN ──
+  // One click selects the outline under the cursor, a second click on the
+  // selected one accepts it. A click on bare sheet does nothing, so a
+  // mis-click cannot write an edge.
+  if(typeof edgeCandActive==='function'&&edgeCandActive()){
+    const ci=edgeCandAt(cp);
+    if(ci>=0){
+      if(ci===edgeProposal.sel)acceptDetectFloorEdge();
+      else selectEdgeCand(ci);
+      return;
+    }
+  }
+
   // On Results the plan is a map of the answer, not a drawing surface: a
   // click picks the region under it (and clears the pick on bare slab).
   if(typeof curStep!=='undefined'&&curStep==='results'&&state.tool!=='pan'){
@@ -6084,6 +6124,14 @@ document.addEventListener('keydown',e=>{
   if(mod&&(e.key==='z'||e.key==='Z')){e.preventDefault();e.shiftKey?history.redo():history.undo();return}
   if(mod&&(e.key==='y'||e.key==='Y')){e.preventDefault();history.redo();return}
   if(mod)return;
+
+  // the candidates cycle on the arrows and accept on Enter, so the whole
+  // pick can be done without leaving the drawing
+  if(typeof edgeCandActive==='function'&&edgeCandActive()){
+    if(e.key==='ArrowRight'||e.key==='ArrowDown'){e.preventDefault();stepEdgeCand(1);return}
+    if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();stepEdgeCand(-1);return}
+    if(e.key==='Enter'){e.preventDefault();acceptDetectFloorEdge();return}
+  }
 
   if(e.key==='F3'){e.preventDefault();setSnap(!state.snap);toast('Object snap '+(state.snap?'on':'off'),1200);return}
   if(e.key==='F8'){e.preventDefault();setOrtho(!state.ortho);toast('Ortho '+(state.ortho?'on':'off'),1200);return}
@@ -6421,6 +6469,7 @@ function setTool(t){
     b.classList.toggle('active',b.dataset.tool===t);
   });
   applyCursor();
+  if(typeof renderPendingBar==='function')renderPendingBar();
   renderCanvas();
 }
 
@@ -18984,45 +19033,210 @@ function acceptDetectFloorEdge(){
 function renderEdgePanel(){
   const host=document.getElementById('edgePanel');
   if(!host)return;
-  if(!edgeProposal){host.style.display='none';host.innerHTML='';return}
+  if(!edgeProposal){host.style.display='none';host.innerHTML='';renderPendingBar(true);return}
   const P=edgeProposal;const lv=state.levels[P.levelIdx];
   host.style.display='';
   // ── THE TOP FEW, NOT ONE ANSWER ──
   // Adolfo, Sep 17 2026 chose being offered candidates over the app guessing.
   // The one on the plan is whichever row is selected; nothing is written until
   // "Use this floor edge".
-  const cands=P.cands||[{polygon:P.polygon,notes:P.notes,areaSF:P.areaSF,why:'heavy lines'}];
+  const cands=edgeCands();
   const rows=cands.map((c,i)=>`<div class="ec-row${i===P.sel?' on':''}" data-ec="${i}">
-      <span class="ec-pick">${i===P.sel?'\u25c9':'\u25cb'}</span>
+      <span class="ec-pick" style="color:rgb(${edgeCandColor(i)})">${i===P.sel?'\u25c9':'\u25cb'}&nbsp;${i+1}</span>
       <span class="ec-main"><b>${c.areaSF!=null?fmtArea(c.areaSF):(c.polygon.length+' corners')}</b>
         <span class="lm-dim">${c.polygon.length} corners \u00b7 ${Math.round((c.frac||0)*100)}% of the plan \u00b7 ${esc(c.why||'')}${c.ink&&(c.ink.nDim||c.ink.nMark)?` \u00b7 ${c.ink.nDim?c.ink.nDim+' dimension'+(c.ink.nDim>1?'s':''):''}${c.ink.nDim&&c.ink.nMark?' and ':''}${c.ink.nMark?c.ink.nMark+' marker'+(c.ink.nMark>1?'s':''):''} kept out`:''}</span></span>
       ${(c.notes&&c.notes.length)?`<span class="ec-why">${c.notes.map(esc).join(' \u00b7 ')}</span>`:''}
     </div>`).join('');
-  host.innerHTML=`<div class="at-head"><b>Floor edge for ${esc(lv?lv.name:'?')}</b> \u2014 ${cands.length>1?`${cands.length} outlines found on this sheet`:'one outline found'} in ${Math.round(P.ms)} ms. Click one to draw it on the plan; take the one that follows the slab edge.${P.existing?` Accepting replaces the floor edge already on ${esc(lv.name)} for this sheet.`:''}</div>`
+  host.innerHTML=`<div class="at-head"><b>Floor edge for ${esc(lv?lv.name:'?')}</b> \u2014 ${cands.length>1?`${cands.length} outlines found on this sheet`:'one outline found'} in ${Math.round(P.ms)} ms. They are drawn on the sheet, numbered — pick one there or here; take the one that follows the slab edge.${P.existing?` Accepting replaces the floor edge already on ${esc(lv.name)} for this sheet.`:''}</div>`
     +`<div class="ec-list">${rows}</div>`
     +`<div class="at-actions"><button class="btn btn-primary btn-sm" id="edgeAccept">Use this floor edge</button><button class="btn btn-sm" id="edgeCancel">Cancel</button></div>`;
-  host.querySelectorAll('.ec-row').forEach(el=>el.addEventListener('click',()=>{
-    const i=+el.dataset.ec;const c=(P.cands||[])[i];if(!c)return;
-    P.sel=i;P.polygon=c.polygon;P.areaSF=c.areaSF;P.notes=c.notes||[];
-    renderEdgePanel();renderCanvas();
-  }));
+  host.querySelectorAll('.ec-row').forEach(el=>{
+    const i=+el.dataset.ec;
+    el.addEventListener('click',()=>selectEdgeCand(i));
+    // hovering the row lights its outline on the plan, and the other way
+    // round — the pane and the sheet are one list
+    el.addEventListener('mouseenter',()=>{if(edgeProposal&&edgeProposal.hover!==i){edgeProposal.hover=i;renderCanvas()}});
+    el.addEventListener('mouseleave',()=>{if(edgeProposal&&edgeProposal.hover===i){edgeProposal.hover=-1;renderCanvas()}});
+  });
   document.getElementById('edgeAccept').addEventListener('click',acceptDetectFloorEdge);
   document.getElementById('edgeCancel').addEventListener('click',cancelDetectFloorEdge);
+  renderPendingBar(true);
 }
+// ════════════════════════════════════════════════════════
+//  THE APP IS WAITING FOR YOU — ON THE SHEET, NOT IN THE PANE
+//
+//  Adolfo, Sep 21 2026: "when we pick floor edge from sheet, the selection
+//  menu should show up inline in the viewing window, right now its not
+//  obvious that the menu is waiting for a selection below because it doesnt
+//  automatically make it obvious that you need to pick from the left pane."
+//
+//  The detector answered into a pane the eyes were not on, and the canvas
+//  looked exactly as it had a moment before. So: every candidate outline is
+//  drawn ON the sheet, numbered and colour-coded to its row, hovering lights
+//  one up and clicking picks it (a second click on the picked one accepts).
+//  The pane keeps the reasons; the choice happens on the drawing, where the
+//  shape is judged.
+//
+//  And the same silence was in every other stage that waits for a click on
+//  the plan — matching a floor from its grid bubbles, matching a load-map
+//  plan, an armed drawing tool. One `pendingAction()` names them all: the
+//  canvas wears a ring while any of them is open, and ONE bar sits over the
+//  drawing saying what is being asked, with the way out on it. Alignment
+//  keeps its own bar in that slot (it carries the grid-label popup), so the
+//  user always sees exactly one bar, in one place.
+// ════════════════════════════════════════════════════════
+
+// one stable colour per candidate, shared by the outline on the plan, its
+// badge, and its row in the pane — the first is the orange the single
+// proposal has always been drawn in
+const EDGE_CAND_RGB=['230,90,0','20,110,200','150,60,170','0,140,110','200,40,90','120,110,0'];
+function edgeCandColor(i){return EDGE_CAND_RGB[(i||0)%EDGE_CAND_RGB.length]}
+function edgeCandActive(){
+  return typeof edgeProposal!=='undefined'&&!!edgeProposal&&
+         (!state.pdf.pages||edgeProposal.page===state.pdf.current);
+}
+function edgeCands(){
+  const P=edgeProposal;
+  if(!P)return[];
+  return P.cands||[{polygon:P.polygon,notes:P.notes,areaSF:P.areaSF,why:'heavy lines'}];
+}
+function edgeCandAreaPx(poly){let a=0;for(let i=0,j=poly.length-1;i<poly.length;j=i++)a+=(poly[j].x+poly[i].x)*(poly[j].y-poly[i].y);return Math.abs(a/2)}
+// Which outline is under the cursor: the line itself beats the inside of a
+// shape, and the smallest wins, so a candidate nested inside another is
+// always reachable.
+function edgeCandAt(cp){
+  if(!edgeCandActive())return -1;
+  const cands=edgeCands(),tol=9/(state.drawing.zoom||1);
+  let near=-1,nearA=Infinity,inside=-1,insideA=Infinity;
+  for(let i=0;i<cands.length;i++){
+    const poly=cands[i]&&cands[i].polygon;
+    if(!poly||poly.length<3)continue;
+    const a=edgeCandAreaPx(poly);
+    if(polyOutlineDist(cp,poly)<=tol){if(a<nearA){nearA=a;near=i}continue}
+    if(pointInPoly(cp,poly)&&a<insideA){insideA=a;inside=i}
+  }
+  return near>=0?near:inside;
+}
+function edgeCandHover(){return edgeCandActive()&&edgeProposal.hover!=null?edgeProposal.hover:-1}
+function updateEdgeCandHover(cp){
+  if(!edgeCandActive())return false;
+  const i=edgeCandAt(cp);
+  if(i===edgeProposal.hover)return true;
+  edgeProposal.hover=i;renderCanvas();
+  return true;
+}
+function selectEdgeCand(i){
+  const P=edgeProposal;if(!P)return;
+  const c=edgeCands()[i];if(!c)return;
+  P.sel=i;P.polygon=c.polygon;P.areaSF=c.areaSF;P.notes=c.notes||[];
+  renderEdgePanel();renderCanvas();
+}
+function stepEdgeCand(d){
+  if(!edgeProposal)return;
+  const n=edgeCands().length;if(n<2)return;
+  selectEdgeCand(((edgeProposal.sel+d)%n+n)%n);
+}
+
+// What is the app waiting for on the plan right now? One answer, used by the
+// ring, the bar and the cursor.
+function pendingAction(){
+  if(edgeCandActive()){
+    const P=edgeProposal,lv=state.levels[P.levelIdx],n=edgeCands().length;
+    return{id:'edge',
+      title:`Pick the slab edge for ${lv?lv.name:'this floor'}`,
+      hint:n>1?`${n} outlines are drawn on the sheet — click the one that follows the slab edge`
+              :'one outline is drawn on the sheet — click it if it follows the slab edge',
+      nav:{i:P.sel,n},
+      actions:[{id:'use',label:'Use this floor edge',primary:true},{id:'hand',label:'Draw by hand'}]};
+  }
+  // alignment already owns this slot with its own bar and popup
+  if(state.align.active)return{id:'align',own:true};
+  if(typeof edgeDraw!=='undefined'&&edgeDraw&&state.tool==='polygon')
+    return{id:'edgedraw',title:'Draw the floor edge on the sheet',
+      hint:`${state.drawing.points.length} corners placed — double-click or Enter closes it, right-click takes one back`};
+  if(state.tool==='polygon')
+    return{id:'draw',title:'Click the corners on the plan',
+      hint:`${state.drawing.points.length} placed — double-click or Enter closes the shape, right-click takes one back`};
+  if(state.tool==='fill')
+    return{id:'fill',title:'Click inside an area on the plan',
+      hint:'the enclosure you click in is traced'};
+  return null;
+}
+let pendingKey=null;
+function renderPendingBar(force){
+  const bar=document.getElementById('pendingBar');
+  if(!bar)return;
+  const wrap=document.getElementById('canvas-wrap');
+  const A=pendingAction();
+  const key=A?JSON.stringify([A.id,A.title,A.hint,A.nav,!!A.own]):'';
+  if(!force&&key===pendingKey)return;
+  pendingKey=key;
+  if(wrap)wrap.classList.toggle('armed',!!A);
+  if(!A||A.own){bar.classList.remove('visible');bar.innerHTML='';return}
+  const nav=(A.nav&&A.nav.n>1)
+    ?`<span class="pb-nav"><button class="pb-step" data-pb="prev" title="Previous outline (←)">‹</button>`
+     +`<span>${A.nav.i+1} of ${A.nav.n}</span>`
+     +`<button class="pb-step" data-pb="next" title="Next outline (→)">›</button></span>`:'';
+  const sw=(A.id==='edge')?`<span class="pb-sw" style="background:rgb(${edgeCandColor(A.nav.i)})"></span>`:'';
+  const acts=(A.actions||[]).map(a=>`<button class="btn btn-sm${a.primary?' btn-primary':''}" data-pb="${a.id}">${esc(a.label)}</button>`).join('');
+  bar.innerHTML=`<span class="pb-title">${sw}${esc(A.title)}</span>`
+    +`<span class="pb-hint">${esc(A.hint||'')}</span>${nav}${acts}`
+    +`<button class="pb-x" data-pb="cancel" title="Cancel (Esc)">×</button>`;
+  bar.classList.add('visible');
+  bar.querySelectorAll('[data-pb]').forEach(b=>b.addEventListener('click',()=>{
+    const w=b.dataset.pb;
+    if(w==='prev')stepEdgeCand(-1);
+    else if(w==='next')stepEdgeCand(1);
+    else if(w==='use')acceptDetectFloorEdge();
+    else if(w==='hand'){const P=edgeProposal;cancelDetectFloorEdge();if(P)edgeDrawStart(P.levelIdx,P.page)}
+    else if(w==='cancel')escapeOnce();
+  }));
+}
+
+// Every candidate on the sheet: the unpicked ones thin and dashed, the
+// hovered one lit, the picked one filled and labelled, each with the number
+// its row carries.
 function drawEdgeProposal(zoom,F_MONO){
   const P=edgeProposal;
-  if(!P||(state.pdf.pages&&P.page!==state.pdf.current))return;
-  const poly=P.polygon;if(!poly||poly.length<3)return;
-  drawCtx.save();
-  drawCtx.beginPath();drawCtx.moveTo(poly[0].x,poly[0].y);for(let i=1;i<poly.length;i++)drawCtx.lineTo(poly[i].x,poly[i].y);drawCtx.closePath();
-  drawCtx.fillStyle='rgba(255,140,0,.12)';drawCtx.fill();
-  drawCtx.strokeStyle='rgba(230,90,0,.95)';drawCtx.lineWidth=3/zoom;drawCtx.setLineDash([14/zoom,6/zoom]);drawCtx.stroke();drawCtx.setLineDash([]);
-  drawCtx.fillStyle='rgba(230,90,0,.95)';
-  for(const p of poly)drawCtx.fillRect(p.x-3.5/zoom,p.y-3.5/zoom,7/zoom,7/zoom);
-  let tl=poly[0];for(const p of poly)if(p.y<tl.y||(p.y===tl.y&&p.x<tl.x))tl=p;
-  drawCtx.font=`700 ${Math.max(12,14/zoom)}px ${F_MONO}`;drawCtx.textAlign='left';drawCtx.textBaseline='bottom';
-  drawCtx.fillText('DETECTED FLOOR EDGE — accept or cancel in the panel',tl.x+6/zoom,tl.y-6/zoom);
-  drawCtx.restore();
+  if(!P||!edgeCandActive())return;
+  const cands=edgeCands();
+  const hov=P.hover!=null?P.hover:-1;
+  const order=[];
+  cands.forEach((c,i)=>{if(i!==P.sel&&i!==hov)order.push(i)});
+  if(hov>=0&&hov!==P.sel)order.push(hov);
+  order.push(P.sel);
+  for(const i of order){
+    const c=cands[i],poly=c&&c.polygon;
+    if(!poly||poly.length<3)continue;
+    const on=i===P.sel,hv=i===hov,rgb=edgeCandColor(i);
+    drawCtx.save();
+    drawCtx.beginPath();drawCtx.moveTo(poly[0].x,poly[0].y);
+    for(let k=1;k<poly.length;k++)drawCtx.lineTo(poly[k].x,poly[k].y);
+    drawCtx.closePath();
+    if(on||hv){drawCtx.fillStyle=`rgba(${rgb},${on?.12:.07})`;drawCtx.fill()}
+    drawCtx.strokeStyle=`rgba(${rgb},${on?.95:hv?.9:.55})`;
+    drawCtx.lineWidth=(on?3:hv?2.5:1.5)/zoom;
+    drawCtx.setLineDash(on?[14/zoom,6/zoom]:[7/zoom,5/zoom]);
+    drawCtx.stroke();drawCtx.setLineDash([]);
+    if(on||hv){
+      drawCtx.fillStyle=`rgba(${rgb},.95)`;
+      for(const q of poly)drawCtx.fillRect(q.x-3.5/zoom,q.y-3.5/zoom,7/zoom,7/zoom);
+    }
+    let tl=poly[0];for(const q of poly)if(q.y<tl.y||(q.y===tl.y&&q.x<tl.x))tl=q;
+    const bs=Math.max(13,16/zoom);
+    drawCtx.fillStyle=`rgba(${rgb},${on||hv?1:.72})`;
+    drawCtx.fillRect(tl.x,tl.y-bs-4/zoom,bs*1.35,bs+2/zoom);
+    drawCtx.font=`700 ${bs*0.78}px ${F_MONO}`;drawCtx.fillStyle='#fff';
+    drawCtx.textAlign='center';drawCtx.textBaseline='middle';
+    drawCtx.fillText(String(i+1),tl.x+bs*0.675,tl.y-3/zoom-bs/2);
+    if(on||hv){
+      drawCtx.font=`700 ${Math.max(12,14/zoom)}px ${F_MONO}`;
+      drawCtx.fillStyle=`rgba(${rgb},.95)`;
+      drawCtx.textAlign='left';drawCtx.textBaseline='bottom';
+      drawCtx.fillText(on?'PICKED — click it again to use it':'CLICK TO PICK THIS ONE',tl.x+bs*1.55,tl.y-4/zoom);
+    }
+    drawCtx.restore();
+  }
 }
 
 // ════════════════════════════════════════════════════════════

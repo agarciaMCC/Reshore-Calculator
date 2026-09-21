@@ -176,6 +176,8 @@ the system; this file holds the rules and is versioned with the code.
 | UI-17 | The Areas step reads itself on arrival: sheets with a confirmed edge and nothing yet read off them are scanned for beams and openings and the proposal opens (none ticked, BEM-08). Remembered on the job per sheet, so an old job is not rescanned. | Sep 21 |
 | UI-18 | Results, Sequence and the rail report the same "still to choose" count: rows across every placement with a shore to pick; rows with nothing tall enough are listed, not counted. | Sep 21 |
 | UI-19 | The level modal is gone. Single floors and typical ranges are edited in the Levels rows (… opens the range fields under a row; double-click lands in the row's own fields). Slab thickness is edited in the row or re-read from the drawings. | Sep 21 |
+| UI-20 | While the app is waiting for a click on the plan — the floor-edge candidates, matching a floor or a load-map plan from its grid crossings, an armed drawing or fill tool — the canvas carries a ring and ONE bar sits over the drawing naming what is being asked, with the way out on it. Matching keeps its own bar in that slot (it carries the grid-label popup); no state ever shows two. | Sep 21 |
+| UI-21 | The floor-edge candidates are drawn on the sheet, numbered and colour-matched to their rows in the pane. Hovering a row or an outline lights it; a click on the plan picks that outline and a second click on the picked one uses it; ← → cycle and Enter uses the one on screen. While they are up the plan is the picker — nothing else on the canvas hovers — and a click on bare sheet writes nothing. | Sep 21 |
 | UI-14 | PDF fidelity: device-pixel-ratio-correct canvases, no PNG round trip, the visible patch re-rendered at on-screen magnification, auto-trace and floor-edge raster at 144 DPI. | Sep 9 |
 
 ## BRD — Brand
@@ -243,3 +245,4 @@ the system; this file holds the rules and is versioned with the code.
 | The level modal (double-click a level / …) | UI-19 | Sep 21 |
 | The Results modal (Schedule button) and gotoStep | BLD-01 | Sep 21 |
 | Detect the floor edge / Auto detect as buttons the user must press first | UI-16, UI-17 | Sep 21 |
+| The detected floor edge shown as one outline, accepted or cancelled in the left pane only | UI-20, UI-21 | Sep 21 |
