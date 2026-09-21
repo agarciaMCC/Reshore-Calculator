@@ -31,6 +31,7 @@ def extract(ifc_path, cache_dir):
     st = os.stat(ifc_path)
     key = hashlib.md5(f"{os.path.abspath(ifc_path)}|{st.st_size}|{int(st.st_mtime)}|v3".encode()).hexdigest()[:12]
     cache = os.path.join(cache_dir, f"extract-{key}.json")
+    global CACHE_PATH; CACHE_PATH = cache
     if os.path.exists(cache):
         log(f"using cached extraction {os.path.basename(cache)}")
         return json.load(open(cache))
@@ -187,6 +188,12 @@ def ring_to_building(ring, th, cx, cy):
     # model (x east, y north) → rotate → building frame with y DOWN (page convention)
     return [(lambda X, Y: (X, -Y))(*rot_xy(x, y, th, cx, cy)) for x, y in ring]
 
+def ft_pts(poly_ft):
+    """building-ft ring → [[x,y]] in feet, the frame the project grid is written in."""
+    pts = [[round(x, 3), round(y, 3)] for x, y in poly_ft]
+    if len(pts) > 1 and pts[0] == pts[-1]: pts.pop()
+    return pts
+
 def poly_pts(poly_ft, xf):
     """building-ft ring → [{x,y}] page px via inverse of alignment transform [a,0,0,d,e,f]."""
     a, d, e, f = xf
@@ -221,6 +228,47 @@ LOG = []
 def log(msg):
     LOG.append(msg); print(msg, file=sys.stderr)
 
+CACHE_PATH = None
+
+# The IFC storey elevations are on the Revit internal datum — Kalae carries LEVEL-1
+# at 100'-0". The drawings, and the model's own "Reference Level" property set (Top /
+# Bottom Reference Elevation, 5,066 of them on Kalae), are on the project datum, which
+# is 90'-9" lower, so LEVEL-1 reads 9'-3" and LEVEL-19 reads 194'-7 1/2" — the numbers
+# on sheet 12 of the McClone set. Adolfo, Sep 21 2026: "the export isnt reading the
+# project elevations. its reading global elevations."
+# Find the shift that lines the most of those properties up with a storey elevation.
+def project_datum(ifc_path, storeys):
+    import ifcopenshell
+    elevs = [s['elev'] for s in storeys if s['elev'] is not None]
+    if not elevs: return 0.0
+    try:
+        f = ifcopenshell.open(ifc_path)
+    except Exception as e:
+        log(f"project datum: cannot reopen {os.path.basename(ifc_path)} ({e}); storey elevations used as they are")
+        return 0.0
+    vals = []
+    for pr in f.by_type('IfcPropertySingleValue'):
+        if pr.Name not in ('Top Reference Elevation', 'Bottom Reference Elevation'): continue
+        try: vals.append(round(float(pr.NominalValue.wrappedValue), 4))
+        except Exception: pass
+    if not vals:
+        log('project datum: no Reference Level elevations in the model; storey elevations used as they are')
+        return 0.0
+    tally = collections.Counter(vals)
+    cnt = collections.Counter()
+    for v, k_ in tally.items():
+        for se in elevs:
+            d = round(se - v, 3)
+            if abs(d) < 1000: cnt[d] += k_
+    if not cnt: return 0.0
+    off, n = cnt.most_common(1)[0]
+    if abs(off) < 1 / 24:
+        log('project datum: the model is already on the project datum')
+        return 0.0
+    log(f"project datum: storey elevations sit {fmt_ftin(off)} above the model's Reference Level values "
+        f"({n} of {len(vals)} agree) — levels reported on the project datum")
+    return off
+
 # ────────────────────────────────────────────────────────────────────────────
 # Stage 2: build the job
 # ────────────────────────────────────────────────────────────────────────────
@@ -245,7 +293,10 @@ def build(ex, args):
     from shapely.ops import unary_union
 
     storeys = ex['storeys']
-    elev = {s['name']: s['elev'] for s in storeys}
+    proj_off = ex.get('projDatum') or 0.0
+    elev = {s['name']: (None if s['elev'] is None else s['elev'] - proj_off) for s in storeys}
+    if proj_off:
+        log(f"levels on the project datum: {fmt_ftin(proj_off)} below the model's storey elevations")
     order = [s['name'] for s in storeys]
 
     # ── classify per storey ─────────────────────────────────────────────────
@@ -354,6 +405,18 @@ def build(ex, args):
     angled = collections.Counter(t for t in angled if clean_tag(t))
     if angled: log(f"grid: {len(grid['x'])} vertical + {len(grid['y'])} horizontal lines kept; {len(angled)} tags not orthogonal after rotation (drawn, not in the project grid): {', '.join(sorted(angled)[:20])}{'…' if len(angled)>20 else ''}")
 
+    # ── what holds the slab up ──────────────────────────────────────────────
+    # The Revit slab is cut around every wall and column, so each of those footprints
+    # arrives as a hole and was being exported as an opening — an X over a shear wall,
+    # and a load path the solver then tried to shore through. Adolfo, Sep 21 2026:
+    # "theres opening lines over shear walls and slabs". They are filled back in: the
+    # load path runs through the wall or the column.
+    supports = []
+    for r in ex['columns'] + ex['walls']:
+        if not r['fp']: continue
+        g_ = shapely_from_fp(r['fp'])
+        if not g_.is_empty: supports.append((g_, r['zmin'], r['zmax']))
+
     # ── shared-coordinate z → project elevation ─────────────────────────────
     # geometry z is in shared coordinates; the storey elevations are project values. The
     # typical slab of each level sits at its level in most cases, so the median offset
@@ -396,6 +459,20 @@ def build(ex, args):
         struct = unary_union([g for r, g in geoms] + [bg for bg in beam_geoms if not bg.is_empty])
         try: struct = struct.buffer(0.05).buffer(-0.05)      # close hairline gaps between joined elements
         except Exception: pass
+        # fill the pockets cut for walls and columns (see 'what holds the slab up')
+        n_fill = 0
+        band_lo, band_hi = base_top - typ_thk / 12 - 0.5, base_top + 0.5
+        sup = unary_union([g_ for g_, z0, z1 in supports if z1 >= band_lo and z0 <= band_hi])
+        if not sup.is_empty:
+            fixed = []
+            for p_ in ([struct] if isinstance(struct, Polygon) else list(getattr(struct, 'geoms', []))):
+                keep = []
+                for r_ in p_.interiors:
+                    h_ = Polygon(r_)
+                    if h_.area > 0 and h_.intersection(sup).area >= 0.6 * h_.area: n_fill += 1; continue
+                    keep.append(r_)
+                fixed.append(Polygon(p_.exterior, keep))
+            if fixed: struct = unary_union(fixed)
         # each floor element, with its beam slots closed (closing radius 4 ft, clipped to real structure)
         def closed(g):
             try:
@@ -416,7 +493,7 @@ def build(ex, args):
         if on_grade: lv['onGrade'] = True
         SZ = lv['slabZones']
         # floor edge
-        SZ.append({'id': sid('edge|' + n), 'polygon': poly_pts(edge_ring, xf), 'kind': 'edge', 'thicknessIn': None, 'offsetIn': 0,
+        SZ.append({'id': sid('edge|' + n), 'polygon': poly_pts(edge_ring, xf), 'polygonFt': ft_pts(edge_ring), 'kind': 'edge', 'thicknessIn': None, 'offsetIn': 0,
                    'label': '', 'detected': True, 'confirmed': True, 'page': page_no, 'source': 'revit'})
         # openings = holes of the union (the Revit openings are already cut from the floor geometry)
         n_open = 0
@@ -425,14 +502,14 @@ def build(ex, args):
                 a = abs(Polygon(h).area)
                 if a < args.min_opening: continue
                 n_open += 1
-                SZ.append({'id': sid(f'open|{n}|{n_open}'), 'polygon': poly_pts(h, xf), 'kind': 'opening', 'thicknessIn': None, 'offsetIn': 0,
+                SZ.append({'id': sid(f'open|{n}|{n_open}'), 'polygon': poly_pts(h, xf), 'polygonFt': ft_pts(h), 'kind': 'opening', 'thicknessIn': None, 'offsetIn': 0,
                            'label': '', 'page': page_no, 'source': 'revit', 'fromSheet': False})
         # detached pieces of slab beyond the main outline count as slab areas
         n_slab = 0
         for ring, holes in pieces[1:]:
             if abs(Polygon(ring).area) < args.min_area: continue
             n_slab += 1
-            SZ.append({'id': sid(f'piece|{n}|{n_slab}'), 'polygon': poly_pts(ring, xf), 'kind': 'grade' if on_grade else 'slab', 'thicknessIn': typ_thk,
+            SZ.append({'id': sid(f'piece|{n}|{n_slab}'), 'polygon': poly_pts(ring, xf), 'polygonFt': ft_pts(ring), 'kind': 'grade' if on_grade else 'slab', 'thicknessIn': typ_thk,
                        'offsetIn': 0, 'label': '', 'page': page_no, 'source': 'revit'})
         # slab areas: every floor element that differs from the typical (thickness or top), and SOG areas on a suspended level
         n_area = 0
@@ -447,7 +524,7 @@ def build(ex, args):
             if g.area < args.min_area: continue
             for ring, holes in poly_b(g):
                 n_area += 1
-                SZ.append({'id': sid(f'slab|{n}|{n_area}'), 'polygon': poly_pts(ring, xf), 'kind': 'grade' if is_sog else 'slab',
+                SZ.append({'id': sid(f'slab|{n}|{n_area}'), 'polygon': poly_pts(ring, xf), 'polygonFt': ft_pts(ring), 'kind': 'grade' if is_sog else 'slab',
                            'thicknessIn': thk, 'offsetIn': off if not is_sog else 0, 'label': type_tail(r['type']), 'page': page_no, 'source': 'revit'})
         # beams
         n_beam = 0; beam_notes = collections.Counter()
@@ -477,14 +554,30 @@ def build(ex, args):
                 beam_notes['upturned / above slab (skipped)'] += 1; continue
             n_beam += 1
             for ring, holes in poly_b(g):
-                SZ.append({'id': sid(f'beam|{n}|{b["gid"]}|{n_beam}'), 'polygon': poly_pts(ring, xf), 'kind': 'beam', 'thicknessIn': None,
+                SZ.append({'id': sid(f'beam|{n}|{b["gid"]}|{n_beam}'), 'polygon': poly_pts(ring, xf), 'polygonFt': ft_pts(ring), 'kind': 'beam', 'thicknessIn': None,
                            'widthIn': w_in, 'depthIn': d_in, 'offsetIn': (None if abs(off_in) < 0.25 else off_in),
                            'label': tail, 'page': page_no, 'source': 'revit', 'mark': (b.get('pset') or {}).get('Mark Structural')})
+        # Adolfo, Sep 21 2026: "are you able to use the IFC in tandem with the typical
+        # printed PDF set that McClone provides to the field... the PDF set is going to be
+        # easier to review for our engineering manager than the one you produced." In field
+        # mode the job carries no sheets of its own: the geometry travels in FEET, in the
+        # frame the project grid is written in, and the calculator drops it onto whichever
+        # of his sheets has been matched to that grid.
+        if args.drawings == 'field':
+            lv['pdfPage'] = None
+            lv.pop('alignment', None)
+            lv['slabZones'] = []
+            for z in SZ:
+                z.pop('polygon', None); z.pop('page', None)
+            lv['modelZones'] = SZ
+        else:
+            for z in SZ: z.pop('polygonFt', None)
         job_levels.append(lv)
         pages.append({'level': n, 'short': short, 'page': page_no, 'elev': lvl_elev, 'slab_top': base_top, 'typ_thk': typ_thk, 'on_grade': on_grade,
                       'pieces': pieces, 'slabs': geoms, 'beams': P['beams'], 'cols': P['cols'], 'walls': P['walls'], 'grid': ex['grid_lines']})
         report.append(f"{short:>6}  T.O.S. {fmt_ftin(lvl_elev):>10}  typ {typ_thk:g}\"  edge {Polygon(edge_ring).area:,.0f} SF  "
                        f"openings {n_open}  slab areas {n_area + n_slab}  beams {n_beam}{'  ON GRADE' if on_grade else ''}"
+                       + (f"  [{n_fill} wall/column pockets filled]" if n_fill else '')
                        + (f"  [{'; '.join(f'{k}: {v}' for k, v in beam_notes.items())}]" if beam_notes else '') + step_note)
 
     # the app keeps levels top-down and builds its confirmation key in that order
@@ -495,6 +588,10 @@ def build(ex, args):
                        'levelsConfirmed': json.dumps([[l['name'], jsnum(l['elevation']), jsnum(l['slabThickness']), bool(l.get('onGrade')), None, None] for l in job_levels], separators=(',', ':')),
                        'shoreChoices': {}, 'regionLabels': {}, 'throughOk': {}, 'assumedScale': None,
                        'revit': {'source': ex['file'], 'exportedAt': time.strftime('%Y-%m-%dT%H:%M:%S'), 'rotationDeg': round(math.degrees(th), 3),
+                                 'drawings': args.drawings, 'geometryUnits': ('feet' if args.drawings == 'field' else 'page px'),
+                                 # the frame the rendered check-sheets are drawn in: feet → page px is
+                                 # (x - e) / a. Kept in field mode too, so the check PDF can be read back.
+                                 'sheetTransform': [round(v, 6) for v in transform],
                                  'sheetScaleFtPerInch': scale, 'coordinateNote': 'building frame = model xy rotated about the slab centroid, y down; polygons are page px at 2 px/pt'}},
            'levels': job_levels, 'shores': SHORE_CATALOG, '_app': 'reshore-calc', '_version': 1, '_savedAt': time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime())}
     return job, pages, xf, (W_in, H_in), scale, report, B
@@ -508,7 +605,7 @@ def render_pdf(pages, xf, sheet, scale, out_pdf, B, ex, args):
     from matplotlib.backends.backend_pdf import PdfPages
     from matplotlib.patches import PathPatch, Circle
     from matplotlib.path import Path
-    from shapely.geometry import Polygon
+    from shapely.geometry import Polygon, LineString
     a, d, e, f = xf
     W_in, H_in = sheet
     Wpx, Hpx = W_in * 144, H_in * 144
@@ -554,8 +651,24 @@ def render_pdf(pages, xf, sheet, scale, out_pdf, B, ex, args):
             for ring, holes in pg['pieces']:
                 for h in holes:
                     if abs(Polygon(h).area) < args.min_opening: continue
-                    hp = px(h); xs_ = [p[0] for p in hp]; ys_ = [p[1] for p in hp]
-                    ax.plot([min(xs_), max(xs_)], [min(ys_), max(ys_)], color='k', lw=0.6); ax.plot([min(xs_), max(xs_)], [max(ys_), min(ys_)], color='k', lw=0.6)
+                    # the X belongs INSIDE the opening: on a plan rotated 51.87 deg the
+                    # axis-aligned box of a rotated hole is far bigger than the hole, and the
+                    # arms ran out over slab, beams and walls. Adolfo, Sep 21 2026: "the
+                    # opening lines are all over the place". Diagonals of the hole's own
+                    # rotated rectangle, clipped to the hole.
+                    hpoly = Polygon(px(h))
+                    if not hpoly.is_valid: hpoly = hpoly.buffer(0)
+                    if hpoly.is_empty or hpoly.geom_type != 'Polygon': continue
+                    mrr = hpoly.minimum_rotated_rectangle
+                    if mrr.geom_type != 'Polygon': continue
+                    cs = list(mrr.exterior.coords)[:4]
+                    if len(cs) < 4: continue
+                    for q0, q1 in ((cs[0], cs[2]), (cs[1], cs[3])):
+                        seg = LineString([q0, q1]).intersection(hpoly)
+                        for part in ([seg] if seg.geom_type == 'LineString' else list(getattr(seg, 'geoms', []))):
+                            if part.is_empty or part.geom_type != 'LineString': continue
+                            px_, py_ = part.xy
+                            ax.plot(px_, py_, color='k', lw=0.6)
             # beams
             for b in pg['beams']:
                 g = shapely_from_fp(b['fp'])
@@ -630,11 +743,23 @@ def main():
     ap.add_argument('--min-area', type=float, default=15.0, help='ignore slab pieces under this many SF (default 15)')
     ap.add_argument('--simplify', type=float, default=0.02, help='polygon simplification tolerance in ft (default 0.02)')
     ap.add_argument('--shores-from', default=None, help='an existing .reshore.json whose shore catalog (including any custom shores) the job should carry instead of the default')
+    ap.add_argument('--drawings', choices=['field', 'rendered'], default='field',
+                    help="'field' (default): the job carries model geometry in feet and stands on McClone's own "
+                         "printed set, placed by matching each sheet to the project grid. 'rendered': the job "
+                         "stands on the plan sheets this tool draws, as before. The rendered PDF is written either way.")
     ap.add_argument('--grid', choices=['primary', 'all'], default='primary', help="project grid: 'primary' keeps plain numbers/letters only (default), 'all' keeps every orthogonal line")
     args = ap.parse_args()
     args.sheet = tuple(float(v) for v in args.sheet.lower().split('x'))
+    if args.drawings == 'field' and not args.rotate:
+        args.rotate = 'auto'
+        log("field mode: --rotate auto, so the project grid the sheets are matched against is square to the frame")
     os.makedirs(args.out, exist_ok=True)
     ex = extract(args.ifc, args.out)
+    if 'projDatum' not in ex:
+        ex['projDatum'] = project_datum(args.ifc, ex['storeys'])
+        if CACHE_PATH:
+            try: json.dump(ex, open(CACHE_PATH, 'w'))
+            except Exception as e: log(f"could not update the extraction cache: {e}")
     job, pages, xf, sheet, scale, report, B = build(ex, args)
     if args.shores_from:
         src = json.load(open(args.shores_from))
