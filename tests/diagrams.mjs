@@ -1,4 +1,4 @@
-// @rules LOD-01, LOD-02  (see DECISIONS.md)
+// @rules LOD-01, LOD-02, MDL-06  (see DECISIONS.md)
 // A set that states its loads as LOADING DIAGRAMS instead of a schedule
 // table: one key plan per level per load type, with the value written inside
 // each area. Run against Reshore Calculator Test 3 (Perkins&Will, WWU
