@@ -19,3 +19,7 @@ package.json
 package-lock.json
 .pwtmp/
 tests/.run-state.json
+
+# Revit model exports (29 MB+, kept beside the exporter, not in history)
+*.ifc
+Revit export/extract-*.json
