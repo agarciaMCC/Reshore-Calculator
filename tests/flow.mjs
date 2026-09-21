@@ -52,7 +52,9 @@ const A = await page.evaluate(() => {
   const rows = planSheetRows();
   return { drawn: rows.filter(r => r.edge && !r.confirmed).length, confirmed: rows.filter(r => r.confirmed).length, n: rows.length,
     detected: rows.filter(r => r.edge).every(r => r.edge.detected),
-    review: edgeSweep ? { auto: !!edgeSweep.auto, rows: edgeSweep.rows.length, picked: edgeSweep.rows.filter(r => r.pick).length, head: document.querySelector('#edgeSweepPanel .mp-head').textContent.replace(/\s+/g, ' ').trim() } : null,
+    review: edgeSweep ? { auto: !!edgeSweep.auto, rows: edgeSweep.rows.length, picked: edgeSweep.rows.filter(r => r.pick).length,
+      onRows: edgeSweep.rows.every(r => document.querySelector(`#edgeRows button[data-esuse="${r.levelIdx}:${r.page}"], #edgeRows button[data-esredo="${r.levelIdx}:${r.page}"]`) != null),
+      noPanel: (() => { const p = document.getElementById('edgeSweepPanel'); return !p || p.style.display === 'none' })() } : null,
     primary: document.querySelector('#edgeRows .primary-act').textContent.replace(/\s+/g, ' ').trim(),
     detectBtn: !!document.querySelector('#edgeRows details[data-byhand="edge"] #edgeDetectAll'), key: edgeAutoKey };
 });
@@ -60,7 +62,8 @@ console.log('   ' + JSON.stringify(A));
 ok(A.drawn >= 1 && A.confirmed === 0, 'confident outlines are drawn, none confirmed for him: ' + A.drawn + ' of ' + A.n);
 ok(A.detected, 'and marked as detected, not hand-drawn');
 ok(A.drawn + (A.review ? A.review.rows : 0) === A.n, 'every sheet is either drawn or in the review: ' + JSON.stringify([A.drawn, A.review && A.review.rows, A.n]));
-ok(!A.review || (A.review.auto && A.review.picked === 0 && /Doubtful/.test(A.review.head)), 'the doubtful ones stay in a review headed as such, unticked: ' + JSON.stringify(A.review));
+ok(!A.review || (A.review.auto && A.review.picked === 0 && A.review.onRows && A.review.noPanel),
+  'the doubtful ones stay on their own sheet\'s row, not in a second panel: ' + JSON.stringify(A.review));
 ok(/Confirm all \d+ drawn/.test(A.primary), 'the primary action is Confirm all N drawn: ' + A.primary);
 ok(A.detectBtn, 'Detect again is behind the disclosure');
 // once: leaving and coming back does not sweep again

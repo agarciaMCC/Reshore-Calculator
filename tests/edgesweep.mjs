@@ -1,16 +1,17 @@
-// @rules EDG-01, UI-03  (see DECISIONS.md)
+// @rules EDG-01, UI-03, UI-22  (see DECISIONS.md)
 // THE FLOOR EDGE, READ FOR THE WHOLE JOB AND CONFIRMED (Adolfo, Sep 14, 2026):
 // "can we have the floor edge be automatically done and then confirmed by the
 //  user? then the option to redraw floor edge in case the floorplan gets
 //  updated and changed in an updated drawing set?"
 //
-// One button reads every sheet the job is bound to and lays the outlines out
-// as a review list. Nothing is written until Apply. A doubtful read arrives
-// unticked with the reason on it. Clicking Show draws that outline over its
-// own sheet with the edge it would replace beside it in grey. Redetect
-// re-reads one sheet — the answer to a re-issued drawing set — and where a
-// floor already has an edge the row says WHAT CHANGES: the area either side,
-// how far the outline moves, and how many drawn areas would fall outside it.
+// One button reads every sheet the job is bound to. Each read lands on THAT
+// SHEET'S OWN ROW in the Floor edge list (Sep 21: "this seems redundant to
+// have these 2 steps, right?" — there is no second review panel), carrying
+// what it found and, where the floor already has an edge, WHAT CHANGES: the
+// area either side, how far the outline moves, and how many drawn areas would
+// fall outside it. Nothing is written until Use this (or Use all N). Show
+// draws that outline over its own sheet with the edge it would replace beside
+// it in grey; Redetect re-reads one sheet — the answer to a re-issued set.
 import { createRequire } from 'node:module';
 const { chromium } = await (async () => {
   try { return await import('playwright'); }
@@ -42,7 +43,9 @@ await page.evaluate(async ([b64, d]) => {
   setStep('edge'); setLayer('slab'); renderSidebar();
 }, [pdf.toString('base64'), job]);
 
-const panel = () => page.$eval('#edgeSweepPanel', e => e.innerText.replace(/\s+/g, ' '));
+// the ONE list: the Floor edge rows, which now carry the reads
+const panel = () => page.$eval('#edgeRows', e => e.innerText.replace(/\s+/g, ' '));
+const rowKey = i => page.evaluate(k => `${edgeSweep.rows[k].levelIdx}:${edgeSweep.rows[k].page}`, i);
 const rows = () => page.evaluate(() => (edgeSweep ? edgeSweep.rows.map(r => ({
   name: r.name, page: r.page, corners: r.corners || 0, verdict: r.verdict, pick: !!r.pick,
   had: !!r.had, areaSF: r.areaSF, err: r.err || null })) : null));
@@ -54,7 +57,9 @@ console.log('A. one button, a row per sheet');
 // step (Sep 17 2026), where the edges are picked and confirmed before the
 // Areas detectors are let loose inside them
 ok(await page.$eval('#edgeDetectAll', b => b.offsetParent !== null && /every sheet/.test(b.textContent)), 'the whole-job button is on the Floor edge section');
-ok(await page.evaluate(() => document.getElementById('edgeSweepPanel').closest('.step-panel').dataset.step === 'edge'), 'and so is its review panel');
+ok(await page.evaluate(() => document.getElementById('edgeRows').closest('.step-panel').dataset.step === 'edge'), 'and the rows it reads into are on the same step');
+ok(await page.evaluate(() => { const p = document.getElementById('edgeSweepPanel'); return !p || p.style.display === 'none' }),
+  'there is no second review panel');
 ok(await page.evaluate(() => document.getElementById('adEdge').closest('label').hidden), 'the Areas auto-detect no longer offers the floor edge');
 
 const targets = await page.evaluate(() => edgeSweepTargets().map(t => [t.name, t.page]));
@@ -71,14 +76,14 @@ console.log('B. the sweep proposes, writes nothing');
 const t0 = await page.evaluate(() => {
   runEdgeSweep();
   return { running: !!(edgeSweep && edgeSweep.running), rows: edgeSweep ? edgeSweep.rows.length : 0,
-    panel: document.getElementById('edgeSweepPanel').innerText.replace(/\s+/g, ' '),
+    panel: document.getElementById('edgeRows').innerText.replace(/\s+/g, ' '),
     btn: detectBtn() ? detectBtn().textContent : '' };
 });
 ok(t0.running && t0.rows === 5, 'the review is up before the first sheet is read: ' + JSON.stringify([t0.running, t0.rows]));
-ok(/reading 1 of 5/.test(t0.panel), 'it says which sheet it is on: ' + t0.panel.slice(0, 90));
-ok(/reading…/.test(t0.panel), 'and the rows not read yet say so');
+ok(/Reading sheet 1 of 5/.test(t0.panel), 'the step says which sheet it is on: ' + t0.panel.slice(0, 90));
+ok(/reading this sheet…/.test(t0.panel), 'and the rows not read yet say so');
 await page.waitForFunction(() => edgeSweep && !edgeSweep.running, null, { timeout: 180000 });
-ok(/Reading sheet \d+ of 5/.test(t0.btn), 'the button that started it shows the progress: ' + t0.btn);
+ok(/Reading…/.test(t0.btn), 'the button that started it is held while it reads: ' + t0.btn);
 ok(await page.evaluate(() => !/Reading sheet/.test(detectBtn().textContent)), 'and goes back to its own label when it is done: '
   + await page.evaluate(() => detectBtn().textContent));
 
@@ -92,9 +97,11 @@ ok(read.every(r => r.areaSF > 1000), 'each has an area in square feet, so the sh
   + JSON.stringify(read.map(r => Math.round(r.areaSF))));
 ok(R.every(r => r.had === false), 'none of them replaces anything yet');
 const P = await panel();
-ok(/nothing is written until you apply/i.test(P), 'the head says so out loud: ' + P.slice(0, 90));
-ok(/no floor edge on this sheet yet/.test(P), 'and each row says there is nothing there yet');
-ok(/Use \d floor edges?/.test(P), 'the Apply button counts what is ticked: ' + (P.match(/Use \d+ floor edges?/) || [''])[0]);
+ok(/read from the sheet/.test(P), 'each read sits on its own sheet\'s row: ' + P.slice(0, 110));
+ok(/Use this/.test(P) && /Dismiss/.test(P), 'with Use this and Dismiss on the row');
+ok(/Use all \d read/.test(await page.$eval('#edgeUseAll', b => b.textContent)),
+  'and one primary action counts them: ' + await page.$eval('#edgeUseAll', b => b.textContent));
+ok(await page.evaluate(() => !document.getElementById('edgeConfirmAll')), 'Confirm all waits its turn');
 
 // ── C. a doubtful read arrives unticked, with the reason ────────────────
 console.log('C. confident ticked, doubtful not');
@@ -117,11 +124,10 @@ await page.evaluate(() => {
   const r = edgeSweep.rows[0]; Object.assign(r, r._keep); delete r._keep; renderEdgeSweepPanel();
 });
 ok((await rows())[0].pick, 'put back');
-// Tick all readable overrides it by hand
-await page.evaluate(() => { edgeSweep.rows.forEach(r => r.pick = false); renderEdgeSweepPanel(); });
-await page.click('#esAll');
-ok((await rows()).filter(r => r.corners > 0).every(r => r.pick), 'Tick all readable ticks every row that read');
-ok((await rows()).filter(r => !r.corners).every(r => !r.pick), 'and cannot tick one that did not');
+// and the reason is on the row itself, not in a panel somewhere else
+await page.evaluate(() => { edgeSweep.rows[0].notes = ['small for the plan']; renderEdgeSection() });
+ok(/small for the plan/.test(await panel()), 'a doubtful read carries its reason on its row');
+await page.evaluate(() => { edgeSweep.rows[0].notes = []; renderEdgeSection() });
 
 // ── D. Show draws it over its own sheet, with the current edge beside it ─
 console.log('D. Show');
@@ -148,7 +154,7 @@ ok(drew.some(c => c[0] === 'text' && /nothing there yet/.test(c[1])), 'and says 
 ok(await page.evaluate(() => escapeOnce({}) === 'edgesweeppreview' && edgeSweep && edgeSweep.sel === -1),
   'Esc takes the drawing off the plan first');
 ok(await page.evaluate(() => escapeOnce({}) === 'edgesweep' && edgeSweep === null), 'and then closes the review');
-ok(await page.$eval('#edgeSweepPanel', e => e.style.display === 'none'), 'the panel goes with it');
+ok(!/Use this/.test(await panel()), 'and the reads go off the rows with it');
 ok(JSON.stringify(await nEdges()) === JSON.stringify(before), 'still nothing written: ' + JSON.stringify(await nEdges()));
 
 // ── E. Apply writes one edge per ticked sheet, under one undo ───────────
@@ -158,8 +164,8 @@ await page.waitForFunction(() => edgeSweep && !edgeSweep.running, null, { timeou
 const want = (await rows()).filter(r => r.pick).length;
 ok(want >= 4, want + ' rows ticked to apply');
 const d0 = await page.evaluate(() => history.depth());
-await page.click('#esApply');
-await page.waitForFunction(() => edgeSweep === null, null, { timeout: 10000 });
+await page.click('#edgeUseAll');
+await page.waitForFunction(() => !edgeSweep || !edgeSweep.rows.some(r => r.polygon), null, { timeout: 10000 });
 const after = await nEdges();
 ok(after.filter(n => n === 1).length === want, `one floor edge on each of the ${want} ticked floors: ` + JSON.stringify(after));
 ok(after.every(n => n <= 1), 'never two on one floor');
@@ -168,6 +174,9 @@ ok(await page.evaluate(() => state.levels.every(l => levelEdges(l).every(z => z.
 ok(await page.evaluate(() => state.levels.every(l => levelEdges(l).every(z => z.page === l.pdfPage))),
   'and carries the sheet it was read from');
 ok(await page.evaluate(() => history.depth()) === d0 + 1, 'the whole sweep is ONE undo entry');
+// the row can no longer contradict the list above it — there is only one list
+ok(!/no floor edge yet/.test(await panel()), 'no row still claims there is no edge: ' + (await panel()).slice(0, 120));
+ok(/drawn ·/.test(await panel()), 'they read as drawn, waiting to be confirmed');
 await page.evaluate(() => history.undo());
 ok(JSON.stringify(await nEdges()) === JSON.stringify(before), 'one Ctrl+Z puts every one of them back: ' + JSON.stringify(await nEdges()));
 await page.evaluate(() => history.redo());
@@ -200,7 +209,7 @@ const one = await rows();
 ok(one.length === 1, 'only the bound sheet is read: ' + JSON.stringify(one.map(r => [r.name, r.page])));
 ok(one[0].had, 'the row knows this floor already has an edge');
 const txt = await panel();
-ok(/has an edge already/.test(txt), 'the row is flagged: ' + (txt.match(/\S+ [^·]*has an edge already/) || [''])[0]);
+ok(/proposed/.test(txt), 'the row reads as a proposal against what is there: ' + txt.slice(0, 120));
 ok(/replaces the current edge/.test(txt), 'and leads with what it does');
 const chg = await page.evaluate(() => edgeChangeText(edgeSweep.rows[0]).replace(/<[^>]*>/g, ''));
 ok(/\d[\d.]*k? SF → \d[\d.]*k? SF/.test(chg), 'the area either side of the change: ' + chg);
@@ -247,9 +256,9 @@ ok(counted.none === 'no floor edge on this sheet yet', 'where there is no edge y
 
 // Redetect re-reads that one sheet on its own
 console.log('   Redetect');
-await page.evaluate(() => { edgeSweep.rows[0].polygon = null; edgeSweep.rows[0].corners = 0; renderEdgeSweepPanel() });
-ok(!/corners/.test(await panel()), 'cleared for the test');
-await page.click('button[data-esredo="0"]');
+await page.evaluate(() => { edgeSweep.rows[0].polygon = null; edgeSweep.rows[0].corners = 0; edgeSweep.rows[0].err = 'cleared'; renderEdgeSection() });
+ok(/could not be read/.test(await panel()), 'a sheet that would not read says so on its row');
+await page.click(`button[data-esredo="${await rowKey(0)}"]`);
 await page.waitForFunction(() => edgeSweep && edgeSweep.rows[0].polygon, null, { timeout: 60000 });
 ok((await rows())[0].corners > 3, 'Redetect reads that sheet again on its own: ' + (await rows())[0].corners + ' corners');
 ok(await page.evaluate(() => edgeSweep.sel === 0), 'and shows what it found');
@@ -274,15 +283,58 @@ const noSheets = await page.evaluate(async () => {
   const t = document.querySelectorAll('.toast'); return { r, t: t.length ? t[t.length - 1].textContent : '' };
 });
 ok(noSheets.r === null && /Levels step/.test(noSheets.t), 'with no sheet bound it sends you to the Levels step: ' + JSON.stringify(noSheets.t));
-const nothingTicked = await page.evaluate(() => {
-  edgeSweep = { rows: [{ levelIdx: 0, page: 2, polygon: null }], sel: -1, running: false, done: 1 };
-  const n = applyEdgeSweep();
+const nothingRead = await page.evaluate(() => {
+  edgeSweep = { rows: [{ levelIdx: 0, page: 2, polygon: null, err: 'nothing' }], sel: -1, running: false, done: 1 };
+  const n = edgeSweepUseAll();
   const t = document.querySelectorAll('.toast');
   const r = { n, t: t.length ? t[t.length - 1].textContent : '', still: !!edgeSweep };
-  edgeSweep = null; renderEdgeSweepPanel(); return r;
+  edgeSweep = null; renderEdgeSection(); return r;
 });
-ok(nothingTicked.n === 0 && /Nothing ticked/.test(nothingTicked.t) && nothingTicked.still,
-  'Apply with nothing ticked does nothing and stays open: ' + JSON.stringify(nothingTicked));
+ok(nothingRead.n === 0 && /Nothing read to use/.test(nothingRead.t) && nothingRead.still,
+  'Use all with nothing readable does nothing and keeps the row: ' + JSON.stringify(nothingRead));
+// ── H. one row, one sheet: Use this and Keep current ────────────────────
+console.log('H. the row is the choice');
+{
+  const st = await page.evaluate(async () => {
+    state.levels.forEach(l => { if (l._page) { l.pdfPage = l._page; delete l._page } });
+    // confirm what is drawn, so the top action is free to count the reads
+    edgeConfirmAll();
+    const lv = state.levels.find(l => levelEdges(l).length);
+    const li = state.levels.indexOf(lv), pg = levelEdges(lv)[0].page;
+    // a second sheet with no edge on it, so one read is a proposal and the
+    // other is a first read
+    const other = state.levels.findIndex((l, i) => i !== li && l.pdfPage != null);
+    const ol = state.levels[other];
+    zonesOf(ol, 'slab').splice(0, zonesOf(ol, 'slab').length);
+    const op = ol.pdfPage;
+    // one read that would replace an edge, one for a sheet with none
+    const SQ = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
+    edgeSweep = { rows: [
+      { levelIdx: li, page: pg, name: lv.name, polygon: SQ(50, 50, 950, 650), corners: 4, notes: [], had: true },
+      { levelIdx: other, page: op, name: state.levels[other].name, polygon: SQ(60, 60, 900, 600), corners: 4, notes: [], had: false }
+    ], sel: -1, running: false, done: 2 };
+    renderEdgeSection();
+    return { li, pg, other, op, text: document.getElementById('edgeRows').innerText.replace(/\s+/g, ' ') };
+  });
+  ok(/proposed/.test(st.text) && /Keep current/.test(st.text), 'a read on a sheet that has an edge is a proposal: ' + st.text.slice(0, 120));
+  ok(/Use all 2 proposed|Use all 2 read/.test(await page.$eval('#edgeUseAll', b => b.textContent)), 'both are counted at the top');
+  const d1 = await page.evaluate(() => history.depth());
+  await page.click(`button[data-esuse="${st.other}:${st.op}"]`);
+  const used = await page.evaluate(([li, pg, o]) => ({
+    wrote: levelEdges(state.levels[o]).length,
+    gone: !edgeSweep.rows.some(r => r.levelIdx === o),
+    left: edgeSweep.rows.length, depth: history.depth()
+  }), [st.li, st.pg, st.other]);
+  ok(used.wrote === 1 && used.gone && used.left === 1, 'Use this writes that one sheet and takes its read off the row: ' + JSON.stringify(used));
+  ok(used.depth === d1 + 1, 'one undo entry for it');
+  const kept = await page.evaluate(() => { const lv = state.levels[edgeSweep.rows[0].levelIdx];
+    return { before: levelEdges(lv)[0].polygon.length } });
+  await page.click(`button[data-esdrop="${st.li}:${st.pg}"]`);
+  const after2 = await page.evaluate(([li]) => ({ still: levelEdges(state.levels[li]).length, sweep: edgeSweep }), [st.li]);
+  ok(after2.still === 1 && after2.sweep === null, 'Keep current drops the read and writes nothing: ' + JSON.stringify([after2.still, after2.sweep, kept.before]));
+  await page.evaluate(() => history.undo());
+}
+
 // a new job clears the review
 await page.evaluate(() => { edgeSweep = { rows: [], sel: -1, running: false, done: 0 }; });
 await page.evaluate(() => startNewJob());

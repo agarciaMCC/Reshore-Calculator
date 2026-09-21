@@ -1,4 +1,4 @@
-// @rules BLD-07, RES-08, UI-15  (see DECISIONS.md)
+// @rules BLD-07, RES-08, UI-15, UI-23  (see DECISIONS.md)
 // Match every floor in one pass (Sep 10, 2026), and the no-shore alert
 // saying WHERE.
 //
@@ -266,6 +266,36 @@ const picked = await page.evaluate(async () => {
 ok(picked.hl, 'clicking a row puts a region on the plan: ' + picked.hl);
 ok(picked.pages.includes(picked.page), 'on a floor sheet of this job: page ' + picked.page);
 ok(picked.lit === 1, 'and its card lights up in the schedule');
+
+// ── G. the read says where it is ────────────────────────────────────────
+// This pass runs by itself on arrival, and the only thing that said so was the
+// label on a button folded away inside the by-hand disclosure — so it looked
+// like nothing happened (Adolfo, Sep 21: "also, the grid auto detect is gone?").
+console.log('G. the read says where it is');
+{
+  const run = await page.evaluate(async () => {
+    const seen = [];
+    const orig = setMatchRead;
+    window.setMatchRead = v => {
+      const r = orig(v);
+      if (v) seen.push({ at: `${v.i} of ${v.n}`, txt: (document.getElementById('matchProgress') || {}).textContent || '',
+        inSlot: !!document.querySelector('#matchList .primary-act #matchProgress') });
+      return r;
+    };
+    matchProposal = null; renderMatchPanel();
+    await proposeMatchAll();
+    window.setMatchRead = orig;
+    return { seen, after: matchRead, el: !!document.getElementById('matchProgress'),
+      rows: matchProposal ? matchProposal.rows.length : 0 };
+  });
+  ok(run.seen.length === run.rows && run.rows > 1, 'it reports every sheet as it reads it: '
+    + JSON.stringify(run.seen.map(s => s.at)));
+  ok(run.seen.every(s => /Reading sheet \d+ of \d+ for its grid bubbles/.test(s.txt)),
+    'saying which sheet it is on: ' + JSON.stringify(run.seen[0]));
+  ok(run.seen.every(s => s.inSlot), 'in the step\'s own primary slot, not inside the by-hand disclosure');
+  ok(run.after === null && !run.el, 'and it stops saying so once the proposal is up');
+  ok(await page.evaluate(() => !!document.querySelector('#matchList .mp-head')), 'which is the proposal panel itself');
+}
 
 await browser.close();
 console.log(`\n${pass} passed, ${fail} failed`);

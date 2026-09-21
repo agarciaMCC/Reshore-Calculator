@@ -9188,6 +9188,18 @@ function matchTargets(){
   });
   return out;
 }
+// Adolfo, Sep 21 2026: "also, the grid auto detect is gone?" It was not — it
+// runs by itself on arrival at Match floors, but the only thing that said so
+// was the label on a button folded away inside "or match again / by hand", so
+// the app read every sheet in silence for as long as that takes. The read now
+// says where it is, in the step's own primary slot.
+let matchRead=null;      // {i,n} while every sheet is being read
+function setMatchRead(v){
+  matchRead=v;
+  const el=document.getElementById('matchProgress');
+  if(el&&v){el.textContent=`Reading sheet ${v.i} of ${v.n} for its grid bubbles…`;return}
+  if(typeof renderMatchPanel==='function')renderMatchPanel();
+}
 async function proposeMatchAll(){
   if(!state.pdf.pages){toast('Load the drawings first.',2600);return null}
   const snapshot=JSON.parse(JSON.stringify(state.project.grid||{x:[],y:[]}));
@@ -9218,7 +9230,9 @@ async function proposeMatchAll(){
     addGridLabelsFrom(res.keep,res.fit.transform);
   };
   try{
+    let k=0;
     for(const row of rows){
+      setMatchRead({i:++k,n:rows.length});
       try{await readOne(row)}catch(e){row.err=(e&&e.message)||'this sheet could not be read'}
     }
     // A sheet that failed only because there was no grid yet deserves a
@@ -9232,6 +9246,7 @@ async function proposeMatchAll(){
   }finally{
     state.project.grid=snapshot;                // nothing is written until Apply
     quietGeom=false;
+    matchRead=null;
   }
   for(const row of rows){
     const v=matchVerdict(row);
@@ -10487,34 +10502,62 @@ function renderEdgeSection(){
   const rows=planSheetRows();
   const drawn=rows.filter(r=>r.edge&&!r.confirmed).length,none=rows.filter(r=>!r.edge).length;
   const busy=!!(edgeSweep&&edgeSweep.running);
+  // what a sweep read for this sheet and has not written yet
+  const readOf=r=>(typeof edgeSweepRowAt==='function'?edgeSweepRowAt(r.levelIdx,r.page):null);
+  const pending=rows.map(readOf).filter(x=>x&&x.polygon);
+  const nProp=pending.filter(x=>x.had).length;
   const row=r=>{
     const lv=state.levels[r.levelIdx];
     const here=r.page===state.pdf.current;
     const drawing=edgeDraw&&edgeDraw.page===r.page&&edgeDraw.levelIdx===r.levelIdx;
     const who=`<b>${esc(r.name)}</b>${r.zone?` · ${esc(r.zone)}`:''} <span class="lm-dim">sheet ${r.page}</span>`;
+    const sw=readOf(r);
+    const key=`${r.levelIdx}:${r.page}`;
+    // a sheet still being read, or one the sweep could not read
+    const waiting=sw&&!sw.polygon&&!sw.err;
+    const readErr=sw&&!sw.polygon&&sw.err?sw.err:null;
+    const errNote=readErr?` · <span class="lm-warn">could not be read — ${esc(readErr)}</span>`:'';
+    const redo=sw&&!sw.polygon?`<button class="btn btn-sm" data-esredo="${key}" title="Read this sheet again">Redetect</button>`:'';
     let st,acts;
-    if(drawing){st=`<span class="lm-warn">drawing — click the corners on the plan</span>`;
+    if(waiting){st=`<span class="lm-dim">reading this sheet…</span>`;acts=''}
+    else if(sw&&sw.polygon){
+      // ── A READ, ON ITS OWN ROW ── nothing is written until Use this
+      const showing=edgeSweep&&edgeSweep.sel===edgeSweepIdx(r.levelIdx,r.page);
+      const what=esc(`${sw.corners} corners${sw.areaSF!=null?` · ${fmtArea(sw.areaSF)}`:''}`);
+      const why=(sw.notes&&sw.notes.length)?` · <span class="lm-warn">${sw.notes.map(esc).join(' · ')}</span>`:'';
+      st=(sw.had?`<span class="lm-warn">proposed</span> · ${what} · ${edgeChangeText(sw)}`
+                :`<span class="lm-warn">read from the sheet</span> · ${what}`)+why;
+      acts=`<button class="btn btn-sm btn-primary" data-esuse="${key}" title="${sw.had?'Replace the floor edge on this sheet with this outline':'Draw this outline as the floor edge on this sheet'}">Use this</button>`
+          +`<button class="btn btn-sm" data-esshow="${key}" title="Draw it over its own sheet, with the edge it would replace beside it in grey">${showing?'Showing':'Show'}</button>`
+          +`<button class="btn btn-sm" data-espick="${key}" title="Read the sheet again and pick from the outlines yourself">Pick from the sheet</button>`
+          +`<button class="btn btn-sm" data-esdrop="${key}" title="${sw.had?'Leave the floor edge on this sheet as it is':'Leave this sheet without a floor edge for now'}">${sw.had?'Keep current':'Dismiss'}</button>`;
+    }
+    else if(drawing){st=`<span class="lm-warn">drawing — click the corners on the plan</span>`;
       acts=`<button class="btn btn-sm" data-edcancel="${r.levelIdx}:${r.page}">Stop drawing</button>`}
-    else if(!r.edge){st=`<span class="lm-warn">no floor edge yet</span>`;
+    else if(!r.edge){st=`<span class="lm-warn">no floor edge yet</span>`+errNote;
       acts=`<button class="btn btn-sm btn-primary" data-edpick="${r.levelIdx}:${r.page}" title="Read the outlines on this sheet and pick the one that is the slab edge">Pick from the sheet</button>`
-          +`<button class="btn btn-sm" data-eddraw="${r.levelIdx}:${r.page}" title="Click the corners of the slab edge yourself">Draw by hand</button>`}
-    else if(!r.confirmed){st=`drawn · ${esc(edgeAreaText(lv,r.page,r.edge))}${r.edge.detected?'':' · by hand'}`;
+          +`<button class="btn btn-sm" data-eddraw="${r.levelIdx}:${r.page}" title="Click the corners of the slab edge yourself">Draw by hand</button>`+redo}
+    else if(!r.confirmed){st=`drawn · ${esc(edgeAreaText(lv,r.page,r.edge))}${r.edge.detected?'':' · by hand'}`+errNote;
       acts=`<button class="btn btn-sm btn-go" data-edok="${r.levelIdx}:${r.page}" title="This outline is the slab edge on this sheet">Confirm</button>`
           +`<button class="btn btn-sm" data-edadj="${r.levelIdx}:${r.page}" title="Select it on the plan to drag its corners">Adjust</button>`
           +`<button class="btn btn-sm" data-edclean="${r.levelIdx}:${r.page}" title="Rebuild the corners onto the drafted lines">Clean corners</button>`
           +`<button class="btn btn-sm" data-edpick="${r.levelIdx}:${r.page}" title="Read the sheet again and pick another outline">Pick again</button>`
-          +`<button class="btn btn-sm" data-edrm="${r.levelIdx}:${r.page}" title="Remove this floor edge">Remove</button>`}
-    else{st=`<span class="ep-ok">✓ confirmed</span> · ${esc(edgeAreaText(lv,r.page,r.edge))}`;
+          +`<button class="btn btn-sm" data-edrm="${r.levelIdx}:${r.page}" title="Remove this floor edge">Remove</button>`+redo}
+    else{st=`<span class="ep-ok">✓ confirmed</span> · ${esc(edgeAreaText(lv,r.page,r.edge))}`+errNote;
       acts=`<button class="btn btn-sm" data-edadj="${r.levelIdx}:${r.page}" title="Select it on the plan; any change reopens it">Adjust</button>`
-          +`<button class="btn btn-sm" data-edredo="${r.levelIdx}:${r.page}" title="Read the sheet again and pick another outline">Redo</button>`}
+          +`<button class="btn btn-sm" data-edredo="${r.levelIdx}:${r.page}" title="Read the sheet again and pick another outline">Redo</button>`+redo}
     return `<div class="ed-row${r.confirmed?' ok':(r.edge?' drawn':'')}${here?' here':''}" data-edgo="${r.levelIdx}:${r.page}">
       <span class="ed-who">${who}</span><span class="ed-st">${st}</span><span class="ed-acts">${acts}</span></div>`;
   };
   host.innerHTML=`<p class="step-help">The floor edge is where the slab stops on each plan sheet. Everything the Areas step reads off a sheet — beams, openings, thickened slabs, loading areas — is looked for <b>inside</b> it, so nothing is picked up from a key plan, a detail or the title block. <b>Pick from the sheet</b> offers the outlines found on the sheet for you to choose from; adjust the corners if you need to, then <b>Confirm</b>.</p>
     <div class="primary-act">
-      ${drawn?`<button class="btn btn-sm btn-wide btn-go" id="edgeConfirmAll" title="Confirm every edge that is drawn but not yet confirmed">Confirm all ${drawn} drawn</button>`
-        :(busy?`<button class="btn btn-sm btn-wide" disabled>Reading sheet ${(edgeSweep.done||0)+1} of ${edgeSweep.rows.length}…</button>`
-        :(none&&none===rows.length?`<span class="lm-dim">The plan sheets are read when you arrive here; the confident outlines are drawn below for you to confirm.</span>`:''))}
+      ${busy?`<button class="btn btn-sm btn-wide" disabled>Reading sheet ${(edgeSweep.done||0)+1} of ${edgeSweep.rows.length}…</button>`
+        :(drawn?`<button class="btn btn-sm btn-wide btn-go" id="edgeConfirmAll" title="Confirm every edge that is drawn but not yet confirmed">Confirm all ${drawn} drawn</button>`
+        // the doubtful reads are last, deliberately: the confident outlines are
+        // already drawn and want confirming, and a read the app is unsure of is
+        // one to look at, not to take in bulk
+        :(pending.length?`<button class="btn btn-sm btn-wide btn-primary" id="edgeUseAll" title="Draw every outline read from the sheets — each lands on its own row to look at and confirm">Use all ${pending.length} ${nProp===pending.length?'proposed':'read'}</button>`
+        :(none&&none===rows.length?`<span class="lm-dim">The plan sheets are read when you arrive here; the confident outlines are drawn below for you to confirm.</span>`:'')))}
     </div>
     <div class="ed-list">${rows.map(row).join('')}</div>
     ${byHandHtml('edge',`<button class="btn btn-sm btn-wide" id="edgeDetectAll"${busy?' disabled':''} title="Read every plan sheet again and review the outlines together">${busy?'Reading…':(none===rows.length?'Detect the floor edge on every sheet':'Detect again on every sheet')}</button><span class="lm-dim">Each row has <b>Draw by hand</b>, <b>Adjust</b> and <b>Pick again</b> for one sheet at a time.</span>`,'or detect again / draw by hand')}
@@ -10532,6 +10575,11 @@ function renderEdgeSection(){
   on('button[data-edredo]',(li,pg)=>edgeRedo(li,pg));
   on('button[data-edrm]',(li,pg)=>edgeRemove(li,pg));
   on('button[data-edcancel]',()=>{edgeDraw=null;state.drawing.points=[];setTool('select');renderCanvas();renderEdgeSection()});
+  on('button[data-esuse]',(li,pg)=>edgeSweepUse(li,pg));
+  on('button[data-esshow]',(li,pg)=>edgeSweepShow(li,pg));
+  on('button[data-esdrop]',(li,pg)=>edgeSweepDrop(li,pg));
+  on('button[data-esredo]',(li,pg)=>edgeSweepRedetect(li,pg));
+  on('button[data-espick]',(li,pg)=>{edgeSweepForget(li,pg);edgePick(li,pg)});
   host.querySelectorAll('.ed-row').forEach(el=>el.addEventListener('click',ev=>{
     if(ev.target.closest('button'))return;
     const [li,pg]=pair(el.dataset.edgo);
@@ -10541,6 +10589,8 @@ function renderEdgeSection(){
   if(da)da.addEventListener('click',async()=>{edgeProposal=null;renderEdgePanel();await runEdgeSweep();renderEdgeSection()});
   const ca=host.querySelector('#edgeConfirmAll');
   if(ca)ca.addEventListener('click',edgeConfirmAll);
+  const ua=host.querySelector('#edgeUseAll');
+  if(ua)ua.addEventListener('click',edgeSweepUseAll);
 }
 
 // ── Which sheet below a sheet stacks on ──
@@ -15621,7 +15671,10 @@ function renderMatchPanel(){
   ensureGridScaleCheck();
   const unmatched=matchTargets().filter(r=>r.page!=null&&!r.hadMatch).length;
   el.innerHTML=modelPanelHtml()+`<p class="step-help">Every sheet is fitted to the building grid from its grid bubbles, and paired <b>by level and zone</b> with the sheet it stands on below — L3 North on L2 North, or on the whole-floor sheet where the floor below is on one sheet. ${unmatched?'The fits are read when you arrive here and laid out for review; nothing is written until you apply.':'Every sheet is matched.'} To match one by hand instead, click <b>two grid crossings</b> on it (or one the grid already knows). <b>Clear</b> drops a sheet's fit without touching what is drawn on it.</p>
-    ${(()=>{const rows=matchSheetRows();const toConf=rows.filter(r=>r.matched&&!r.confirmed).length;return `<div class="primary-act">${toConf?`<button class="btn btn-sm btn-wide btn-go" id="btnConfirmMatches" title="Confirm every matched sheet without looking at each grid">Confirm all ${toConf} matched</button>`:''}</div>`})()}
+    ${(()=>{
+      if(matchRead)return `<div class="primary-act"><button class="btn btn-sm btn-wide" id="matchProgress" disabled>Reading sheet ${matchRead.i} of ${matchRead.n} for its grid bubbles…</button></div>`;
+      const rows=matchSheetRows();const toConf=rows.filter(r=>r.matched&&!r.confirmed).length;
+      return `<div class="primary-act">${toConf?`<button class="btn btn-sm btn-wide btn-go" id="btnConfirmMatches" title="Confirm every matched sheet without looking at each grid">Confirm all ${toConf} matched</button>`:''}</div>`})()}
     ${byHandHtml('match',`<button class="btn btn-sm btn-wide" id="btnMatchAll" title="Read the grid bubbles on every assigned sheet again, fit each one, and show the lot for review">${unmatched?'Match every floor from its grid bubbles':'Re-read every sheet’s grid bubbles'}</button><span class="lm-dim">Each row has <b>Match by hand</b> (click two grid crossings), <b>Show grid</b>, <b>Redo</b> and <b>Clear</b>.</span>`,'or match again / by hand')}
     ${gridScaleBannerHtml()}${matchProposalHtml()}`
     // A floor drawn across several sheets gets a row per sheet: each is matched
@@ -19358,26 +19411,81 @@ async function runEdgeSweep(){
   renderEdgeSweepPanel();
   return edgeSweep;
 }
+// ── THE READ GOES ON ITS OWN SHEET'S ROW ──
+// Adolfo, Sep 21 2026: "this seems redundant to have these 2 steps, right?"
+// It was: a row per sheet in the Floor edge list, and a second review listing
+// the same sheets again — and the review's rows were read before the apply,
+// so they went on saying "no floor edge on this sheet yet" about sheets the
+// list above already showed confirmed. There is one list now: a read lands on
+// its own sheet's row as a proposal, carrying what it would change, Show, Use
+// this and Keep current. Nothing is written until Use.
+function edgeSweepIdx(li,pg){return edgeSweep?edgeSweep.rows.findIndex(x=>x.levelIdx===li&&x.page===pg):-1}
+function edgeSweepRowAt(li,pg){const i=edgeSweepIdx(li,pg);return i<0?null:edgeSweep.rows[i]}
+function edgeSweepForget(li,pg){
+  const i=edgeSweepIdx(li,pg);
+  if(i<0)return;
+  edgeSweep.rows.splice(i,1);
+  if(edgeSweep.sel===i)edgeSweep.sel=-1;else if(edgeSweep.sel>i)edgeSweep.sel--;
+  if(!edgeSweep.rows.length)edgeSweep=null;
+}
+function edgeSweepDrop(li,pg){edgeSweepForget(li,pg);renderEdgeSection();renderCanvas()}
+function edgeSweepShow(li,pg){const i=edgeSweepIdx(li,pg);if(i>=0)showEdgeSweepRow(i)}
+async function edgeSweepRedetect(li,pg){
+  const i=edgeSweepIdx(li,pg);
+  if(i<0)return;
+  const row=edgeSweep.rows[i];
+  row.polygon=null;row.err=null;
+  renderEdgeSection();
+  await readEdgeRow(row);
+  if(edgeSweep){edgeSweep.sel=edgeSweepIdx(li,pg);renderEdgeSection();renderCanvas()}
+}
+// the edge a swept row would write, on its own sheet, leaving the floor's
+// other sheets alone
+function writeEdgeFromRow(r){
+  const lv=state.levels[r.levelIdx];
+  if(!lv)return 0;
+  const arr=zonesOf(lv,'slab');
+  let replaced=0;
+  for(let i=arr.length-1;i>=0;i--)if(isEdgeZone(arr[i])&&zonePage(lv,arr[i])===r.page){arr.splice(i,1);replaced++}
+  const z={id:sid(),polygon:r.polygon.map(p=>({x:p.x,y:p.y})),kind:'edge',thicknessIn:null,offsetIn:0,label:'',detected:true};
+  if(state.pdf.pages)z.page=r.page;
+  arr.push(z);
+  if(lv.pdfPage==null)lv.pdfPage=r.page;
+  return replaced;
+}
+function edgeSweepUse(li,pg){
+  const r=edgeSweepRowAt(li,pg);
+  if(!r||!r.polygon){toast('Nothing read on this sheet yet.',2600);return 0}
+  const lv=state.levels[r.levelIdx];
+  history.record('Use floor edge');
+  const replaced=writeEdgeFromRow(r);
+  state.results=null;
+  edgeSweepForget(li,pg);
+  persist();refreshFlow();renderSidebar();renderCanvas();renderEdgeSection();
+  toast(`Floor edge drawn on ${lv?lv.name:'this sheet'}${replaced?' · replaced the one there before':''} — look at it on the plan, then Confirm. Ctrl+Z puts it back.`,4800);
+  return 1;
+}
+function edgeSweepUseAll(){
+  if(!edgeSweep)return 0;
+  edgeSweep.rows.forEach(r=>{if(r.polygon)r.pick=true});
+  return applyEdgeSweep();
+}
 function applyEdgeSweep(){
   if(!edgeSweep)return 0;
   const picks=edgeSweep.rows.filter(r=>r.pick&&r.polygon);
-  if(!picks.length){toast('Nothing ticked to apply.',2600);return 0}
+  if(!picks.length){toast('Nothing read to use.',2600);return 0}
   history.record('Detect floor edges');
   let n=0,replaced=0;
   for(const r of picks){
-    const lv=state.levels[r.levelIdx];
-    if(!lv)continue;
-    const arr=zonesOf(lv,'slab');
-    for(let i=arr.length-1;i>=0;i--)if(isEdgeZone(arr[i])&&zonePage(lv,arr[i])===r.page){arr.splice(i,1);replaced++}
-    const z={id:sid(),polygon:r.polygon.map(p=>({x:p.x,y:p.y})),kind:'edge',thicknessIn:null,offsetIn:0,label:'',detected:true};
-    if(state.pdf.pages)z.page=r.page;
-    arr.push(z);
-    if(lv.pdfPage==null)lv.pdfPage=r.page;
+    if(!state.levels[r.levelIdx])continue;
+    replaced+=writeEdgeFromRow(r);
     n++;
   }
   state.results=null;
-  edgeSweep=null;
-  persist();refreshFlow();renderSidebar();renderCanvas();
+  // a row that could not be read keeps its place, so Redetect stays on it
+  const rest=edgeSweep.rows.filter(r=>!(r.pick&&r.polygon));
+  edgeSweep=rest.length?{rows:rest,sel:-1,running:false,done:rest.length,auto:edgeSweep.auto}:null;
+  persist();refreshFlow();renderSidebar();renderCanvas();renderEdgeSection();
   toast(`${n} floor edge${n>1?'s':''} drawn${replaced?` · ${replaced} replaced`:''}. Look at each on the plan and confirm it — Ctrl+Z puts it all back.`,5200);
   return n;
 }
@@ -19407,69 +19515,12 @@ function edgeChangeText(r){
   if(r.outside)bits.push(`<span class="lm-warn">${r.outside} drawn area${r.outside>1?'s':''} would fall outside it</span>`);
   return 'replaces the current edge · '+bits.join(' · ');
 }
+// The review panel is gone — renderEdgeSection() draws every read on its own
+// sheet's row. This stays because the sweep calls it as it reads.
 function renderEdgeSweepPanel(){
   const host=document.getElementById('edgeSweepPanel');
-  if(!host)return;
-  if(!edgeSweep){host.style.display='none';host.innerHTML='';return}
-  const S=edgeSweep;
-  host.style.display='';
-  const rows=S.rows.map((r,i)=>{
-    const lv=state.levels[r.levelIdx];
-    const read=r.polygon||r.err;
-    const sel=S.sel===i;
-    return `<div class="mp-row v-${r.verdict||'none'}${sel?' sel':''}">
-      <label class="mp-tick">${r.polygon?`<input type="checkbox" data-espick="${i}"${r.pick?' checked':''}>`
-        :`<span class="mp-x">${read?'—':'…'}</span>`}</label>
-      <div class="mp-main">
-        <div class="mp-name">${esc(r.name||'')} <span class="lm-dim">${esc(lv?sheetTag(lv,r.page):'sheet '+r.page)}</span>
-          ${r.had?`<span class="mp-flag">has an edge already</span>`:''}
-          ${r.matched===false?`<span class="mp-flag">sheet not matched — area unknown</span>`:''}</div>
-        <div class="mp-stat">${r.polygon?esc(`${r.corners} corners${r.areaSF!=null?` · ${fmtArea(r.areaSF)}`:''}${r.ms?` · ${Math.round(r.ms)} ms`:''}`)
-          :(r.err?`<span class="lm-warn">${esc(r.err)}</span>`:'reading…')}</div>
-        ${r.polygon?`<div class="mp-why">${edgeChangeText(r)}</div>`:''}
-        ${r.notes&&r.notes.length?`<div class="mp-why lm-warn">${r.notes.map(esc).join(' · ')}</div>`:''}
-      </div>
-      <div class="mp-acts">
-        ${r.polygon?`<button class="btn btn-sm" data-esshow="${i}" title="Draw this outline over its own sheet, with the current floor edge beside it">${sel?'Showing':'Show'}</button>`:''}
-        <button class="btn btn-sm" data-esredo="${i}" title="Read this sheet again — use it when the drawing set has been re-issued">Redetect</button>
-      </div></div>`;
-  }).join('');
-  const n=S.rows.filter(r=>r.pick&&r.polygon).length;
-  const bad=S.rows.filter(r=>!r.polygon&&r.err).length;
-  host.innerHTML=`<div class="mp-panel">
-    <div class="mp-head">${S.auto?'Doubtful reads — look at each and tick the ones that are the slab edge':'Floor edges read from the sheets — nothing is written until you apply'}
-      <span class="lm-dim">${S.running?`reading ${S.done+1} of ${S.rows.length}…`:`${S.rows.length} sheet${S.rows.length>1?'s':''}${bad?` · ${bad} could not be read`:''}`}</span></div>
-    <p class="step-help dim">Click <b>Show</b> to draw an outline over its own sheet — the current edge is drawn beside it in grey. A doubtful read arrives unticked with the reason. <b>Redetect</b> re-reads one sheet, which is what to use when the set is re-issued.</p>
-    ${rows}
-    <div class="mp-actions">
-      <button class="btn btn-sm btn-primary" id="esApply"${n&&!S.running?'':' disabled'}>Use ${n||''} floor edge${n===1?'':'s'}</button>
-      <button class="btn btn-sm" id="esAll">Tick all readable</button>
-      <button class="btn btn-sm" id="esClose">Close</button>
-    </div></div>`;
-  host.querySelectorAll('input[data-espick]').forEach(c=>c.addEventListener('change',()=>{
-    const r=edgeSweep&&edgeSweep.rows[+c.dataset.espick];
-    if(r)r.pick=c.checked;
-    renderEdgeSweepPanel();
-  }));
-  host.querySelectorAll('button[data-esshow]').forEach(b=>b.addEventListener('click',()=>showEdgeSweepRow(+b.dataset.esshow)));
-  host.querySelectorAll('button[data-esredo]').forEach(b=>b.addEventListener('click',async()=>{
-    const i=+b.dataset.esredo,row=edgeSweep&&edgeSweep.rows[i];
-    if(!row)return;
-    b.disabled=true;b.textContent='Reading…';
-    row.polygon=null;row.err=null;renderEdgeSweepPanel();
-    await readEdgeRow(row);
-    if(edgeSweep){edgeSweep.sel=i;renderEdgeSweepPanel();renderCanvas()}
-  }));
-  const ap=document.getElementById('esApply');
-  if(ap)ap.addEventListener('click',applyEdgeSweep);
-  const all=document.getElementById('esAll');
-  if(all)all.addEventListener('click',()=>{
-    if(!edgeSweep)return;
-    edgeSweep.rows.forEach(r=>{if(r.polygon)r.pick=true});
-    renderEdgeSweepPanel();
-  });
-  const cl=document.getElementById('esClose');
-  if(cl)cl.addEventListener('click',()=>{edgeSweep=null;renderEdgeSweepPanel();renderCanvas()});
+  if(host){host.style.display='none';host.innerHTML=''}
+  if(typeof renderEdgeSection==='function')renderEdgeSection();
 }
 // the selected proposal, drawn over its own sheet with the current edge beside it
 function drawEdgeSweep(zoom,F_MONO){
