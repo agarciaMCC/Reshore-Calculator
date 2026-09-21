@@ -1,4 +1,4 @@
-// @rules LOD-01, LOD-03, LOD-04, LOD-05  (see DECISIONS.md)
+// @rules LOD-01, LOD-03, LOD-04, LOD-05, LOD-09, UI-15  (see DECISIONS.md)
 // THE LOAD CHART CAN BE TYPED IN OR BROUGHT IN (Adolfo, Sep 14, 2026):
 // "we need a way to enter in loads manually for the load chart or to upload
 //  an excel file"
@@ -53,45 +53,55 @@ const reset = () => page.evaluate(() => {
   setStep('loads'); openLoadMapModal();
 });
 
-// ── A. nothing to read it off: the way in ───────────────────────────────
-console.log('A. the empty state');
+// ── A. nothing to read it off: the chart starts itself ──────────────────
+// Adolfo, Sep 21 2026: don't ask the schedule-shape question cold. With no
+// schedule on the drawings the chart starts as one combined chart with a
+// blank row; switching to split LL + SDL is under "by hand" while it is empty.
+console.log('A. the empty state starts the chart');
 await reset();
-eq(await shape(), 'none', 'no schedule yet');
-ok(await page.$eval('#lmStart', e => e.style.display !== 'none'), 'the chooser is up');
-const st = await startText();
-ok(/Start a combined chart/.test(st) && /Start split LL \+ SDL schedules/.test(st),
-  'offering both shapes: ' + st.slice(0, 120));
-ok(/Import from Excel/.test(st) && /Blank template/.test(st), 'and a file either way');
-ok(/SDL \+ 1.6\/1.3 × LL/.test(st), 'saying how capacity comes out, so nothing is a black box');
-ok(await page.$eval('#lmCombined', e => e.style.display === 'none'), 'the empty table is out of the way');
-ok(await page.$eval('.lm-bulk', e => e.style.display === 'none'), 'so is a bulk control with nothing to act on');
-ok(await page.$eval('#lmNoteCombined', e => e.style.display === 'none'), 'and the note about what the drawing says');
-ok(/nothing to read a schedule off/.test(await chartText()), 'the status says why: ' + (await chartText()).slice(0, 90));
-
-console.log('   starting a combined chart');
-await page.click('#lsCombined');
-eq(await shape(), 'combined', 'a combined chart now');
+const started = () => page.waitForFunction(() => scheduleShape() === 'combined', null, { timeout: 5000 });
+await started();
+eq(await shape(), 'combined', 'a combined chart, without being asked');
 eq((await marks()).length, 1, 'with one row to type into');
 eq((await marks())[0][4], 'manual', 'marked as typed in');
-ok(await page.$eval('#lmStart', e => e.style.display === 'none'), 'the chooser steps aside');
-ok(await page.$eval('#lmCombined', e => e.style.display !== 'none'), 'and the table comes back');
-ok(/typed in by hand/.test(await chartText()), 'the status line says where it came from');
-await page.evaluate(() => history.undo());
-eq(await shape(), 'none', 'one undo puts the empty state back');
+ok(await page.$eval('#lmStart', e => e.style.display === 'none'), 'no chooser in the way');
+ok(await page.$eval('#lmCombined', e => e.style.display !== 'none'), 'the table is up');
+ok(/started blank/.test(await chartText()), 'the status says the chart started blank: ' + ((await chartText()).match(/started blank[^.]*/) || [''])[0]);
+ok(await page.evaluate(() => !!state.project.loadsStartedBlank), 'and the job remembers it');
+ok(await page.evaluate(() => !loadsReady()), 'a chart with no numbers does not open Results yet');
+eq((await page.evaluate(() => stepStatus('loads'))).text, "Enter the first mark's loads", 'the step says what it is waiting for');
+// the hand tools are folded away
+ok(await page.$eval('#byhand-loads', d => !d.open), 'import / re-read / switch are behind "by hand", closed');
+ok(await page.$eval('#byhand-loads', d => /Import from Excel/.test(d.textContent) && /Blank template/.test(d.textContent) && /split LL \+ SDL/.test(d.textContent)), 'and they are all there');
+ok(await page.$eval('#lmNoteCombined', e => /SDL \+ 1.6\/1.3 × LL/.test(e.textContent)), 'saying how capacity comes out, so nothing is a black box');
 
-console.log('   starting split schedules');
+console.log('   switching to split while the chart is empty');
+await page.evaluate(() => openByHand('loads'));
 await page.click('#lsSplit');
 eq(await shape(), 'split', 'split now');
 eq(await page.evaluate(() => [llSchedule().length, sdlSchedule().length]).then(JSON.stringify), '[1,1]',
   'one live-load mark and one dead-load mark');
 ok(await page.$eval('#lmSplit', e => /Live load schedule/.test(e.innerText) && /Superimposed dead load/.test(e.innerText)),
   'both tables are drawn');
+ok(await page.$eval('#byhand-loads', d => d.open && /combined chart instead/.test(d.textContent)), 'the disclosure stays open and now offers the way back');
+await page.click('#lsCombined');
+eq(await shape(), 'combined', 'and back to combined');
 await page.evaluate(() => history.undo());
+eq(await shape(), 'split', 'one undo per switch');
+await page.evaluate(() => history.undo());
+eq(await shape(), 'combined', 'back at the start');
+
+console.log('   a chart in use does not switch');
+await page.evaluate(() => { getConditions()[0].sdl = 25; getConditions()[0].ll = 40; afterConditionChange(); });
+await page.click('#lsSplit');
+eq(await shape(), 'combined', 'the switch is refused once a value is typed');
+ok(/in use/.test(await lastToast()), 'and says why: ' + await lastToast());
+ok(await page.evaluate(() => loadsReady()), 'a priced condition opens Results');
 
 // ── B. typing the chart in ──────────────────────────────────────────────
 console.log('B. adding, renaming, deleting by hand');
 await reset();
-await page.click('#lsCombined');
+await started();
 await page.click('#lmAdd');
 await page.click('#lmAdd');
 eq((await marks()).map(m => m[0]).join(','), '1,2,3', 'Add a mark takes the next free number');
@@ -176,8 +186,9 @@ eq(await page.evaluate(() => loadImport.rows.find(r => r.mark === '11').stated),
   'the stated capacity rides along for the check');
 
 console.log('   nothing is written until you import');
-eq((await marks()).length, 0, 'the schedule is still empty');
-eq(await page.evaluate(() => history.depth()), 0, 'and the undo stack untouched');
+eq((await marks()).length, 1, 'the schedule still holds only its blank starter row');
+eq(await page.evaluate(() => history.depth()), 1, 'and the undo stack has only the chart\'s own start');
+ok(await page.evaluate(() => loadImport.blank), 'the review knows the starter row is a placeholder, so nothing reads as "changed"');
 const pt = await panelText();
 ok(/nothing is written until you import/.test(pt), 'the panel says so: ' + pt.slice(0, 70));
 ok(/27 new/.test(pt) && /0 changed/.test(pt), 'with the count of each');
@@ -196,8 +207,9 @@ ok((await marks()).every(m => m[4] === 'import'), 'every row knows it was import
 ok(/imported from Kalae Reshore Calcsv2.xlsx/.test(await chartText()), 'and the status line names the file');
 ok(await page.$eval('#lmImportPanel', e => e.style.display === 'none'), 'the review closes behind it');
 await page.evaluate(() => history.undo());
-eq((await marks()).length, 0, 'one Ctrl+Z takes all 27 back out');
+eq((await marks()).length, 1, 'one Ctrl+Z takes all 27 back out, and the blank starter is back');
 await page.evaluate(() => history.redo());
+ok(await page.evaluate(() => !state.project.loadingConditions.some(c => c.sdl == null && c.ll == null && !c.desc)), 'the starter row is gone once real marks are in');
 
 // ── D. importing onto a schedule that already has marks ─────────────────
 console.log('D. the second import');
@@ -304,6 +316,8 @@ ok(await page.evaluate(() => { const r = parseLoadRows(readCsvRows(LOAD_TEMPLATE
 // a split job keeps its shape
 console.log('   a split job stays split');
 await reset();
+await started();
+await page.evaluate(() => openByHand('loads'));
 await page.click('#lsSplit');
 await takeFile('Kalae Reshore Calcsv2.xlsx');
 eq(await page.evaluate(() => loadImport.target), 'll', 'a combined file lands in the live-load schedule');

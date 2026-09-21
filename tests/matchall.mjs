@@ -1,4 +1,4 @@
-// @rules BLD-07, RES-08  (see DECISIONS.md)
+// @rules BLD-07, RES-08, UI-15  (see DECISIONS.md)
 // Match every floor in one pass (Sep 10, 2026), and the no-shore alert
 // saying WHERE.
 //
@@ -50,6 +50,9 @@ await page.evaluate(() => {
 });
 ok(await page.$$eval('#matchList button[data-automatch]', b => b.length) === 0, 'the per-floor Auto button is gone');
 ok(await page.$eval('#btnMatchAll', b => /every floor/i.test(b.textContent)), 'one button matches every floor');
+// matching runs itself on arrival; the button is the re-run, behind "by hand" (UI-18)
+ok(await page.$eval('#btnMatchAll', b => !!b.closest('details[data-byhand="match"]')), 'and it lives behind the by-hand disclosure');
+await page.evaluate(() => openByHand('match'));
 await page.click('#btnMatchAll');
 await page.waitForFunction(() => !!matchProposal, { timeout: 120000 });
 await page.waitForTimeout(200);

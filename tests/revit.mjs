@@ -1,11 +1,12 @@
-// @rules RVT-01, RVT-02, RVT-03, RVT-04, RVT-05  (see DECISIONS.md)
+// @rules RVT-01, RVT-02, RVT-03, RVT-05, RVT-06, RVT-07, RVT-08, RVT-09  (see DECISIONS.md)
 // REVIT -> CALCULATOR (Sep 18 2026). McClone's own scope model, exported as
 // IFC, is turned into a calculator job by "Revit export/ifc2reshore.py".
 // Adolfo chose: Revit supplies GEOMETRY ONLY and the loading marks are drawn
 // in the calculator (RVT-01); FILL / PAD / CURB / PEDESTAL / Plinth / TOS
 // SLOPE are never slab and anything named BM or BEAM is a beam whatever its
 // category (RVT-02); rotation to project north is an option (RVT-03); the
-// drawing set is a rendered plan sheet per level for now (RVT-04); gridline
+// drawing set now stands on McClone's own printed set (RVT-09, which
+// superseded RVT-04); gridline
 // tags with an apostrophe or a lowercase letter are not drawn and bubbles
 // sit outside the building extents (RVT-05).
 // The IFC and its Python stack are not needed here: the classifiers are pure
@@ -13,9 +14,10 @@
 // the artifact the rules describe.
 //  A. the classifiers, straight from the Python
 //  B. the exporter's options: rotation is opt-in
-//  C. the Kalae job: 42 levels, 42 sheets, geometry only, no excluded kinds
-//  D. the Kalae sheets: one plan per level, clean tags only, bubbles outside
-//     the building
+//  C. the Kalae job: 42 levels, geometry only, in feet, with no sheets of its
+//     own; project elevations; no wall or column pockets sold as openings
+//  D. the rendered PDF, still written as a check on what the model thinks it
+//     has: one plan per level, clean tags only, bubbles outside the building
 import { createRequire } from 'node:module';
 const { chromium } = await (async () => {
   try { return await import('playwright'); }
@@ -85,7 +87,7 @@ ok(/auto/.test(help) && /degrees/.test(help), 'it takes "auto" (number gridlines
 const src = fs.readFileSync(path.join(rvt, 'ifc2reshore.py'), 'utf8');
 ok(/Rotation to project north is an option, not automatic/.test(src), 'and the docstring states the decision');
 
-console.log('C. the Kalae job is geometry only');
+console.log('C. the Kalae job is geometry only, in feet, with no sheets of its own');
 const job = JSON.parse(fs.readFileSync(path.join(rvt, '1268_KALAE-revit.reshore.json'), 'utf8'));
 const log = fs.readFileSync(path.join(rvt, '1268_KALAE-revit-export-log.txt'), 'utf8');
 const levels = job.levels;
@@ -93,27 +95,40 @@ ok(levels.length === 42, '42 levels: ' + levels.length);
 ok(levels.every(l => l.zones.length === 0), 'RVT-01: no loading areas on any level — the marks are drawn in the calculator');
 ok(/Loading marks are \*\*not\*\* exported/.test(fs.readFileSync(path.join(rvt, 'README.md'), 'utf8')), 'the README says so');
 ok(/'loadingConditions': \[\], 'llSchedule': \[\], 'sdlSchedule': \[\]/.test(src), 'and the exporter writes an empty load schedule');
+// RVT-09: field mode. The geometry travels in feet under modelZones and the
+// job brings no sheets, because it stands on McClone's own set.
+ok(job.project.revit.drawings === 'field' && job.project.revit.geometryUnits === 'feet', 'RVT-09: the job is in field mode, geometry in feet');
+ok(levels.every(l => !l.pdfPage && !l.alignment && l.slabZones.length === 0), 'RVT-09: no sheets, no matches, nothing in page pixels');
+ok(levels.every(l => (l.modelZones || []).every(z => Array.isArray(z.polygonFt) && z.polygonFt.length > 2 && z.polygonFt.every(q => q.length === 2 && q.every(Number.isFinite)))),
+  'every model area carries a ring in feet');
+// RVT-06: the project datum, not the storey elevations
+ok(/levels on the project datum: 90'-9" below the model's storey elevations/.test(log), "RVT-06: levels are reported 90'-9\" below the storey elevations");
+const L1 = levels.find(l => l.name === '1'), L19 = levels.find(l => l.name === '19');
+ok(L1 && Math.abs(L1.elevation - 9.25) < 1e-6, "RVT-06: Level 1 reads 9'-3\": " + (L1 && L1.elevation));
+ok(L19 && Math.abs(L19.elevation - 194.625) < 1e-6, "RVT-06: Level 19 reads 194'-7 1/2\", as sheet 12 of the McClone set has it: " + (L19 && L19.elevation));
+// RVT-07: wall and column pockets are filled, not exported as openings
+ok(/wall\/column pockets filled/.test(log), 'RVT-07: the log reports the pockets it filled');
+ok(/h_\.intersection\(sup\)\.area >= 0\.6 \* h_\.area/.test(src), 'RVT-07: a hole a wall or column fills is filled back in');
+// RVT-08: the X sits inside the opening
+ok(/minimum_rotated_rectangle/.test(src) && /LineString\(\[q0, q1\]\)\.intersection\(hpoly\)/.test(src), "RVT-08: the opening X is drawn on the hole's own rectangle and clipped to it");
 const kinds = {};
-for (const l of levels) for (const z of l.slabZones) kinds[z.kind] = (kinds[z.kind] || 0) + 1;
+for (const l of levels) for (const z of l.modelZones) kinds[z.kind] = (kinds[z.kind] || 0) + 1;
 ok(kinds.edge === 42 && kinds.beam > 150 && kinds.opening > 150 && kinds.slab > 20 && kinds.grade >= 1, 'edges, beams, openings, slab steps and grade came through: ' + JSON.stringify(kinds));
 const never = /FILL|PAD\b|CURB|PEDESTAL|PLINTH|TOS SLOPE/i;
-ok(levels.every(l => l.slabZones.every(z => !never.test(z.label || ''))), 'RVT-02: nothing labelled FILL / PAD / CURB / PEDESTAL / Plinth / TOS SLOPE is in the job');
-const beams = levels.flatMap(l => l.slabZones.filter(z => z.kind === 'beam'));
+ok(levels.every(l => l.modelZones.every(z => !never.test(z.label || ''))), 'RVT-02: nothing labelled FILL / PAD / CURB / PEDESTAL / Plinth / TOS SLOPE is in the job');
+const beams = levels.flatMap(l => l.modelZones.filter(z => z.kind === 'beam'));
 // Floors that are beams carry the BM in their name; Structural Framing members
 // (the 36x14 TRANSITION beams) are beams by category and need not
 const named = beams.filter(b => /\bBM\b|\bBEAM\b/i.test(b.label || ''));
 ok(named.length > 150 && beams.every(b => /\bBM\b|\bBEAM\b|\d+x\d+/i.test(b.label || '')), 'beams came in as beams — ' + named.length + ' of ' + beams.length + ' named BM, the rest framing members with a W x D: ' + JSON.stringify([...new Set(beams.map(b => b.label))].slice(0, 6)));
 ok(beams.every(b => b.widthIn > 0 && b.depthIn > 0), 'and a width and depth');
-ok(levels.every(l => l.slabZones.filter(z => z.kind === 'edge').length === 1 && l.slabZones.find(z => z.kind === 'edge').confirmed), 'one confirmed floor edge per level');
-ok(levels.every(l => l.alignment && l.alignment.confirmed && /^revit/.test(l.alignment.source || '')), 'every sheet matched and confirmed from the model');
+ok(levels.every(l => l.modelZones.filter(z => z.kind === 'edge').length === 1 && l.modelZones.find(z => z.kind === 'edge').confirmed), 'one confirmed floor edge per level');
 ok(job.project.revit && typeof job.project.revit.rotationDeg === 'number' && /rotate auto: .* rotating 51\.87/.test(log), 'RVT-03: Kalae was rotated because it was ASKED for (--rotate auto), and the job records the angle: ' + job.project.revit.rotationDeg);
 const grid = job.project.grid;
 const clean = /^[A-Z0-9.]+$/;
 ok(grid.x.length && grid.y.length && [...grid.x, ...grid.y].every(g => clean.test(g.label)), 'RVT-05: the project grid holds clean tags only: ' + [...grid.x, ...grid.y].map(g => g.label).join(' '));
 
-console.log('D. the sheets: one rendered plan per level, clean bubbles outside the building');
-const pages = new Set(levels.map(l => l.pdfPage));
-ok(pages.size === 42 && Math.min(...pages) === 1 && Math.max(...pages) === 42, 'RVT-04: every level has its own page, 1..42');
+console.log('D. the rendered PDF, kept as a check on what the model thinks it has');
 ok(/wrote .*revit-plans\.pdf \(42 pages\)/.test(log), 'the log says 42 pages');
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
@@ -123,7 +138,12 @@ await page.waitForFunction(() => typeof solveAll === 'function');
 const pdf = fs.readFileSync(path.join(rvt, '1268_KALAE-revit-plans.pdf'));
 // the building extents in page px: the union of every level's floor edge
 const ext = { minx: Infinity, miny: Infinity, maxx: -Infinity, maxy: -Infinity };
-for (const l of levels) for (const z of l.slabZones) if (z.kind === 'edge') for (const p of z.polygon) {
+// the job is in feet now, so the check-sheet's own frame converts back to page px
+const ST = job.project.revit.sheetTransform;
+ok(Array.isArray(ST) && ST.length === 6, 'the job records the frame the check sheets are drawn in');
+const toPx = ([x, y]) => ({ x: (x - ST[4]) / ST[0], y: (y - ST[5]) / ST[3] });
+for (const l of levels) for (const z of l.modelZones) if (z.kind === 'edge') for (const q of z.polygonFt) {
+  const p = toPx(q);
   ext.minx = Math.min(ext.minx, p.x); ext.maxx = Math.max(ext.maxx, p.x); ext.miny = Math.min(ext.miny, p.y); ext.maxy = Math.max(ext.maxy, p.y);
 }
 const sample = [1, 2, 5, 12, 27, 40, 42];
@@ -145,7 +165,8 @@ const D = await page.evaluate(async ({ b64, sample, ext }) => {
 }, { b64: pdf.toString('base64'), sample, ext });
 ok(D.pages === 42, 'the PDF has 42 pages: ' + D.pages);
 for (const s of D.sheets) {
-  const lv = levels.find(l => l.pdfPage === s.n);
+  const m = /^LEVEL (.+) FLOOR PLAN$/.exec(s.title || '');
+  const lv = m && levels.find(l => l.name === m[1]);
   ok(s.title && s.title.toUpperCase().includes(String(lv.name).toUpperCase()), `sheet ${s.n} is titled for ${lv.name}: ${s.title}`);
   ok(s.footer, `sheet ${s.n} says geometry only, marks drawn in the calculator`);
   ok(s.tags.length >= 4, `sheet ${s.n} has gridline bubbles: ${s.tags.length}`);

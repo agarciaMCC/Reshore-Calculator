@@ -1,4 +1,4 @@
-// @rules BLD-02, UI-04  (see DECISIONS.md)
+// @rules BLD-02, UI-04, UI-15  (see DECISIONS.md)
 // Reading the sheets: auto-match a floor from its grid bubbles, read T/SLAB
 // elevations and thicknesses, and the ortho tracking line's perpendicular
 // lock. Run against Adolfo's own test set, so the numbers are checked
@@ -96,7 +96,10 @@ await page.evaluate(() => setStep('levels'));
 ok(await page.$('#btnReadElev') !== null, 'the Levels step has the button');
 // the read runs itself when a set loads (Sep 17 2026); the button is the re-read
 ok(await page.$eval('#btnReadElev', b => /Read the levels again/.test(b.textContent)), 'as a re-read — the first read is automatic: ' + await page.$eval('#btnReadElev', b => b.textContent));
-ok(await page.$('#levelsConfirm') !== null, 'and Levels ends in a Confirm row');
+ok(await page.$('#levelsConfirm') !== null, 'and Levels has its Confirm row');
+ok(await page.evaluate(() => { const p = document.getElementById('p-levels'); const c = document.getElementById('levelsConfirm'), l = document.getElementById('levelList'); return c && l && [...p.children].indexOf(c) < [...p.children].indexOf(l) }), 'the Confirm row is the primary action, above the list (UI-18)');
+ok(await page.$eval('#btnReadElev', b => !!b.closest('#byhand-levels')), 'the re-read is behind "or do it by hand"');
+await page.evaluate(() => openByHand('levels'));
 await page.click('#btnReadElev');
 await page.waitForFunction(() => document.querySelectorAll('#elevProposal .ep-row').length > 0, null, { timeout: 20000 });
 ok(await page.$$eval('#elevProposal .ep-row', r => r.length) === 5, 'the review panel lists every floor plan');

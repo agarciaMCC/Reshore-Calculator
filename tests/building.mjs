@@ -127,6 +127,10 @@ console.log('   sheets status: ' + JSON.stringify(C.st1));
 // ── D. the floor edge ─────────────────────────────────────────────────────
 console.log('D. the floor edge, per plan sheet');
 const D0 = await page.evaluate(() => {
+  // this section walks the BY-HAND path (Pick from the sheet, Draw by hand);
+  // the sweep that runs itself on arrival (UI-19, tests/flow.mjs) is stood
+  // down here so it does not race the hand picks
+  edgeAutoKey = planSheetRows().map(r => r.page).join(',');
   setStep('edge');
   const rows = planSheetRows();
   return { n: rows.length, st: stepStatus('edge'), first: rows[0], html: document.getElementById('edgeRows').innerText.replace(/\s+/g, ' ') };

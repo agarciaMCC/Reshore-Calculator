@@ -59,7 +59,8 @@ console.log('C. UI: propose, cancel with Esc, accept, replace, undo');
 // The floor edge is settled on the BUILDING step now (Adolfo, Sep 17 2026):
 // its own section, a row per plan sheet, "Pick from the sheet" on each. The
 // Areas auto-detect no longer offers it.
-await page.evaluate(() => { setStep('edge'); state.activeLevelIdx = state.levels.findIndex(l => l.name === '3'); renderEdgeSection(); });
+// the by-hand path: the arrival sweep (UI-16, tests/flow.mjs) is stood down
+await page.evaluate(() => { edgeAutoKey = planSheetRows().map(r => r.page).join(','); setStep('edge'); state.activeLevelIdx = state.levels.findIndex(l => l.name === '3'); renderEdgeSection(); });
 ok(await page.evaluate(() => GROUPS[0].sections.join(',') === 'drawings,levels,sheets,edge,match'), 'Floor edge is a section of Building, before Match floors');
 ok(await page.evaluate(() => document.getElementById('adEdge').closest('label').hidden), 'and is no longer a tick box on the Areas auto-detect');
 const pickBtn = await page.evaluate(() => {

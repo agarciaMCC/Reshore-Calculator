@@ -98,12 +98,14 @@ the system; this file holds the rules and is versioned with the code.
 
 | ID | Rule | Decided |
 |---|---|---|
-| LOD-01 | Three schedule shapes: a schedule table, loading diagrams (a key plan per level per load type), and manual/Excel entry. The app asks which when starting from nothing. | Sep 9, Sep 14 |
+| LOD-01 | Three ways loads arrive: a schedule table, loading diagrams (a key plan per level per load type), and manual/Excel entry. The drawings are scanned first; when nothing on them reads as a schedule the chart STARTS ITSELF as one combined chart with a blank row and says so. Switching to split LL + SDL schedules is under "by hand" while the chart is empty; a shape the user switched to stands. The blank starter row is a placeholder: an import or a re-scan that brings real marks replaces it. | Sep 9, Sep 14, Sep 21 |
 | LOD-02 | Values read off loading diagrams go into the Loads step ONLY — not pinned, not auto-traced. | Sep 9 |
 | LOD-03 | The Excel import reads his chart as written (Designation, SDL psf, LL psf, TOTAL CAPACITY psf, with * meaning reducible live load), with a downloadable blank template and a review panel before anything is written. | Sep 14 |
 | LOD-04 | A re-scan keeps hand-entered marks and flags where the drawings disagree. | Sep 14 |
 | LOD-05 | Verifying a mark stays on the Loads tab and highlights the schedule row the value was read from — never jumps to another step. | Sep 15 |
 | LOD-06 | Auto-trace lives on the Loads step. A typical loading mark per level is auto-picked from the mark covering the largest traced area. | Sep 15 |
+| LOD-08 | The typical capacity per floor has ONE home: the Loads step, with the marks. The Levels row and the Areas typical row show it read-only and link there. | Sep 21 |
+| LOD-09 | Results waits for a schedule it can price: a chart whose rows carry no numbers does not open Results. | Sep 21 |
 | LOD-07 | Load-map tracing is one pass over every load-map sheet, on the Loads step after the schedule. Plans filed under the floor their title names with level and zone pickers, one review grouped by floor, traced areas landing on whichever zone sheet they fall in. | Sep 17 |
 
 ## ARE — Areas step and markup
@@ -169,6 +171,11 @@ the system; this file holds the rules and is versioned with the code.
 | UI-11 | The ghost of the floor below combines the North and South floor edges into ONE complete floor, alongside a stacking-check panel. | Sep 17 |
 | UI-12 | The stacking warning auto-clears where an on-grade area is drawn there, with an OK button on the row remembered on the job until the overshoot grows. | Sep 17 |
 | UI-13 | On the Levels list, headers sit over the field they reference, and the F2F and shore-height line is bold and easy to read. | Sep 17 |
+| UI-15 | Every section has ONE primary action at the top (Confirm levels · All N flagged look right · Confirm all N drawn · Confirm all N matched · Confirm all N marks · Add the proposed shapes). Re-readers and hand tools fold behind an "or do it by hand" disclosure that stays closed until opened and, once opened, stays open for the job. | Sep 21 |
+| UI-16 | The Floor edge section reads itself on arrival: every plan sheet is swept, confident outlines are drawn for Confirm / Adjust, doubtful ones stay in the review to pick from. Once per set of sheets; the button is the re-run. | Sep 21 |
+| UI-17 | The Areas step reads itself on arrival: sheets with a confirmed edge and nothing yet read off them are scanned for beams and openings and the proposal opens (none ticked, BEM-08). Remembered on the job per sheet, so an old job is not rescanned. | Sep 21 |
+| UI-18 | Results, Sequence and the rail report the same "still to choose" count: rows across every placement with a shore to pick; rows with nothing tall enough are listed, not counted. | Sep 21 |
+| UI-19 | The level modal is gone. Single floors and typical ranges are edited in the Levels rows (… opens the range fields under a row; double-click lands in the row's own fields). Slab thickness is edited in the row or re-read from the drawings. | Sep 21 |
 | UI-14 | PDF fidelity: device-pixel-ratio-correct canvases, no PNG round trip, the visible patch re-rendered at on-screen magnification, auto-trace and floor-edge raster at 144 DPI. | Sep 9 |
 
 ## BRD — Brand
@@ -186,6 +193,14 @@ the system; this file holds the rules and is versioned with the code.
 | RVT-03 | Rotation to project north is a user option. | Sep 18 |
 | RVT-04 | The drawing set is a rendered plan sheet per level for now; vector-only mode later. | Sep 18 |
 | RVT-05 | Any gridline or bubble whose tag carries an apostrophe or a lowercase letter is not needed on the drawings, and bubbles sit outside the building extents. | Sep 18 |
+| RVT-06 | Elevations are reported on the PROJECT datum, found from the model's own Reference Level properties (Top / Bottom Reference Elevation) against the storey elevations. Kalae: 90'-9" below the storey values, so Level 1 reads 9'-3". Storey elevations are the fallback. | Sep 21 |
+| RVT-07 | A hole in the slab that a wall or column fills is not an opening. The pocket is filled back in: the load path runs through the wall or the column. | Sep 21 |
+| RVT-08 | The X on an opening is drawn on the opening's own rotated rectangle and clipped to it, never on its axis-aligned box. | Sep 21 |
+| RVT-09 | Default (`--drawings field`): the job stands on McClone's own printed set. It carries no sheets of its own; its geometry travels in FEET in the frame the project grid is written in, under `modelZones`. `--drawings rendered` keeps the old behaviour. The rendered PDF is written either way, as a check on what the model thinks it has. | Sep 21 |
+| RVT-10 | Registration is the Match step: fitting one of his sheets to the model's project grid from that sheet's own bubbles IS the transform, and the same transform places the model's polygons on it. Model geometry governs; the drawing is the backdrop. Nothing is written until Apply. | Sep 21 |
+| RVT-11 | A polygon is placed on the sheet it lands on and cut at the page edge, so a floor split North / South gets each half on its own sheet. | Sep 21 |
+| BLD-12 | A sheet can serve more than one floor — a typical tower plan serves every floor above the podium. Where several floors hold a page, the floor being worked on is the one meant. | Sep 21 |
+| BLD-13 | The fit is seeded from the two crossings that agree with the most others, refitted, and seeds over 3" RMS are discarded. A key plan in the title block carries its own bubbles at its own scale, and a fit taken over every crossing lands between the two plans and stays there. | Sep 21 |
 
 ---
 
@@ -223,3 +238,8 @@ the system; this file holds the rules and is versioned with the code.
 | Seven steps in the rail | BLD-01 | Sep 15 |
 | One-shot sheet review panel, edge column on the Sheets step | BLD-04 | Sep 17 |
 | Orange selected-region highlight | RES-06 | Sep 8 |
+| "Start a combined chart / Start split schedules" asked cold on an empty Loads step | LOD-01 | Sep 21 |
+| Typical capacity editable on the Levels row, the level modal and the Areas typical row | LOD-08 | Sep 21 |
+| The level modal (double-click a level / …) | UI-19 | Sep 21 |
+| The Results modal (Schedule button) and gotoStep | BLD-01 | Sep 21 |
+| Detect the floor edge / Auto detect as buttons the user must press first | UI-16, UI-17 | Sep 21 |

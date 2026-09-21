@@ -1,4 +1,4 @@
-// @rules ARE-08, MDL-15  (see DECISIONS.md)
+// @rules ARE-08, MDL-15, LOD-08  (see DECISIONS.md)
 // The typical capacity, drawn from the floor edge rather than stored as a
 // second shape: it covers the slab, the drawn areas read as exceptions cut out
 // of it, it follows the edge through any edit because it IS the edge, and it
@@ -102,18 +102,23 @@ ok(labels.a.cap === 138 && Math.round(labels.a.at.x) === 50 && Math.round(labels
 ok(labels.b.cap === 0 && !!labels.b.at,
    'a floor with no typical capacity still gets one, to show it is unset: ' + JSON.stringify(labels.b));
 
-console.log('E. the Areas step edits the level default, not a second field');
+console.log('E. the Areas step shows the level default and points at its home');
+// Adolfo, Sep 21 2026: the typical capacity has ONE home — the Loads step.
+// The Areas row and the Levels row show it read-only and link there.
 await page.evaluate(() => { state.activeLevelIdx = 1; setLayer('loading'); renderSidebar() });
 const row = await page.evaluate(() => {
   const r = document.querySelector('#zoneList .typ-row');
   return r && { text: r.textContent.replace(/\s+/g, ' ').trim(), unset: r.classList.contains('unset'),
-                controls: r.querySelectorAll('.lvl-edit').length };
+                controls: r.querySelectorAll('.lvl-edit').length, ro: !!r.querySelector('.lvl-cap-ro'), link: !!r.querySelector('a[data-golo]') };
 });
 ok(row && /Typical capacity/.test(row.text), 'the row is there: ' + JSON.stringify(row && row.text));
 ok(row && /138 PSF/.test(row.text), 'showing the capacity');
 ok(row && /inside the floor edge/.test(row.text), 'and saying it is bounded by the edge');
 ok(row && !row.unset, 'not flagged, because it is set');
-ok(row && row.controls >= 1, 'with the same control the Levels step uses: ' + (row && row.controls));
+ok(row && row.controls === 0 && row.ro && row.link, 'read-only, with a link to the Loads step: ' + JSON.stringify(row));
+const lvRow = await page.evaluate(() => { renderLevelList(); const r = document.querySelector('#levelList .sb-item[data-level="1"]');
+  return { ro: !!r.querySelector('.lvl-cap-ro'), edits: r.querySelectorAll('.lvl-edit[data-f="cap"], .lvl-edit[data-f="defMark"], .lvl-edit[data-f="defLL"]').length, txt: r.querySelector('.lvl-cap-ro').textContent.trim() } });
+ok(lvRow.ro && lvRow.edits === 0 && /138 PSF/.test(lvRow.txt), 'the Levels row shows the same, read-only: ' + JSON.stringify(lvRow));
 
 const unset = await page.evaluate(() => {
   state.activeLevelIdx = 0; renderSidebar();          // Level 3 has no default
@@ -127,20 +132,27 @@ const onSlab = await page.evaluate(() => { setLayer('slab'); renderSidebar();
 ok(onSlab, 'and it is not on the slab layer, which is not about capacity');
 await page.evaluate(() => setLayer('loading'));
 
-console.log('F. editing it writes the level default and takes one undo');
+console.log('F. the Loads step edits it, and it takes one undo');
 const edited = await page.evaluate(() => {
-  state.activeLevelIdx = 1; renderSidebar();
-  const before = { cap: state.levels[1].defaultCapacity, depth: history.depth() };
-  const inp = document.querySelector('#zoneList .typ-row .lvl-edit');
+  const link = document.querySelector('#zoneList .typ-row a[data-golo]');
+  link.click();
+  const landed = curStep;
+  const blk = document.getElementById('lmTypical');
+  const inp = blk && blk.querySelector('.typ-brow[data-tli="1"] .lvl-edit[data-f="cap"]');
+  const before = { cap: state.levels[1].defaultCapacity, depth: history.depth(), rows: blk ? blk.querySelectorAll('.typ-brow').length : -1 };
   inp.value = '175';
   inp.dispatchEvent(new Event('change', { bubbles: true }));
-  const after = { cap: levelDefaultCapacity(state.levels[1]), depth: history.depth() };
+  const after = { cap: levelDefaultCapacity(state.levels[1]), depth: history.depth(),
+    shown: document.querySelector('#lmTypical .typ-brow[data-tli="1"] .tb-psf').textContent.trim() };
   history.undo();
-  return { before, after, undone: levelDefaultCapacity(state.levels[1]) };
+  return { landed, before, after, undone: levelDefaultCapacity(state.levels[1]) };
 });
-ok(edited.after.cap === 175, 'the level default is what changes: ' + edited.after.cap);
+ok(edited.landed === 'loads', 'the link lands on the Loads step: ' + edited.landed);
+ok(edited.before.rows >= 1, 'which has a typical row per carrying floor: ' + edited.before.rows);
+ok(edited.after.cap === 175 && edited.after.shown === '175 PSF', 'the level default is what changes: ' + JSON.stringify(edited.after));
 ok(edited.after.depth === edited.before.depth + 1, 'one undo entry: ' + JSON.stringify(edited));
 ok(edited.undone === 138, 'and undo puts it back: ' + edited.undone);
+await page.evaluate(() => setStep('areas'));
 
 console.log('G. drawing it changes nothing the solver does');
 await build();

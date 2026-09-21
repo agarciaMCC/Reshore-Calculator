@@ -36,6 +36,9 @@ await page.evaluate(async ([b64, d]) => {
   resetGeometry(); state.pdf.doc = doc; state.pdf.pages = doc.numPages; state.pdf.current = 1; state.pdf.pageImages = {};
   deserializeDoc(d); sortLevelsByElevation(); state.activeLevelIdx = 0; renderSidebar(); persist();
   document.getElementById('upload-prompt').style.display = 'none';
+  // this suite drives the sweep BY HAND; the sweep that runs itself on
+  // arrival (UI-16, tests/flow.mjs) is stood down so it does not race it
+  edgeAutoKey = planSheetRows().map(r => r.page).join(',');
   setStep('edge'); setLayer('slab'); renderSidebar();
 }, [pdf.toString('base64'), job]);
 

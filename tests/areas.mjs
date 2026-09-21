@@ -1,4 +1,4 @@
-// @rules ARE-01, ARE-02, ARE-04, ARE-05, ARE-06, ARE-07, UI-08, UI-10, LOD-06  (see DECISIONS.md)
+// @rules ARE-01, ARE-02, ARE-04, ARE-05, ARE-06, ARE-07, UI-08, UI-10, LOD-06, UI-15  (see DECISIONS.md)
 // The Areas panel: per-layer Draw buttons that arm the tool themselves, the
 // slab kind menu, derived shape names, grouping by type, and the help behind
 // the ? on the title.
@@ -33,7 +33,11 @@ ok(!await page.$eval('#areasHelp',e=>e.hidden),'clicking ? shows it');
 ok(await page.$eval('#areasHelp',e=>/smaller area cuts out/.test(e.textContent)&&!/higher capacity governs/.test(e.textContent)),'help text updated for the cutout rule');
 await page.keyboard.press('Escape');
 ok(await page.$eval('#areasHelp',e=>e.hidden),'Escape closes it');
-// loading layer buttons
+// loading layer buttons — behind "or draw / copy by hand" (UI-18), closed until opened
+ok(await page.$eval('#byhand-areas',d=>!d.open&&d.contains(document.getElementById('btnDrawLoading'))&&d.contains(document.getElementById('btnCopyFrom'))&&d.contains(document.getElementById('btnAutoDetect'))),'Draw, Copy and Detect again fold away behind the disclosure');
+ok(await page.$eval('#beamPanel',e=>[...e.parentNode.children].indexOf(e)<[...e.parentNode.children].indexOf(document.getElementById('zoneList'))),'the proposal panel sits above the list');
+await page.evaluate(()=>openByHand('areas'));
+ok(await page.evaluate(()=>!!state.project.handTools.areas),'opening it is remembered on the job');
 ok(await page.$eval('#btnDrawLoading',e=>e.offsetParent!==null&&e.textContent==='Draw loading area'),'Draw loading area shown on the loading layer');
 ok(await page.$eval('#drawSlabWrap',e=>e.style.display==='none'),'the slab draw button is hidden');
 ok(await page.$eval('#btnCopyFrom',e=>/Copy loading areas/.test(e.textContent)),'copy button names the layer');
