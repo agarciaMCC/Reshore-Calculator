@@ -942,14 +942,33 @@ select.sched-shore option,select.sel-styled option{background:var(--surface-rais
 .lvl-cap-ro.unset{color:var(--text-tertiary);font-style:italic}
 .lvl-cap-ro a{color:var(--mcc-red,#CF0A2C);cursor:pointer;text-decoration:none;font-style:normal}
 .lvl-cap-ro a:hover{text-decoration:underline}
-.typ-block{margin:10px 0 6px;border:1px solid var(--border);border-radius:6px;padding:8px 10px}
-.typ-block h4{margin:0 0 4px;font-size:12px}
-.typ-block .typ-brow{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px;flex-wrap:wrap}
+/* ── THE TYPICAL CAPACITY IS NOT A FOOTNOTE ──
+   Adolfo, Sep 21 2026: "make this section stand out more. it feels like it
+   can easily get missed." It is a card with its state in its head, amber
+   until every carrying floor has one — and the Loads step is not done
+   before that (LOD-10). */
+.typ-block{margin:14px 0 8px;border:1px solid var(--border);border-left:4px solid var(--safe);border-radius:6px;padding:10px 12px;background:var(--surface-raised)}
+.typ-block.needs{border-color:var(--warn);border-left-color:var(--warn);background:var(--warn-bg)}
+.typ-block h4{margin:0;font-size:13px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.typ-state{font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;padding:2px 8px;border-radius:9px;border:1px solid var(--safe);color:var(--safe);white-space:nowrap}
+.typ-block.needs .typ-state{border-color:var(--warn);color:var(--warn)}
+.typ-block .typ-sub{display:block;font-size:11px;color:var(--text-secondary);margin:3px 0 6px}
+.typ-block .typ-brow{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;flex-wrap:wrap;border-top:1px solid var(--border-light)}
+.typ-block .typ-brow.first{border-top:none}
 .typ-block .typ-brow .tb-name{min-width:64px;font-weight:600}
-.typ-block .typ-brow .tb-psf{min-width:60px;text-align:right;font-variant-numeric:tabular-nums}
+.typ-block .typ-brow .tb-psf{min-width:64px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
 .typ-block .typ-brow.assumed .tb-psf{color:var(--warn,#c97a00)}
+.typ-block .typ-brow.unset .tb-name{color:var(--warn)}
 .typ-block .typ-brow .lvl-edit{font-size:11px}
+/* the LL and DL pickers were stacking, so "B" over "2" read as one broken
+   code; they sit side by side with their own labels */
+.typ-block .typ-brow .tb-ctl{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:nowrap}
+.typ-block .typ-brow .tb-ctl .lvl-edit-wrap{margin-left:0}
+.typ-block .typ-brow .lvl-sel{min-width:60px;padding:2px 4px}
+.typ-block .typ-brow .tb-lbl{font-size:9px;letter-spacing:.4px;color:var(--text-tertiary);text-transform:uppercase}
 .typ-block .lm-dim{font-size:11px}
+.typ-block .typ-act{margin-top:8px}
+.typ-block .typ-act .btn{width:100%}
 .kind-switch{display:flex;gap:0;margin:-2px 0 6px;border:1px solid var(--border);border-radius:5px;overflow:hidden;font-size:11px}
 .kind-switch span{padding:3px 6px;color:var(--text-tertiary);white-space:nowrap}
 .kind-btn{flex:1;border:none;background:transparent;cursor:pointer;font-size:11px;padding:3px 2px;color:var(--text-secondary);white-space:nowrap}
@@ -4844,16 +4863,22 @@ function renderTypicalBlock(){
   const top=topLevelId();
   const rows=state.levels.map((l,i)=>({l,i})).filter(o=>!levelOnGrade(o.l)&&o.l.id!==top);
   const nAss=rows.filter(o=>o.l.typicalAssumed).length;
-  el.innerHTML=`<h4>Typical capacity per floor <span class="lm-dim">— what covers a floor wherever no loading area is drawn</span></h4>
-    ${rows.length?rows.map(o=>{const cap=levelDefaultCapacity(o.l);
-      return `<div class="typ-brow${o.l.typicalAssumed?' assumed':''}${cap>0?'':' unset'}" data-tli="${o.i}">
+  const g=typicalGap();
+  const needs=!!(g.unset||g.assumed);
+  el.className='typ-block'+(needs?' needs':'');
+  const state_=g.unset?`${g.unset} still to set`:(g.assumed?`${g.assumed} to confirm`:(g.rows?`all ${g.rows} set`:'nothing to set'));
+  el.innerHTML=`<h4>Typical capacity per floor <span class="typ-state">${esc(state_)}</span></h4>
+    <span class="typ-sub">What covers a floor wherever no loading area is drawn — every floor under the pour needs one.</span>
+    ${rows.length?rows.map((o,k)=>{const cap=levelDefaultCapacity(o.l);
+      const miss=typicalMissing(o.l);
+      return `<div class="typ-brow${k===0?' first':''}${o.l.typicalAssumed?' assumed':''}${miss?' unset':''}" data-tli="${o.i}">
         <span class="tb-name">${esc(isRange(o.l)?rangeLabel(o.l):o.l.name)}</span>
         <span class="tb-ctl">${levelCapacityControl(o.l,o.i)}</span>
-        <span class="tb-psf">${cap>0?Math.round(cap)+' PSF':'<span class="lm-warn">not set</span>'}</span>
+        <span class="tb-psf">${cap>0?Math.round(cap)+' PSF':(miss?'<span class="lm-warn">not set</span>':'<span class="lm-dim" title="Every loading area on this floor is drawn and marked, so it needs no typical">from drawn areas</span>')}</span>
         ${o.l.typicalAssumed?`<span class="lm-dim" title="${esc('Taken from '+o.l.typicalAssumed)}">assumed</span><button class="btn btn-sm" data-tconfirm="${o.i}">Confirm</button>`:''}
       </div>`}).join('')
     :'<span class="lm-dim">Every floor here is the top of the stack or on grade — nothing to set.</span>'}
-    ${nAss?`<div class="lm-acts"><button class="btn btn-sm" id="typConfirmAll">Confirm all ${nAss} assumed</button></div>`:''}
+    ${nAss?`<div class="typ-act"><button class="btn btn-sm btn-go" id="typConfirmAll" title="Every assumed value reads right — confirm them all">Confirm all ${nAss} assumed</button></div>`:''}
     <div class="lm-dim">The top floor pours last and carries nothing above it; slab on grade absorbs everything. Neither needs a capacity.</div>`;
   el.querySelectorAll('.lvl-edit').forEach(inp=>{
     inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();inp.blur()}});
@@ -6886,6 +6911,25 @@ function prefillTypicals(){
 function assumedTypicalLevels(){
   return state.levels.filter(l=>l.typicalAssumed&&typicalIsSet(l));
 }
+// Every floor that carries a pour above it needs a typical capacity; the top
+// floor and slab on grade do not. One reading of where that stands, used by
+// the card on Loads and by the step itself (LOD-10).
+function typicalGap(){
+  const top=topLevelId();
+  const rows=state.levels.filter(l=>!levelOnGrade(l)&&l.id!==top);
+  return{rows:rows.length,
+         unset:rows.filter(typicalMissing).length,
+         assumed:rows.filter(l=>l.typicalAssumed&&typicalIsSet(l)).length};
+}
+// A floor whose loading areas are all drawn and marked says what it carries
+// without a typical — the same exclusion the Areas step makes
+// (levelsWithoutCapacity), so the two steps cannot disagree.
+function typicalCoveredByAreas(l){
+  return zonesOf(l,'loading').filter(z=>z.mark!=null||z.llMark!=null).length>0;
+}
+function typicalMissing(l){
+  return !(levelDefaultCapacity(l)>0)&&!typicalCoveredByAreas(l);
+}
 function confirmTypical(l){
   if(!l||!l.typicalAssumed)return;
   history.record('Confirm typical capacity');
@@ -6908,13 +6952,13 @@ function levelCapacityControl(l,i){
   if(shape==='split'){
     const ll=llSchedule().map(r=>`<option value="${esc(String(r.mark))}"${l.defLL!=null&&String(l.defLL)===String(r.mark)?' selected':''}>${esc(String(r.mark))}</option>`).join('');
     const sd=sdlSchedule().map(r=>`<option value="${esc(String(r.mark))}"${l.defSDL!=null&&String(l.defSDL)===String(r.mark)?' selected':''}>${esc(String(r.mark))}</option>`).join('');
-    return `<label class="lvl-edit-wrap" title="Default live-load mark from the schedule"><select class="lvl-edit lvl-sel" data-li="${i}" data-f="defLL"><option value="">LL</option>${ll}</select></label>`
-         +`<label class="lvl-edit-wrap" title="Default superimposed dead-load mark"><select class="lvl-edit lvl-sel" data-li="${i}" data-f="defSDL"><option value="">DL</option>${sd}</select></label>`
+    return `<label class="lvl-edit-wrap" title="Default live-load mark from the schedule"><span class="tb-lbl">LL</span><select class="lvl-edit lvl-sel" data-li="${i}" data-f="defLL"><option value="">—</option>${ll}</select></label>`
+         +`<label class="lvl-edit-wrap" title="Default superimposed dead-load mark"><span class="tb-lbl">DL</span><select class="lvl-edit lvl-sel" data-li="${i}" data-f="defSDL"><option value="">—</option>${sd}</select></label>`
          +(l.defLL==null?psf:'');
   }
   if(shape==='combined'){
     const m=getConditions().filter(c=>!isConcOnly(c)).map(c=>`<option value="${esc(String(c.mark))}"${l.defMark!=null&&sameMark(l.defMark,c.mark)?' selected':''}>#${esc(String(c.mark))}</option>`).join('');
-    return `<label class="lvl-edit-wrap" title="Default loading mark from the load map"><select class="lvl-edit lvl-sel" data-li="${i}" data-f="defMark"><option value="">mark</option>${m}</select></label>`
+    return `<label class="lvl-edit-wrap" title="Default loading mark from the load map"><span class="tb-lbl">mark</span><select class="lvl-edit lvl-sel" data-li="${i}" data-f="defMark"><option value="">—</option>${m}</select></label>`
          +(l.defMark==null?psf:'');
   }
   return psf;
@@ -15078,9 +15122,18 @@ function stepStatus(id){
       const s=scheduleShape();
       if(s==='none')return{done:false,text:state.pdf.pages?'Read loads from the drawings':'Load drawings first'};
       if(!scheduleUsable())return{done:false,text:'Enter the first mark\'s loads'};
-      if(s==='split'){const un=unconfirmedMarkCount();return un?{done:false,text:`${un} mark${un>1?'s':''} to confirm`}:{done:true,text:`${llSchedule().length} live + ${sdlSchedule().length} dead-load marks`}}
-      const un=getConditions().filter(needsConfirm).length;
-      return un?{done:false,text:`${un} mark${un>1?'s':''} to confirm`}:{done:true,text:`${getConditions().length} marks confirmed`};
+      const un=s==='split'?unconfirmedMarkCount():getConditions().filter(needsConfirm).length;
+      if(un)return{done:false,text:`${un} mark${un>1?'s':''} to confirm`};
+      // the marks are only half of it: a floor with no typical capacity is a
+      // floor the solver cannot read, so the step says so rather than going
+      // green and letting it through (Adolfo, Sep 21: "it feels like it can
+      // easily get missed")
+      const g=typicalGap();
+      if(g.unset)return{done:false,text:`${g.unset} floor${g.unset>1?'s':''} without a typical capacity`};
+      if(g.assumed)return{done:false,text:`${g.assumed} typical capacit${g.assumed>1?'ies':'y'} to confirm`};
+      const marks=s==='split'?`${llSchedule().length} live + ${sdlSchedule().length} dead-load marks`
+                             :`${getConditions().length} marks confirmed`;
+      return{done:true,text:marks+(g.rows?` · ${g.rows} typical capacit${g.rows>1?'ies':'y'} set`:'')};
     }
     case 'match':{
       const bl=stepBlockers('match');

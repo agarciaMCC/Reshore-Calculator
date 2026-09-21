@@ -1,4 +1,4 @@
-// @rules LOD-01, LOD-03, LOD-04, LOD-05, LOD-09, UI-15  (see DECISIONS.md)
+// @rules LOD-01, LOD-03, LOD-04, LOD-05, LOD-09, LOD-10, UI-15  (see DECISIONS.md)
 // THE LOAD CHART CAN BE TYPED IN OR BROUGHT IN (Adolfo, Sep 14, 2026):
 // "we need a way to enter in loads manually for the load chart or to upload
 //  an excel file"
@@ -328,6 +328,42 @@ await page.click('#liApply');
 eq(await shape(), 'split', 'still split afterwards');
 ok(await page.evaluate(() => llSchedule().length >= 27 && getConditions().length === 0),
   'the marks went into the live-load schedule and nothing into a combined chart');
+
+// ── the step waits for the typical capacities too ───────────────────────
+// Adolfo, Sep 21 2026: "make this section stand out more. it feels like it can
+// easily get missed." It could, because Loads went green on confirmed marks
+// alone while a floor still had no typical capacity (LOD-10).
+console.log('E. the typical capacities are part of being done');
+await reset();
+await page.waitForFunction(() => scheduleShape() === 'combined', null, { timeout: 5000 });
+const G = await page.evaluate(() => {
+  // a chart it can price, every mark confirmed
+  const c = getConditions()[0];
+  c.sdl = 25; c.ll = 40; c.confirmed = true;
+  afterConditionChange();
+  getConditions().forEach(x => x.confirmed = true);
+  // roof (pours last), two carrying floors, slab on grade
+  state.levels = [{ id: 'r', name: 'R', elevFt: 40, zones: [], slabZones: [] },
+                  { id: 'a', name: '2', elevFt: 30, zones: [], slabZones: [] },
+                  { id: 'b', name: '1', elevFt: 20, zones: [], slabZones: [] },
+                  { id: 'g', name: 'G', elevFt: 10, onGrade: true, zones: [], slabZones: [] }];
+  const out = { gapEmpty: typicalGap(), empty: stepStatus('loads') };
+  state.levels[1].defMark = c.mark; state.levels[2].defMark = c.mark;
+  out.set = { gap: typicalGap(), status: stepStatus('loads') };
+  state.levels[1].typicalAssumed = 'the TYPICAL row of the schedule';
+  out.assumed = stepStatus('loads');
+  delete state.levels[1].typicalAssumed;
+  out.back = stepStatus('loads');
+  return out;
+});
+ok(!G.empty.done && /2 floors without a typical capacity/.test(G.empty.text),
+  'with none set the step names how many floors are waiting: ' + G.empty.text);
+ok(G.gapEmpty.rows === 2, 'the roof and the slab on grade are not among them: ' + JSON.stringify(G.gapEmpty));
+ok(G.set.status.done && /2 typical capacities set/.test(G.set.status.text),
+  'set them and the step is done, counting them: ' + G.set.status.text);
+ok(!G.assumed.done && /1 typical capacity to confirm/.test(G.assumed.text),
+  'an assumed value holds the step open until it is confirmed: ' + G.assumed.text);
+ok(G.back.done, 'confirmed, it closes again: ' + G.back.text);
 
 await browser.close();
 console.log(`\n${pass} passed, ${fail} failed`);

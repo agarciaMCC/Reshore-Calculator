@@ -106,6 +106,7 @@ the system; this file holds the rules and is versioned with the code.
 | LOD-06 | Auto-trace lives on the Loads step. A typical loading mark per level is auto-picked from the mark covering the largest traced area. | Sep 15 |
 | LOD-08 | The typical capacity per floor has ONE home: the Loads step, with the marks. The Levels row and the Areas typical row show it read-only and link there. | Sep 21 |
 | LOD-09 | Results waits for a schedule it can price: a chart whose rows carry no numbers does not open Results. | Sep 21 |
+| LOD-10 | The typical capacity per floor is a card of its own on Loads, with its state in its head (all N set / N to confirm / N still to set) and amber while anything is missing — and the Loads step is NOT done until every carrying floor has one and no assumed value is left unconfirmed. The rail and Next carry the same count. | Sep 21 |
 | LOD-07 | Load-map tracing is one pass over every load-map sheet, on the Loads step after the schedule. Plans filed under the floor their title names with level and zone pickers, one review grouped by floor, traced areas landing on whichever zone sheet they fall in. | Sep 17 |
 
 ## ARE — Areas step and markup

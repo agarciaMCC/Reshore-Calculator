@@ -1,4 +1,4 @@
-// @rules ARE-08, MDL-15, LOD-08  (see DECISIONS.md)
+// @rules ARE-08, MDL-15, LOD-08, LOD-10  (see DECISIONS.md)
 // The typical capacity, drawn from the floor edge rather than stored as a
 // second shape: it covers the slab, the drawn areas read as exceptions cut out
 // of it, it follows the edge through any edit because it IS the edge, and it
@@ -246,6 +246,48 @@ const bare = await page.evaluate(() => {
 ok(bare.loadingKept === 0 && bare.used === true,
    'no loading shape is kept, and the typical is flagged instead: ' + JSON.stringify(bare));
 ok(bare.edgeKept === 1, 'only the floor edge, which is what bounds the fill: ' + JSON.stringify(bare));
+
+// ── H. the card says where it stands, and the step waits for it ─────────
+// Adolfo, Sep 21 2026: "make this section stand out more. it feels like it
+// can easily get missed." Styling is half of it; the other half is that the
+// Loads step used to go green on confirmed marks alone (LOD-10).
+console.log('H. the typical capacity is not a footnote');
+const H = await page.evaluate(() => {
+  setStep('loads');
+  const rows = state.levels.filter(l => !levelOnGrade(l) && l.id !== topLevelId());
+  const blk = () => document.getElementById('lmTypical');
+  const read = () => ({ needs: blk().classList.contains('needs'),
+    chip: blk().querySelector('.typ-state').textContent.trim(),
+    status: stepStatus('loads'), gap: typicalGap() });
+  rows.forEach(l => delete l.typicalAssumed);
+  renderTypicalBlock();
+  const allSet = read();
+  // the two pickers are the live- and dead-load marks: side by side, labelled
+  const sels = [...blk().querySelectorAll('.typ-brow.first .lvl-sel')].map(e => e.getBoundingClientRect());
+  const lbls = [...blk().querySelectorAll('.typ-brow.first .tb-lbl')].map(e => e.textContent.trim());
+  const picker = { n: sels.length, sameRow: sels.length < 2 || Math.abs(sels[0].top - sels[1].top) < 2, lbls };
+  rows[0].typicalAssumed = 'the TYPICAL row of the schedule';
+  renderTypicalBlock();
+  const assumed = Object.assign(read(), { btn: !!blk().querySelector('.typ-act #typConfirmAll') });
+  const last = rows[rows.length - 1];
+  const keep = { ll: last.defLL, sdl: last.defSDL, mark: last.defMark, cap: last.defaultCapacity };
+  last.defLL = null; last.defSDL = null; last.defMark = null; last.defaultCapacity = 0;
+  renderTypicalBlock();
+  const unset = Object.assign(read(), { flagged: !!blk().querySelector('.typ-brow.unset') });
+  Object.assign(last, { defLL: keep.ll, defSDL: keep.sdl, defMark: keep.mark, defaultCapacity: keep.cap });
+  delete rows[0].typicalAssumed;
+  renderTypicalBlock();
+  return { allSet, assumed, unset, back: read(), picker, n: rows.length };
+});
+ok(!H.allSet.needs && /all \d set/.test(H.allSet.chip), 'with every floor set the card is quiet and says so: ' + H.allSet.chip);
+ok(H.assumed.needs && /1 to confirm/.test(H.assumed.chip), 'an assumed value turns the card amber: ' + H.assumed.chip);
+ok(H.assumed.btn, 'with Confirm all N assumed as its own action');
+ok(H.unset.needs && /1 still to set/.test(H.unset.chip) && H.unset.flagged, 'a floor with none is flagged on its row: ' + H.unset.chip);
+ok(!H.back.needs && /all \d set/.test(H.back.chip), 'put back, the card goes quiet again: ' + H.back.chip);
+// what the step does with all this is asserted where a schedule exists:
+// tests/loadentry.mjs, section E
+ok(H.picker.sameRow, 'the live- and dead-load pickers sit side by side, not stacked: ' + JSON.stringify(H.picker));
+ok(H.picker.n < 2 || /LL/.test(H.picker.lbls.join('')), 'each labelled, so B and 2 do not read as one code: ' + JSON.stringify(H.picker.lbls));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 await browser.close();
