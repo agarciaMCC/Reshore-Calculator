@@ -34,6 +34,7 @@ the system; this file holds the rules and is versioned with the code.
 | MDL-12 | The pour's own loading areas lapping past the pour's edge are not counted as poured; 0.5 ft of drafting slop counts as poured. | Sep 18 |
 | MDL-13 | Slab and on-grade areas always count toward the poured extent, with a note when they add area; openings punch out; beams add nothing alone. On the floors BELOW, the floor edge stays authoritative. | Sep 10 |
 | MDL-14 | The topmost floor needs no capacity and gets no nag. | Sep 9 |
+| MDL-16 | The Floor edge step carries the slab-on-grade tick: the bottom of the stack arrives ticked (marked assumed), any row can be ticked or cleared by hand, and once cleared by hand it is never proposed again on that job. A floor on grade is asked for no capacity — it absorbs whatever reaches it. | Sep 21 |
 | MDL-15 | The floor edge carries no capacity of its own; the level default does that per sample point. The floor edge stands in as the pour's extent when no loading areas are drawn there. | Sep 9 |
 
 ## RGN — Regions, merging and naming
@@ -44,6 +45,7 @@ the system; this file holds the rules and is versioned with the code.
 | RGN-02 | Conditions split by mark: the same PSF over B2, C2 and E2 are separate conditions with their own rows, SF and patterns. The carrying floor's mark is part of the region signature. | Sep 8 |
 | RGN-03 | A region under the minimum region size merges into the neighbour it shares the most boundary with, ONLY on a matching load path (bearing / no-slab / opening / grade). Capacity- and shore-height-only differences still merge. | Sep 10, restored Sep 15 |
 | RGN-04 | Hairline wedges below two sample cells (8 SF at a 2 ft step) are absorbed into a region they TOUCH, and their marks do not travel with them. Anything larger is a condition and is never merged. | Sep 15 |
+| RGN-11 | Edge slivers: a piece under the minimum region size that is either under 50 SF or nowhere more than two sample steps across is absorbed into the neighbour it shares the most boundary with. A THIN piece may go into a neighbour whose load path differs — those ribbons are two traced outlines disagreeing by inches, not conditions — while a compact one may only go where the load path matches, so RGN-03's protection of a real patch stands. Marks and cascade never travel with it: the host keeps its own name and calculation, and what was absorbed is recorded and listed on it. | Sep 21 |
 | RGN-05 | The slab layer and the loading layer partition the floor independently, smallest-first in both passes. | Sep 15 |
 | RGN-06 | Regions and the click highlight are painted from their exact polygons, not from solver sample cells. | Sep 17 |
 | RGN-07 | Region names read slab thickness then each level below with its capacity: `13" Slab - L3 39 PSF - L2 54 PSF - 1B SOG`. Beams the same with width x depth in front. | Sep 17 |

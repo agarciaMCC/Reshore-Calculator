@@ -1,4 +1,4 @@
-// @rules MDL-02, MDL-03, MDL-04  (see DECISIONS.md)
+// @rules MDL-02, MDL-03, MDL-04, MDL-16  (see DECISIONS.md)
 // Slab-on-grade behaviour: whole-level flag, per-area kind, warnings,
 // schedule rows, persistence, and a Kalae regression check.
 import { createRequire } from 'node:module';
@@ -221,6 +221,48 @@ const printed = await page.evaluate(async () => {
 });
 ok(/SOG is slab on grade: the remaining 69\.8 PSF is taken by the soil/.test(printed), 'print note present');
 ok(/A slab on grade \(whole floor or drawn area\) absorbs/.test(printed), 'footer assumption present');
+
+// ── the Floor edge step knows what is on grade ──────────────────────────
+// Adolfo, Sep 21 2026: "we need floor edge to also recognize when it is slab
+// on grade. otherwise it asks me to specify a capacity for the floor."
+console.log('the floor edge carries the on-grade tick (MDL-16)');
+{
+  const G = await page.evaluate(() => {
+    const mk = (name, el) => ({ id: sid(), name, elevation: el, floorToFloor: null, slabThickness: 9,
+      defaultCapacity: 0, rangeFrom: null, rangeTo: null, pdfPage: 1, zones: [], slabZones: [] });
+    state.levels = [mk('3', 30), mk('2', 20), mk('1', 10)];
+    state.pdf.pages = 1; state.pdf.current = 1;
+    const out = {};
+    out.before = state.levels.map(l => !!l.onGrade);
+    out.proposed = proposeOnGrade();
+    out.after = state.levels.map(l => !!l.onGrade);
+    out.assumed = !!state.levels[2].gradeAssumed;
+    // the floor on grade is not one of the floors asked for a capacity
+    out.gap = typicalGap();
+    // asked twice, it does not keep proposing
+    out.again = proposeOnGrade();
+    // cleared by hand, and never proposed again on this job
+    edgeGradeToggle(2);
+    out.cleared = !!state.levels[2].onGrade;
+    out.chosen = !!state.levels[2].gradeChosen;
+    out.reproposed = proposeOnGrade();
+    out.stillClear = !!state.levels[2].onGrade;
+    out.gapCleared = typicalGap();
+    // and ticked by hand again
+    edgeGradeToggle(2);
+    out.retick = !!state.levels[2].onGrade;
+    return out;
+  });
+  ok(G.proposed === 1 && JSON.stringify(G.after) === '[false,false,true]',
+    'the bottom of the stack arrives ticked: ' + JSON.stringify(G.after));
+  ok(G.assumed, 'marked as assumed, so the row can say so');
+  ok(G.gap.rows === 1, 'leaving one floor to be asked for a capacity — not the roof, not the one on grade: ' + JSON.stringify(G.gap));
+  ok(G.again === 0, 'it is proposed once, not on every visit');
+  ok(!G.cleared && G.chosen, 'the tick on the row clears it');
+  ok(G.reproposed === 0 && !G.stillClear, 'and once cleared by hand it is never proposed again on this job');
+  ok(G.gapCleared.rows === 2, 'cleared, that floor IS asked for a capacity again: ' + JSON.stringify(G.gapCleared));
+  ok(G.retick, 'and it can be ticked back on by hand');
+}
 
 await browser.close();
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -967,6 +967,9 @@ select.sched-shore option,select.sel-styled option{background:var(--surface-rais
 .typ-block .typ-brow .lvl-sel{min-width:60px;padding:2px 4px}
 .typ-block .typ-brow .tb-lbl{font-size:9px;letter-spacing:.4px;color:var(--text-tertiary);text-transform:uppercase}
 .typ-block .lm-dim{font-size:11px}
+.ed-grade{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--text-secondary);white-space:nowrap;cursor:pointer}
+.ed-grade input{margin:0;cursor:pointer}
+.ed-grade.on{color:var(--safe);font-weight:600}
 .typ-block .typ-act{margin-top:8px}
 .typ-block .typ-act .btn{width:100%}
 .kind-switch{display:flex;gap:0;margin:-2px 0 6px;border:1px solid var(--border);border-radius:5px;overflow:hidden;font-size:11px}
@@ -8358,6 +8361,31 @@ document.getElementById('btnAddLevel').addEventListener('click',()=>addLevelInli
 // place while the plan stays live underneath. Guess the name and the slab
 // from the neighbours so the common case is one or two keystrokes.
 // Whole-level slab on grade. Undo, not a confirm dialog, covers a mis-click.
+// ── THE BOTTOM OF THE STACK IS ON GRADE ──
+// Adolfo, Sep 21 2026: "we need floor edge to also recognize when it is slab
+// on grade. otherwise it asks me to specify a capacity for the floor."
+// A floor on grade needs no capacity — it absorbs whatever reaches it — but
+// nothing on the Floor edge step said so, so the bottom floor was asked for
+// one. The bottom of the stack now arrives ticked, and the tick is on the row
+// to clear where the lowest modelled floor is not on grade (a podium over
+// parking). Once cleared by hand it is never proposed again on that job.
+function proposeOnGrade(){
+  if(state.levels.length<2)return 0;
+  if(state.levels.some(levelOnGrade))return 0;
+  const b=state.levels[state.levels.length-1];      // levels are kept top to bottom
+  if(!b||isRange(b)||b.gradeChosen)return 0;
+  b.onGrade=true;b.gradeAssumed=true;
+  state.results=null;persist();
+  return 1;
+}
+function edgeGradeToggle(li){
+  const l=state.levels[li];
+  if(!l)return;
+  toggleLevelOnGrade(li);
+  l.gradeChosen=true;delete l.gradeAssumed;
+  persist();renderEdgeSection();
+  if(typeof renderTypicalBlock==='function')renderTypicalBlock();
+}
 function toggleLevelOnGrade(i){
   const l=state.levels[i];
   if(!l||isRange(l))return;
@@ -10557,6 +10585,11 @@ function renderEdgeSection(){
     const who=`<b>${esc(r.name)}</b>${r.zone?` · ${esc(r.zone)}`:''} <span class="lm-dim">sheet ${r.page}</span>`;
     const sw=readOf(r);
     const key=`${r.levelIdx}:${r.page}`;
+    // a floor on grade absorbs whatever reaches it and is asked for no
+    // capacity; the tick is here because this is where the floor's extent is
+    // settled, and it is the whole floor's flag even on a split floor
+    const onG=!!(lv&&levelOnGrade(lv));
+    const grade=(lv&&!isRange(lv))?`<label class="ed-grade${onG?' on':''}" title="${esc(onG?(lv.gradeAssumed?'Taken as slab on grade because it is the bottom of the stack \u2014 clear this if it is not':'Slab on grade: it absorbs whatever load reaches it, nothing is shored below it, and it is asked for no capacity'):'Tick if this floor is slab on grade \u2014 it then absorbs whatever reaches it and needs no capacity')}"><input type="checkbox" data-edgrade="${key}"${onG?' checked':''}> on grade${onG&&lv.gradeAssumed?' <span class="lm-dim">(assumed)</span>':''}</label>`:'';
     // a sheet still being read, or one the sweep could not read
     const waiting=sw&&!sw.polygon&&!sw.err;
     const readErr=sw&&!sw.polygon&&sw.err?sw.err:null;
@@ -10591,7 +10624,7 @@ function renderEdgeSection(){
       acts=`<button class="btn btn-sm" data-edadj="${r.levelIdx}:${r.page}" title="Select it on the plan; any change reopens it">Adjust</button>`
           +`<button class="btn btn-sm" data-edredo="${r.levelIdx}:${r.page}" title="Read the sheet again and pick another outline">Redo</button>`+redo}
     return `<div class="ed-row${r.confirmed?' ok':(r.edge?' drawn':'')}${here?' here':''}" data-edgo="${r.levelIdx}:${r.page}">
-      <span class="ed-who">${who}</span><span class="ed-st">${st}</span><span class="ed-acts">${acts}</span></div>`;
+      <span class="ed-who">${who}</span><span class="ed-st">${st}</span><span class="ed-acts">${grade}${acts}</span></div>`;
   };
   host.innerHTML=`<p class="step-help">The floor edge is where the slab stops on each plan sheet. Everything the Areas step reads off a sheet — beams, openings, thickened slabs, loading areas — is looked for <b>inside</b> it, so nothing is picked up from a key plan, a detail or the title block. <b>Pick from the sheet</b> offers the outlines found on the sheet for you to choose from; adjust the corners if you need to, then <b>Confirm</b>.</p>
     <div class="primary-act">
@@ -10624,6 +10657,10 @@ function renderEdgeSection(){
   on('button[data-esdrop]',(li,pg)=>edgeSweepDrop(li,pg));
   on('button[data-esredo]',(li,pg)=>edgeSweepRedetect(li,pg));
   on('button[data-espick]',(li,pg)=>{edgeSweepForget(li,pg);edgePick(li,pg)});
+  host.querySelectorAll('input[data-edgrade]').forEach(c=>c.addEventListener('click',e=>{
+    e.stopPropagation();
+    edgeGradeToggle(+String(c.dataset.edgrade).split(':')[0]);
+  }));
   host.querySelectorAll('.ed-row').forEach(el=>el.addEventListener('click',ev=>{
     if(ev.target.closest('button'))return;
     const [li,pg]=pair(el.dataset.edgo);
@@ -11678,6 +11715,10 @@ function cascadeAtPoint(stack,pourIdx,thickIn,dl,shores){
 // neighbour that reads the SAME WAY DOWN THE STACK (Adolfo, Sep 10, 2026).
 // A patch with a different load path — no slab below, an opening, on grade —
 // stands on its own however small, and is flagged instead.
+// A piece this small is a tracing artifact whatever it reads, and so is one
+// that is nowhere more than two sample steps across. Fixed, not a setting:
+// the edge tolerance taught us that a knob here changes answers quietly.
+const ARTIFACT_SF=50;
 function minRegionSF(){
   const v=state.project&&state.project.minRegionSF;
   return (v==null||isNaN(v))?200:Math.max(0,+v);
@@ -11774,8 +11815,97 @@ function mergeSlivers(regions,step,minSF){
       moved=true;
     }
   }
+  // ══ EDGE SLIVERS ══
+  // Adolfo, Sep 21 2026: "WE NEED TO GET RID OF THE SLIVERS IN THE RESULTS."
+  // What is left under the minimum is small AND reads differently — a
+  // different mark, or a load path that differs only because two traced
+  // outlines disagree by inches (noslab>bear along an edge, open>grade at the
+  // lip of an opening). Where such a piece is TINY (under ARTIFACT_SF) or
+  // THIN (nowhere more than two sample steps across) it is an artifact of the
+  // drawing, not a condition, and it is absorbed into the neighbour it shares
+  // the most boundary with WHATEVER that neighbour reads.
+  //
+  // What it does NOT do is take the sliver's identity with it: the host keeps
+  // its own marks and its own cascade, so nothing comes back labelled
+  // "B2 / C2" (Sep 15: "do not merge loading conditions") and no calculation
+  // changes. What went in is recorded on the host and listed, so a patch that
+  // read differently is stated rather than hidden.
+  const cellSet=r=>{const t=new Set();for(let c=0;c<r.cells.length;c+=2)t.add(cellKey(r.cells[c],r.cells[c+1]));return t};
+  // thin: no cell of it has all four neighbours inside the piece, so it is
+  // nowhere more than two sample steps across
+  const isThin=r=>{
+    const t=cellSet(r);
+    for(const k of t){
+      const [x,y]=k.split(',').map(Number);
+      if(NB.every(([dx,dy])=>t.has((x+dx)+','+(y+dy))))return false;
+    }
+    return true;
+  };
+  // Two tests, because two things can make a small piece its own region.
+  //  · a different MARK on the same structure: absorbing it changes no
+  //    shoring, so tiny OR thin is enough;
+  //  · a different LOAD PATH — no slab below, an opening, grade: only
+  //    THINNESS justifies absorbing that, because a compact patch is real
+  //    geometry. This is what keeps the 49 SF corner notch of Sep 10 its own
+  //    row ("this area is incorrectly reading a slab below when there is not
+  //    one that exists") while clearing the ribbons that run along an edge
+  //    because two traced outlines disagree by inches.
+  const cascadeOf=list.map(cascadeShape);
+  moved=true;
+  while(moved){
+    moved=false;
+    const order=list.map((r,i)=>i)
+      .filter(i=>alive[i]&&regSF(list[i])<minSF&&(regSF(list[i])<ARTIFACT_SF||isThin(list[i])))
+      .sort((a,b)=>regSF(list[a])-regSF(list[b]));
+    for(const i of order){
+      if(!alive[i])continue;
+      const r=list[i];
+      const thin=isThin(r);
+      const share=new Map();
+      for(let c=0;c<r.cells.length;c+=2){
+        const x=q(r.cells[c]),y=q(r.cells[c+1]);
+        for(const [dx,dy] of NB){
+          const at=owner.get((x+dx)+','+(y+dy));
+          if(at==null)continue;
+          const h=host(at);
+          if(h===i||!alive[h])continue;
+          // a thin piece may go anywhere; a compact one only where the load
+          // path is the same, so nothing structural is absorbed away
+          if(!thin&&cascadeOf[h]!==cascadeOf[i])continue;
+          share.set(h,(share.get(h)||0)+1);
+        }
+      }
+      if(!share.size)continue;                    // an island keeps its own row
+      let pick=-1,most=-1;
+      for(const [h,cnt] of share){
+        if(cnt>most||(cnt===most&&regSF(list[h])>regSF(list[pick]))){pick=h;most=cnt}
+      }
+      const into=list[pick];
+      const sf=regSF(r);
+      into.artifactSF=(into.artifactSF||0)+sf;
+      into.artifactCount=(into.artifactCount||0)+1+(r.artifactCount||0);
+      (into.artifacts||(into.artifacts=[])).push({sf,shape:cascadeShape(r),
+        marks:[...(r.loadingMarks||[])].filter(m=>m!=null).join('/'),thin:isThin(r)});
+      for(const a of (r.artifacts||[]))into.artifacts.push(a);
+      if(into.areaSF!=null)into.areaSF+=sf;
+      if(r.mp)into.mp=mpUnion(into.mp,r.mp);
+      into.samples+=r.samples;
+      into.edgeSamples=(into.edgeSamples||0)+(r.edgeSamples||0);
+      for(let c=0;c<r.cells.length;c+=2){
+        into.cells.push(r.cells[c],r.cells[c+1]);
+        owner.set(cellKey(r.cells[c],r.cells[c+1]),pick);
+      }
+      // deliberately NOT carried over: loadingMarks, stepCodes, the cascade
+      into.bb.minX=Math.min(into.bb.minX,r.bb.minX);into.bb.maxX=Math.max(into.bb.maxX,r.bb.maxX);
+      into.bb.minY=Math.min(into.bb.minY,r.bb.minY);into.bb.maxY=Math.max(into.bb.maxY,r.bb.maxY);
+      alive[i]=false;r._into=pick;r.mergedInto=into;
+      regions.delete(r.key);
+      moved=true;
+    }
+  }
   // what is left under the threshold could not find a neighbour reading the
-  // same way down the stack, so it keeps its own calculation and is flagged
+  // same way down the stack, and is neither thin nor tiny, so it keeps its
+  // own calculation and is flagged
   flag();
 }
 function resolveMerged(r){while(r&&r.mergedInto)r=r.mergedInto;return r}
@@ -12589,7 +12719,7 @@ function solvePourLevel(stack,pourIdx,opts){
   // Then the minimum-region rule, on the same load path as always.
   mergeSlivers(regions,step,minRegionSF());
   // whatever absorbed a sliver has a new shape
-  for(const r of regions.values())if(r.sliverSF)r.cells=mpCells(r.mp,step);
+  for(const r of regions.values())if(r.sliverSF||r.artifactSF)r.cells=mpCells(r.mp,step);
   claimBoundaryCells(regions,step);
 
   const out=[...regions.values()].map(r=>({
@@ -13814,7 +13944,7 @@ function renderSchedule(){
         <span class="card-chips">${chips}</span>
       </div>
       <div class="card-more">
-        <span class="sched-stat card-stat">${(t=>t?esc(t)+' · ':'')(regionGridTag(r))}${(m=>m.length?esc(m.join('/'))+' · ':'')(regionMarks(r))}${fmtArea(r.areaSF)} · placement ${r.placementLoad.toFixed(1)} PSF · ${r.reshoreLevels} reshore level${r.reshoreLevels===1?'':'s'}${r.edgeSF?` · <span title="${fmtArea(r.edgeSF)} of this region overhangs a lower floor's edge by ${OVERHANG_BEAR_FT} ft or less; falsework brings that load back to the slab edge, so it bears on that floor">${r.edgeSF>=r.areaSF*0.995?'overhang':fmtArea(r.edgeSF)+' overhang'} \u2264 ${OVERHANG_BEAR_FT} ft, bearing</span>`:''}${r.sliverSF?` · <span class="lm-dim" title="${r.sliverCount} sliver region${r.sliverCount>1?'s':''} under ${minRegionSF()} SF (Settings: minimum region size) merged into this one: each shares the most boundary with it AND reads the same way down the stack. A patch with a different load path — no slab below, an opening, on grade — is never merged, however small">absorbs ${fmtArea(r.sliverSF)} of slivers</span>`:''}</span>
+        <span class="sched-stat card-stat">${(t=>t?esc(t)+' · ':'')(regionGridTag(r))}${(m=>m.length?esc(m.join('/'))+' · ':'')(regionMarks(r))}${fmtArea(r.areaSF)} · placement ${r.placementLoad.toFixed(1)} PSF · ${r.reshoreLevels} reshore level${r.reshoreLevels===1?'':'s'}${r.edgeSF?` · <span title="${fmtArea(r.edgeSF)} of this region overhangs a lower floor's edge by ${OVERHANG_BEAR_FT} ft or less; falsework brings that load back to the slab edge, so it bears on that floor">${r.edgeSF>=r.areaSF*0.995?'overhang':fmtArea(r.edgeSF)+' overhang'} \u2264 ${OVERHANG_BEAR_FT} ft, bearing</span>`:''}${r.artifactSF?` · <span class="lm-dim" title="${r.artifactCount} edge sliver${r.artifactCount>1?'s':''} — ${esc((r.artifacts||[]).map(a=>`${Math.round(a.sf)} SF ${a.marks?a.marks+' ':''}${a.shape}`).join(', '))} — under ${ARTIFACT_SF} SF or nowhere more than two sample steps across, so each is a tracing artifact rather than a condition. Absorbed into this region, which keeps its own marks and its own calculation">absorbs ${fmtArea(r.artifactSF)} of edge slivers</span>`:''}${r.sliverSF?` · <span class="lm-dim" title="${r.sliverCount} sliver region${r.sliverCount>1?'s':''} under ${minRegionSF()} SF (Settings: minimum region size) merged into this one: each shares the most boundary with it AND reads the same way down the stack. A patch with a different load path — no slab below, an opening, on grade — is never merged, however small">absorbs ${fmtArea(r.sliverSF)} of slivers</span>`:''}</span>
       <div class="ra-strip">${strip}</div>
       <div class="rs-tools">
         <input class="sched-rlabel" data-rkey="${esc(r.key)}" value="${esc(regionCustomLabel(L.pour.name,r.key))}" placeholder="name this region — West half, Podium, core…" title="Give this region a name of your own. Leave it empty and it is named from the grid bays it covers and the mark carrying it.">
@@ -15368,6 +15498,7 @@ function setStep(id){
   if(id==='match'&&typeof autoProposeMatches==='function')autoProposeMatches();
   // THE EDGE AND THE AREAS READ THEMSELVES TOO (Adolfo, Sep 21 2026): arrive,
   // review, Next — the buttons stay as "run again".
+  if(id==='edge'&&typeof proposeOnGrade==='function')proposeOnGrade();
   if(id==='edge'&&typeof autoDetectEdges==='function')autoDetectEdges();
   if(grp.id==='areas'&&typeof autoScanAreas==='function')autoScanAreas();
   if(typeof renderPageBar==='function')renderPageBar();
