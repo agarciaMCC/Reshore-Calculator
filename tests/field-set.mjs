@@ -1,4 +1,4 @@
-// @rules RVT-09, RVT-10, RVT-11, BLD-12, BLD-13  (see DECISIONS.md)
+// @rules RVT-09, RVT-10, RVT-11, BLD-12, BLD-13, BLD-17  (see DECISIONS.md)
 // THE MODEL ON McCLONE'S OWN PRINTED SET (Sep 21 2026). Adolfo: "are you able
 // to use the IFC in tandem with the typical printed PDF set that McClone
 // provides to the field? ... the PDF set is going to be easier to review for
@@ -113,10 +113,23 @@ const whole = placed.l2Model, half = placed.l2.filter(h => h.matched && h.edge !
 ok(half.length >= 1, 'RVT-11: at least one of L2\'s two sheets matched');
 ok(half.every(h => h.edge > whole * 0.15 && h.edge < whole * 0.98),
    `RVT-11: each matched sheet carries a cut part of the floor, not the whole ${whole} SF: ` + JSON.stringify(placed.l2));
-// A sheet the fit could not settle is NOT written: it is left for a hand match.
+// BLD-17 (Sep 22): every podium sheet now fits from its own bubbles. Four of
+// them used to read ZERO column bubbles, because the numbers and the letters
+// were banded together and one diagonal letter bubble landing in the numeric
+// band had the whole band thrown away as "mixed". Banding each kind on its
+// own recovered them: 10 of 10 at 0.01-0.02" RMS.
 const poor = match.rows.filter(r => r.v === 'poor' || r.v === 'none');
-ok(poor.length > 0 && placed.l2.filter(h => h.matched).length < placed.l2.length,
-   `BLD-13: ${poor.length} sheet(s) the bubbles could not settle are left unmatched for a hand fit, not written wrong`);
+ok(poor.length === 0, `BLD-17: every podium sheet fits from its own bubbles (${poor.length} could not settle)`);
+ok(match.rows.every(r => r.rms != null && r.rms <= 0.05),
+   `BLD-17: and to hundredths of an inch (worst ${Math.max(...match.rows.map(r => r.rms || 0)).toFixed(2)}")`);
+// L2 is drawn across two sheets and now BOTH halves carry their own geometry
+ok(placed.l2.length === 2 && placed.l2.every(h => h.matched),
+   'RVT-11: both halves of the split L2 are matched and cut: ' + placed.l2.map(h => `p${h.page} ${h.edge}`).join(' · '));
+// BLD-13 still holds: a fit the seeds cannot settle under 3" RMS is refused
+// rather than written wrong — the key plan in the title block is what made
+// that necessary and it is still in every one of these title blocks.
+ok(match.rows.every(r => r.v !== 'poor' || r.rms > 3),
+   'BLD-13: nothing is accepted on a fit the seeding could not settle');
 
 ok(errors.length === 0, 'no page errors: ' + errors.slice(0, 3).join(' | '));
 await browser.close();

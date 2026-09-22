@@ -29,7 +29,7 @@ def extract(ifc_path, cache_dir):
     from shapely.ops import unary_union
 
     st = os.stat(ifc_path)
-    key = hashlib.md5(f"{os.path.abspath(ifc_path)}|{st.st_size}|{int(st.st_mtime)}|v3".encode()).hexdigest()[:12]
+    key = hashlib.md5(f"{os.path.abspath(ifc_path)}|{st.st_size}|{int(st.st_mtime)}|v4".encode()).hexdigest()[:12]
     cache = os.path.join(cache_dir, f"extract-{key}.json")
     global CACHE_PATH; CACHE_PATH = cache
     if os.path.exists(cache):
@@ -45,20 +45,58 @@ def extract(ifc_path, cache_dir):
             if rel.RelatingStructure.is_a('IfcBuildingStorey'): return rel.RelatingStructure
         return None
 
+    def facets_of(top, unit_n):
+        """RVT-13. The top face broken at its slope BREAKS.
+
+        Adolfo, Sep 21: "ramps need to have elevations at each break to
+        establish high and low points for shore height." A ramp arrives as
+        one element whose zmax - zmin is the slope RISE plus the thickness,
+        so it was exported 103" thick with one T.O.S. taken off its high
+        corner. Group the top triangles by the PLANE they lie in — normal
+        direction and offset — and each run and landing becomes a piece with
+        its own outline and its own high and low top.
+        """
+        # plane key: normal to ~2 degrees, offset to ~3/4"
+        key = np.column_stack([np.round(unit_n * 28).astype(int),
+                               np.round((unit_n * top.mean(axis=1)).sum(axis=1) / 0.06).astype(int)])
+        groups = {}
+        for i, k in enumerate(map(tuple, key)): groups.setdefault(k, []).append(i)
+        out = []
+        for k, idx in groups.items():
+            t = top[idx]
+            polys = [Polygon(tt[:, :2]) for tt in t]
+            polys = [p for p in polys if p.is_valid and p.area > 1e-6]
+            if not polys: continue
+            g = unary_union(polys)
+            try: g = g.buffer(0.005).buffer(-0.005)
+            except Exception: pass
+            if g.is_empty or g.area < 1.0: continue
+            out.append({'fp': g, 'area': float(g.area),
+                        'zlo': float(t[:, :, 2].min()), 'zhi': float(t[:, :, 2].max()),
+                        'nz': float(abs(unit_n[idx][:, 2]).mean())})
+        out.sort(key=lambda f: -f['area'])
+        return out
+
     def footprint(shape):
         v = np.array(shape.geometry.verts).reshape(-1, 3) * FT_PER_M
         fc = np.array(shape.geometry.faces).reshape(-1, 3)
         tris = v[fc]
         n = np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
-        nz = n[:, 2] / (np.linalg.norm(n, axis=1) + 1e-12)
-        top = tris[nz > 0.7]
-        if len(top) == 0: top = tris
+        ln = np.linalg.norm(n, axis=1) + 1e-12
+        unit = n / ln[:, None]
+        nz = unit[:, 2]
+        sel = nz > 0.7
+        top = tris[sel]
+        if len(top) == 0: top, sel = tris, np.ones(len(tris), bool)
         polys = [Polygon(t[:, :2]) for t in top]
         polys = [p for p in polys if p.is_valid and p.area > 1e-6]
         u = unary_union(polys)
         try: u = u.buffer(0.005).buffer(-0.005)
         except Exception: pass
-        return u, float(v[:, 2].min()), float(v[:, 2].max()), float(np.median(top[:, :, 2]))
+        # the top's own rise, which is what separates a ramp from a thick slab
+        rise = float(top[:, :, 2].max() - top[:, :, 2].min())
+        facets = facets_of(top, unit[sel]) if rise > 0.25 else []
+        return u, float(v[:, 2].min()), float(v[:, 2].max()), float(np.median(top[:, :, 2])), rise, facets
 
     def gj(g):
         if g.is_empty: return []
@@ -77,9 +115,14 @@ def extract(ifc_path, cache_dir):
             t = ue.get_type(e); tname = t.Name if t else None
             try: sh = ifcopenshell.geom.create_shape(s, e)
             except Exception: continue
-            g, zmin, zmax, ztop = footprint(sh)
+            g, zmin, zmax, ztop, rise, facets = footprint(sh)
             rec = {'gid': e.GlobalId, 'name': e.Name, 'type': tname, 'zmin': round(zmin, 4), 'zmax': round(zmax, 4), 'ztop': round(ztop, 4),
                    'area': round(g.area, 2), 'fp': gj(g)}
+            # RVT-13: only a top that actually falls carries its breaks
+            if rise > 0.25:
+                rec['rise'] = round(rise, 4)
+                rec['facets'] = [{'zlo': round(f['zlo'], 4), 'zhi': round(f['zhi'], 4), 'nz': round(f['nz'], 4),
+                                  'area': round(f['area'], 2), 'fp': gj(f['fp'])} for f in facets]
             if cls == 'IfcOpeningElement':
                 host = e.VoidsElements[0].RelatingBuildingElement if e.VoidsElements else None
                 rec['host'] = host.GlobalId if host else None; rec['host_cls'] = host.is_a() if host else None
@@ -149,6 +192,42 @@ def thickness_from_name(tname):
     m = THK_RE.search(type_tail(tname))
     return frac(m.group(1)) if m else None
 
+def geo_thickness(rec):
+    """Thickness from the geometry, with the slope rise taken back out.
+
+    RVT-13. zmax - zmin on a ramp is the RISE plus the thickness, so the L3
+    ramp at Kalae measured 103" thick. The top's own fall is `rise`; what is
+    left is the slab.
+    """
+    t = (rec['zmax'] - rec['zmin'] - (rec.get('rise') or 0)) * 12
+    if t < 1.0: t = (rec['zmax'] - rec['zmin']) * 12      # nothing sensible left: say what we see
+    return round(t, 2)
+
+def slope_pieces(rec, g, min_area):
+    """The element as (polygon, top high, top low) per slope break.
+
+    A flat element is one piece and behaves exactly as before. A ramp comes
+    back as one piece per plane of its top face — each run and each landing,
+    with the high and low of that piece. Facets too small to draw are left
+    out and their ground stays with the piece the outline already covers.
+    """
+    facets = rec.get('facets') or []
+    if not facets:
+        return [(g, rec['zmax'], rec['zmax'])]
+    keep = [f for f in facets if f['area'] >= max(min_area, 0.01 * (rec['area'] or 1))]
+    if not keep: keep = facets[:1]
+    # a single piece that does not fall is the flat case, unchanged
+    if len(keep) == 1 and (keep[0]['zhi'] - keep[0]['zlo']) * 12 < 1.0:
+        return [(g, rec['zmax'], rec['zmax'])]
+    out = []
+    for f in keep:
+        fg = shapely_from_fp(f['fp'])
+        if fg.is_empty: continue
+        fg = fg.intersection(g) if g and not g.is_empty else fg
+        if fg.is_empty or fg.area < min_area: continue
+        out.append((fg, f['zhi'], f['zlo']))
+    return out or [(g, rec['zmax'], rec['zmax'])]
+
 def is_floor_slab(rec):
     t = rec['type'] or ''
     if not t.startswith('Floor:') and not t.startswith('Floors') and 'Thickened' not in t: return False
@@ -209,11 +288,31 @@ def simplify_ring(coords, tol=0.02):
     except Exception:
         return coords
 
+def fmt_in(inch):
+    """inches as a drawing writes them: 5", 7 1/2", 11 3/4" — never 7.5"."""
+    sign = '-' if inch < 0 else ''; inch = abs(inch)
+    whole = int(inch); num = round((inch - whole) * 8)
+    if num == 8: whole += 1; num = 0
+    den = 8
+    while num and num % 2 == 0: num //= 2; den //= 2
+    if not num: return f'{sign}{whole}"'
+    return f'{sign}{whole} {num}/{den}"' if whole else f'{sign}{num}/{den}"'
+
 def fmt_ftin(ft):
+    """feet and inches as a drawing writes them: 9'-3", 77'-11 1/2".
+
+    RVT-12. This used to print the inches with %g, so a slab at 77'-11.5"
+    came out as 77'-11.5" — which no drawing says, and which the
+    calculator's own dimension reader (DIM_RE) does not parse, so the
+    rendered set's title strips read as nothing.
+    """
     sign = '-' if ft < 0 else ''; ft = abs(ft)
-    f_ = int(ft); i = round((ft - f_) * 12 * 4) / 4
+    f_ = int(ft); i = round((ft - f_) * 12 * 8) / 8
     if i >= 12: f_ += 1; i -= 12
-    inch = ('%g' % i)
+    whole = int(i); num = round((i - whole) * 8); den = 8
+    if num == 8: whole += 1; num = 0
+    while num and num % 2 == 0: num //= 2; den //= 2
+    inch = f'{whole} {num}/{den}' if num else str(whole)
     return f"{sign}{f_}'-{inch}\""
 
 def jsnum(v):
@@ -442,7 +541,7 @@ def build(ex, args):
         # the level's typical slab: the largest floor element
         main = max(geoms, key=lambda rg: rg[1].area)
         m_rec = main[0]
-        typ_thk = thickness_from_name(m_rec['type']) or round((m_rec['zmax'] - m_rec['zmin']) * 12, 2)
+        typ_thk = thickness_from_name(m_rec['type']) or geo_thickness(m_rec)
         base_top = m_rec['zmax']                       # ft, shared-coords z of the typical slab top
         # Revit level elevation vs slab top: report the difference, use slab top as T.O.S.
         # (geometry z is shared coordinates; the storey elevation is project; align them through the typical slab)
@@ -512,20 +611,39 @@ def build(ex, args):
             SZ.append({'id': sid(f'piece|{n}|{n_slab}'), 'polygon': poly_pts(ring, xf), 'polygonFt': ft_pts(ring), 'kind': 'grade' if on_grade else 'slab', 'thicknessIn': typ_thk,
                        'offsetIn': 0, 'label': '', 'page': page_no, 'source': 'revit'})
         # slab areas: every floor element that differs from the typical (thickness or top), and SOG areas on a suspended level
-        n_area = 0
+        n_area = 0; n_sloped = 0
         for r, g in geoms:
             if r is m_rec: continue
-            thk = thickness_from_name(r['type'])
-            if thk is None: thk = round((r['zmax'] - r['zmin']) * 12, 2)
-            off = round((r['zmax'] - base_top) * 12 * 4) / 4
+            thk = thickness_from_name(r['type']) or geo_thickness(r)
             is_sog = bool(SOG.search(r['type'] or ''))
             if on_grade and is_sog: continue                     # the whole level is on grade already
-            if not is_sog and abs(thk - typ_thk) < 0.125 and abs(off) < 0.25: continue   # same as the typical: covered by the edge
             if g.area < args.min_area: continue
-            for ring, holes in poly_b(g):
-                n_area += 1
-                SZ.append({'id': sid(f'slab|{n}|{n_area}'), 'polygon': poly_pts(ring, xf), 'polygonFt': ft_pts(ring), 'kind': 'grade' if is_sog else 'slab',
-                           'thicknessIn': thk, 'offsetIn': off if not is_sog else 0, 'label': type_tail(r['type']), 'page': page_no, 'source': 'revit'})
+            # RVT-13: a ramp is one element with a falling top. Split it at
+            # its slope breaks and give each run and landing its own high and
+            # low T.O.S., so the shore height under it is a range rather than
+            # one figure off its high corner.
+            for piece in slope_pieces(r, g, args.min_area):
+                pg_, zhi, zlo = piece
+                off = round((zhi - base_top) * 12 * 4) / 4
+                off_lo = round((zlo - base_top) * 12 * 4) / 4
+                flat = abs(off - off_lo) < 0.25
+                if is_sog: flat = True
+                if not is_sog and flat and abs(thk - typ_thk) < 0.125 and abs(off) < 0.25: continue
+                for ring, holes in poly_b(pg_):
+                    n_area += 1
+                    z = {'id': sid(f'slab|{n}|{n_area}'), 'polygon': poly_pts(ring, xf), 'polygonFt': ft_pts(ring), 'kind': 'grade' if is_sog else 'slab',
+                         'thicknessIn': thk, 'offsetIn': off if not is_sog else 0, 'label': type_tail(r['type']), 'page': page_no, 'source': 'revit'}
+                    # an on-grade piece bears on the ground whatever it does,
+                    # so its fall is not a shore-height question
+                    if not flat and not is_sog:
+                        # the low end travels with it; the calculator shores to
+                        # the tallest and checks the low end against the
+                        # shore's closed length
+                        z['offsetLowIn'] = off_lo if not is_sog else 0
+                        z['sloped'] = True
+                        z['label'] = (z['label'] + ' ramp').strip()
+                        n_sloped += 1
+                    SZ.append(z)
         # beams
         n_beam = 0; beam_notes = collections.Counter()
         slab_lookup = [(g, r) for r, g in geoms]
@@ -578,7 +696,8 @@ def build(ex, args):
         report.append(f"{short:>6}  T.O.S. {fmt_ftin(lvl_elev):>10}  typ {typ_thk:g}\"  edge {Polygon(edge_ring).area:,.0f} SF  "
                        f"openings {n_open}  slab areas {n_area + n_slab}  beams {n_beam}{'  ON GRADE' if on_grade else ''}"
                        + (f"  [{n_fill} wall/column pockets filled]" if n_fill else '')
-                       + (f"  [{'; '.join(f'{k}: {v}' for k, v in beam_notes.items())}]" if beam_notes else '') + step_note)
+                       + (f"  [{'; '.join(f'{k}: {v}' for k, v in beam_notes.items())}]" if beam_notes else '')
+                       + (f"  [sloped pieces: {n_sloped}]" if n_sloped else '') + step_note)
 
     # the app keeps levels top-down and builds its confirmation key in that order
     job_levels.sort(key=lambda l: -l['elevation'])
@@ -720,7 +839,7 @@ def render_pdf(pages, xf, sheet, scale, out_pdf, B, ex, args):
             sc = '1/%d" = 1\'-0"' % round(12/scale) if (12/scale).is_integer() else f'1" = {scale:g}\''
             ax.text(72, strip_y + 60, f"{args.name or ex['project']}", fontsize=22, weight='bold', va='top')
             ax.text(72, strip_y + 135, f"LEVEL {pg['short']} FLOOR PLAN", fontsize=30, weight='bold', va='top')
-            ax.text(72, strip_y + 225, f"T.O.S. {fmt_ftin(pg['elev'])}   ·   typical slab {pg['typ_thk']:g}\"   ·   scale {sc}"
+            ax.text(72, strip_y + 225, f"T.O.S. {fmt_ftin(pg['elev'])}   ·   typical slab {fmt_in(pg['typ_thk'])}   ·   scale {sc}"
                     + ("   ·   SLAB ON GRADE" if pg['on_grade'] else ''), fontsize=13, va='top')
             ax.text(72, strip_y + 280, f"Generated from {ex['file']} (Revit scope model) for the McClone Reshore Calculator — geometry only; loading marks are drawn in the calculator.",
                     fontsize=9, va='top', color='#444')
