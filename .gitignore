@@ -25,3 +25,4 @@ tests/.run-state.json
 Revit export/extract-*.json
 __pycache__/
 shots/
+reshore-calc-ui-revamp.html
