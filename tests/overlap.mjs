@@ -1,7 +1,7 @@
-// @rules MDL-05, RGN-01, RGN-02, RGN-05, RES-06  (see DECISIONS.md)
+// @rules MDL-05, RGN-01, RGN-02, RGN-05, RES-06, RES-10  (see DECISIONS.md)
 // Overlapping loading areas behave as a CUTOUT (the smaller area governs its
 // own space, the larger one governs everywhere else), conditions split by
-// mark, and the Results highlight is green and layer-independent.
+// mark, and the Results highlight is teal (RES-10) and layer-independent.
 import { createRequire } from 'node:module';
 const { chromium } = await (async () => {
   try { return await import('playwright'); }
@@ -123,7 +123,7 @@ const thr0 = await page.evaluate(() => {
 });
 ok(thr0.some(g => g.code === 'W1' && g.area === 100 && g.cap === 90), 'with the minimum at 0 it becomes its own condition: ' + JSON.stringify(thr0));
 
-console.log('E. Results highlight: green, one boundary, layer-independent');
+console.log('E. Results highlight: teal, one boundary, layer-independent');
 const pdf = fs.readFileSync(path.resolve(here, 'fixtures', 'test-set.pdf'));
 const job = JSON.parse(fs.readFileSync(path.resolve(here, 'fixtures', 'test-job.reshore.json'), 'utf8'));
 await page.evaluate(async ([b64, d]) => {
@@ -146,7 +146,7 @@ ok(real.every(x => x.codes.every(c => c && !/\//.test(c))), 'no region mixes two
 
 // click the "reshore under 3" row of the biggest region on each layer and
 // record what actually gets painted: the picture must not depend on the
-// Areas tab, and the highlight must be selection green.
+// Areas tab, and the highlight must be the selection teal.
 await page.evaluate(() => {
   window.__rec = null;
   const oFill = drawCtx.fillRect, oStroke = drawCtx.stroke, oPath = drawCtx.fill;
@@ -172,12 +172,12 @@ const pLoad = await paint('loading');
 ok(pSlab.layer === 'slab' && pLoad.layer === 'loading', 'both layers exercised');
 ok(JSON.stringify(pSlab.fills) === JSON.stringify(pLoad.fills), 'identical fills on either layer: ' + pSlab.fills.length + ' vs ' + pLoad.fills.length);
 ok(JSON.stringify(pSlab.strokes) === JSON.stringify(pLoad.strokes), 'identical strokes on either layer');
-const green = pLoad.fills.filter(c => /46, ?160, ?90/.test(c)).length;
+const green = pLoad.fills.filter(c => /14, ?143, ?150|63, ?199, ?207/.test(c)).length;
 const orange = pLoad.fills.filter(c => /255, ?140, ?0/.test(c)).length;
 // the region is one clipped path now, not a fillRect per cell, so one green
 // fill is the whole highlight
-ok(green >= 1 && orange === 0, `the highlight is painted selection green, no hazard orange: green ${green}, orange ${orange}`);
-ok(pLoad.strokes.some(c => /20, ?110, ?60/.test(c)), 'the region boundary is stroked in the same green');
+ok(green >= 1 && orange === 0, `the highlight is painted selection teal, no hazard orange: teal ${green}, orange ${orange}`);
+ok(pLoad.strokes.some(c => /14, ?143, ?150|63, ?199, ?207/.test(c)), 'the region boundary is stroked in the same teal');
 // one boundary path, not one per cell
 ok(pLoad.strokes.filter(c => /20, ?110, ?60/.test(c)).length <= 2, 'the boundary is at most two stroked paths — the sample grid where regions meet, the drawn outline where the region reaches it');
 // and with no highlight the Areas layer still decides

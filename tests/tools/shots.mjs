@@ -15,14 +15,14 @@ fs.mkdirSync(out, { recursive: true });
 const steps = process.argv.slice(3);
 const want = s => !steps.length || steps.includes(s);
 
-const job = JSON.parse(fs.readFileSync(path.resolve(here, '..', '1175_Bothell_Stem_4.reshore.json'), 'utf8'));
+const job = JSON.parse(fs.readFileSync(path.resolve(here, '..', '..', '1175_Bothell_Stem_4.reshore.json'), 'utf8'));
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 1 });
 page.on('pageerror', e => console.log('PAGEERROR', e.message));
-await page.goto('file://' + path.resolve(here, '..', 'reshore-calc.html'));
+await page.goto('file://' + path.resolve(here, '..', '..', 'reshore-calc.html'));
 await page.waitForFunction(() => typeof solveAll === 'function');
 await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
-await page.setInputFiles('#fileInput', path.resolve(here, 'fixtures', 'test-set.pdf'));
+await page.setInputFiles('#fileInput', path.resolve(here, '..', 'fixtures', 'test-set.pdf'));
 await page.waitForFunction(() => state.pdf.pages > 0, null, { timeout: 180000 });
 await page.waitForTimeout(3000);
 await page.evaluate(d => applyOpenedJob(d, 'shots'), job);

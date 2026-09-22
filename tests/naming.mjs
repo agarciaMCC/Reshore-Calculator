@@ -184,7 +184,7 @@ const painted = await page.evaluate(async () => {
 });
 ok(painted.hits === painted.n, `every region is painted in its own colour (${painted.hits}/${painted.n})`);
 ok(painted.names >= 2, `the big regions carry their names on the plan, one step per line; small patches go by colour (${painted.names}/${painted.n})`);
-// with a region selected, the green selection still goes over the top
+// with a region selected, the teal selection (RES-10) still goes over the top
 const selPaint = await page.evaluate(() => {
   const L = schedSolve.levels.find(x => x.pour.name === 'Roof');
   const r = L.solve.regions[0];
@@ -194,9 +194,9 @@ const selPaint = await page.evaluate(() => {
   drawCtx.fill = function (...a) { rec.push(String(this.fillStyle)); return oPath.apply(this, a); };
   renderNow(); drawCtx.fillRect = oFill; drawCtx.fill = oPath;
   setResultHighlight(null);
-  return { green: rec.some(c => /46, ?160, ?90/.test(c)), map: rec.some(c => /148, ?103, ?189|43, ?87, ?151|200, ?90, ?58/.test(c)) };
+  return { green: rec.some(c => /14, ?143, ?150|63, ?199, ?207/.test(c)), map: rec.some(c => /148, ?103, ?189|43, ?87, ?151|200, ?90, ?58/.test(c)) };
 });
-ok(selPaint.green && selPaint.map, 'selection green sits over the region map: ' + JSON.stringify(selPaint));
+ok(selPaint.green && selPaint.map, 'the selection glow sits over the region map: ' + JSON.stringify(selPaint));
 // the print legend
 const legend = await page.evaluate(() => {
   let html = '';

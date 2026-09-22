@@ -145,6 +145,12 @@ the system; this file holds the rules and is versioned with the code.
 | RES-11 | RESULTS READ TOP-DOWN LIKE A FIELD SHEET: one context row (pour · area · print); real warnings stay in view, explanatory notes fold into "Notes & assumptions"; the pane opens on the pour's own sheet; tabs read "All floors / Under 3" and chips "under 3" (a floor called 3 must never read as a count); the install row leads with the floor and its pattern at the title size; "Next pick" is the pane's one primary button. | Sep 21 |
 | RES-10 | Print refuses results that no longer match the inputs. | Sep 15 |
 
+## PRT — The printed sheet
+
+| ID | Rule | Decided |
+|---|---|---|
+| PRT-01 | THE PRINT SHOWS WHERE. Every region row and beam row carries a crop of its own sheet around it, the region glowing (RES-10) with the floor below ghosted. Every floor that gets reshoring gets a page after the install table: its plan shaded by required spacing with the legend. The snippets are drawn after the print document opens; it prints once they are in. | Sep 21 |
+
 ## SEQ — Sequence
 
 | ID | Rule | Decided |

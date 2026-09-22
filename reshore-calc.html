@@ -14987,6 +14987,13 @@ function printSchedule(){
               `${bm.row.beamChosen?esc(bm.row.beamChosen.shore.name):'shore t.b.c.'}${bm.row.beamSpacingFt!=null?' at '+esc(feetToStr(bm.row.beamSpacingFt))+' o.c.':''}`).join(', ')}`:''}</td></tr>`;
       }).join('')}</tbody></table>
     <p class="note">The reshoring under a floor is installed once and must satisfy every region above it, so the pattern is the tightest any region asks for. An area needing tighter spacing governs its own footprint, not the floor; anything over ${iPlan.thrPct}% of the floor tightens the floor instead.</p>`:'';
+  // PRT-01: a page per floor that gets reshoring — the plan shaded by the
+  // spacing that goes in under it, with its legend — right after the table
+  // that says the same thing in words. Drawn after the document opens.
+  const overviews=iPlan?resultsTabFloors(L).map(f=>`<div class="pagebreak ov" data-snip="f:${esc(f.key)}">
+      <h3>Under ${esc(installFloorName(f))} &mdash; the plan shaded by required spacing</h3>
+      <div class="ov-legend">${floorLegendHtml(L,f)}</div>
+      <div class="snip snip-ov"><span class="snip-wait">plan — rendering…</span></div></div>`).join(''):'';
   // A legend first: swatch, name, size and pattern — the sheet someone can
   // hold against the plan without reading the whole schedule.
   const legend=s.spatial&&s.regions.length?`<h3>Regions on this placement</h3>
@@ -15007,6 +15014,7 @@ function printSchedule(){
       <td>${st.chosen?Math.round(st.chosen.sfPerShore):'—'}</td>
       <td><b>${st.chosen?st.chosen.pattern:'—'}</b></td></tr>`).join('');
     return `<h3><span class="sw" style="background:${regionColorCss(regionColorIdx(r,ri,L),1)}"></span>${esc(regionLabel(r,ri,L))} &mdash; ${fmtArea(r.areaSF)}, placement ${r.placementLoad.toFixed(1)} PSF</h3>
+      <div class="snip" data-snip="r:${ri}"><span class="snip-wait">plan snippet — rendering…</span></div>
       <table><thead><tr><th>Reshore under</th><th>Mark</th><th>Cap PSF</th><th>Resultant PSF</th><th>Shore height</th>
         <th>Shore</th><th>Capacity lb</th><th>SF/shore</th><th>Pattern</th></tr></thead>
         <tbody>${body||'<tr><td colspan="9">No reshoring required.</td></tr>'}${gradeStep?`<tr><td colspan="9"><i>${esc(gradeStep.level.name)} is slab on grade: the remaining ${gradeStep.remaining.toFixed(1)} PSF is taken by the soil; no shores below.</i></td></tr>`:''}${r.sliverSF?`<tr><td colspan="9"><i>Includes ${fmtArea(r.sliverSF)} of sliver regions under ${minRegionSF()} SF merged into this region.</i></td></tr>`:''}</tbody></table>
@@ -15016,7 +15024,7 @@ function printSchedule(){
       <td>${r.beamNet>0&&r.shoreHeightFt!=null?feetToStr(r.shoreHeightFt):'—'}</td>
       <td>${r.beamNet<=0?'<i>absorbed here</i>':(r.beamChosen?esc(r.beamChosen.shore.name)+' — '+r.beamChosen.capacityAtHeight.toLocaleString()+' lb':'<i>not chosen</i>')}</td>
       <td>${r.beamNet>0?r.beamPerCluster:'—'}</td><td><b>${r.beamSpacingFt!=null?feetToStr(r.beamSpacingFt)+' o.c.':'—'}</b></td></tr>`).join('');
-    return `<h3>${esc(beamLabel(b,bi))} &mdash; ${b.lengthFt!=null?b.lengthFt+' LF, ':''}stem ${inchStr(b.stemIn)} below the ${inchStr(b.thicknessIn)} slab = ${b.plf} PLF along the beam, shored separately from the slab grid</h3>
+    return `<div class="snip snip-beam" data-snip="b:${bi}"><span class="snip-wait">plan snippet — rendering…</span></div><h3>${esc(beamLabel(b,bi))} &mdash; ${b.lengthFt!=null?b.lengthFt+' LF, ':''}stem ${inchStr(b.stemIn)} below the ${inchStr(b.thicknessIn)} slab = ${b.plf} PLF along the beam, shored separately from the slab grid</h3>
       <table><thead><tr><th>Reshore under</th><th>Stem in PLF</th><th>Slab spare PSF × eff. width ft = PLF</th><th>Shore PLF</th><th>Shore height</th><th>Shore</th><th>Per cluster</th><th>Spacing along beam</th></tr></thead><tbody>${br}</tbody></table>
       ${b.beamUnresolved?'<p><b>Not absorbed within the defined stack.</b></p>':''}
       <div class="dg-print">${beamPathSvg({...b,index:bi},L)}</div>`;
@@ -15034,11 +15042,15 @@ function printSchedule(){
     .dg-dim-txt{font:700 10px/1 Calibri,'Segoe UI',system-ui,sans-serif;fill:var(--dg-dim)}
     .dg-calc{font:12px/1 Consolas,Menlo,monospace;fill:var(--dg-text)}.dg-strong{font-weight:700}.dg-shore-name{fill:var(--dg-shore);font-weight:700}.dg-pend-txt{fill:var(--dg-pend);font-weight:600}.dg-sub2{fill:var(--dg-sub);font-size:var(--fs-sm)}
     .sw{display:inline-block;width:10px;height:10px;border:1px solid #000;margin-right:6px;vertical-align:baseline;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+    .snip{margin:4px 0 8px;page-break-inside:avoid}.snip img{max-width:100%;max-height:62mm;border:1px solid #bbb}.snip-beam{margin-top:10px}
+    .snip-ov img{max-width:100%;max-height:150mm;border:1px solid #bbb}.snip-wait{font-size:10px;color:#888}
+    .ov-legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11px;margin:4px 0 6px}.ov-legend .lg-item{display:inline-flex;align-items:center;gap:5px}.ov-legend .lg-sw{display:inline-block;width:12px;height:12px;border:1px solid #333;print-color-adjust:exact;-webkit-print-color-adjust:exact}.ov-legend .lg-pend{background:#9a9a9a}.ov-legend .lg-later{background:repeating-linear-gradient(45deg,#c96 0 2px,transparent 2px 5px)}.ov-legend .rs-legend-h{flex:1 0 100%;color:#555}.ov-legend .lm-dim{color:#777}
   </style></head><body>
   ${mccPrintHead(`Reshore schedule &mdash; ${esc(L.pour.name)}`,
     `${esc(state.project.name||'Untitled project')} &middot; placing ${inchStr(L.pour.slabThickness)} slab`
     +` &middot; construction DL ${projectDL()} PSF &middot; ${new Date().toLocaleDateString()}`)}
   ${install}
+  ${overviews}
   ${assumptionsHtml(L,true)}
   ${legend}
   ${rows}
@@ -15056,8 +15068,146 @@ function printSchedule(){
      Timber shores limited to ${timberMaxH()} ft clear height. Verify against the structural drawings before installation.</p>
   </body></html>`);
   win.document.close();
-  setTimeout(()=>{try{win.print()}catch(e){}},350);
+  // the snippets are drawn after the page is open, then it prints
+  fillPrintSnippets(win,L).then(()=>setTimeout(()=>{try{win.print()}catch(e){}},350));
 }
+// ── PLAN SNIPPETS FOR THE PRINT (PRT-01) ──
+// Adolfo, Sep 21 2026: "the PDF should have screenshots of the area in
+// question." Every region and beam row gets a crop of its sheet around it,
+// glowing, with the floor below ghosted; every floor that gets reshoring gets
+// its sheet shaded by required spacing with the legend.
+async function pageImageFor(pg){
+  if(pg==null)return null;
+  if(!state.pdf.pageImages[pg]&&state.pdf.doc){try{await renderPdfPage(pg)}catch(e){}}
+  return state.pdf.pageImages[pg]||null;
+}
+function pourLevelDef(L){return state.levels.find(l=>l.id===(L.pour.defId||L.pour.id))||null}
+// crop `img` around the pixel box, scaled to `target` px wide; returns
+// {c,ctx,s} with ctx already transformed so sheet pixels can be drawn
+function cropCanvas(img,box,target,padFrac){
+  const bw=box.maxX-box.minX,bh=box.maxY-box.minY;
+  const pad=Math.max(120,Math.max(bw,bh)*(padFrac==null?.25:padFrac));
+  const x0=Math.max(0,Math.floor(box.minX-pad)),y0=Math.max(0,Math.floor(box.minY-pad));
+  const x1=Math.min(img.width,Math.ceil(box.maxX+pad)),y1=Math.min(img.height,Math.ceil(box.maxY+pad));
+  const cw=Math.max(1,x1-x0),ch=Math.max(1,y1-y0);
+  const s=Math.min(1.5,target/cw);
+  const c=document.createElement('canvas');
+  c.width=Math.round(cw*s);c.height=Math.round(ch*s);
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
+  ctx.imageSmoothingQuality='high';
+  ctx.drawImage(img,x0,y0,cw,ch,0,0,c.width,c.height);
+  ctx.setTransform(s,0,0,s,-x0*s,-y0*s);
+  return {c,ctx,s,x0,y0,cw,ch};
+}
+function pxBoxOf(bb,T){
+  const pts=[[bb.minX,bb.minY],[bb.maxX,bb.minY],[bb.maxX,bb.maxY],[bb.minX,bb.maxY]].map(q=>buildingToPixel(q[0],q[1],T)).filter(Boolean);
+  if(pts.length<4)return null;
+  return {minX:Math.min(...pts.map(p=>p.px)),maxX:Math.max(...pts.map(p=>p.px)),minY:Math.min(...pts.map(p=>p.py)),maxY:Math.max(...pts.map(p=>p.py))};
+}
+function drawGhostOn(ctx,lv,T,zoom){
+  const below=levelBelowOf(lv);if(!below)return;
+  const ground=levelGroundFt(below);if(!ground.length)return;
+  ctx.save();
+  ctx.strokeStyle='rgba(120,120,255,.75)';ctx.fillStyle='rgba(120,120,255,.06)';
+  ctx.lineWidth=2/zoom;ctx.setLineDash([16/zoom,8/zoom]);
+  for(const e of ground){
+    const px=e.bPoly.map(b=>buildingToPixel(b.x,b.y,T)).filter(Boolean);
+    if(px.length<3)continue;
+    ctx.beginPath();px.forEach((q,i)=>i?ctx.lineTo(q.px,q.py):ctx.moveTo(q.px,q.py));ctx.closePath();ctx.fill();ctx.stroke();
+  }
+  ctx.restore();
+}
+async function regionSnippet(obj,L,label,isBeam){
+  const lv=pourLevelDef(L);if(!lv||!obj||!obj.bb)return null;
+  const pg=(isBeam?(typeof beamZonePage==='function'?beamZonePage(obj,L):null):regionZonePage(obj,L))||lv.pdfPage;
+  const al=pg!=null?levelAlignmentFor(lv,pg):null;
+  const T=(al&&al.transform)||(lv.alignment&&lv.alignment.transform)||null;
+  if(!T)return null;
+  const img=await pageImageFor(pg);if(!img)return null;
+  const box=pxBoxOf(obj.bb,T);if(!box)return null;
+  const path=obj.mp?mpPath(obj.mp,T):regionCellPath(obj.cells,obj.cellStep,T,new Set(),false);
+  if(!path)return null;
+  const {c,ctx,s}=cropCanvas(img,box,720,.3);
+  drawGhostOn(ctx,lv,T,s);
+  ctx.fillStyle=selectRgba(.16);ctx.fill(path,'evenodd');
+  glowStroke(ctx,path,s,2);
+  if(label){
+    const cx=(box.minX+box.maxX)/2,cy=(box.minY+box.maxY)/2;
+    ctx.font=`700 ${13/s}px ${cssVar('--font-display')||'Calibri, sans-serif'}`;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.lineWidth=4/s;ctx.strokeStyle='rgba(255,255,255,.92)';ctx.strokeText(label,cx,cy);
+    ctx.fillStyle=selectRgba(1);ctx.fillText(label,cx,cy);
+  }
+  return c.toDataURL('image/png');
+}
+async function floorOverviewImages(L,f){
+  const lv=pourLevelDef(L);if(!lv)return [];
+  const pages=f.zonePage!=null?[f.zonePage]:levelSheets(lv).map(x=>x.page);
+  const out=[];
+  for(const pg of pages){
+    const al=levelAlignmentFor(lv,pg);const T=al&&al.transform;if(!T)continue;
+    const img=await pageImageFor(pg);if(!img)continue;
+    const onSheet=r=>regionOnFloorTab(r,f,L)&&(!pourIsZoned(L)||regionZonePage(r,L)===pg);
+    // the pour's extent on this sheet decides the crop
+    let box=null;
+    for(const r of L.solve.regions){
+      if(!onSheet(r))continue;
+      const b=pxBoxOf(r.bb,T);if(!b)continue;
+      box=box?{minX:Math.min(box.minX,b.minX),minY:Math.min(box.minY,b.minY),maxX:Math.max(box.maxX,b.maxX),maxY:Math.max(box.maxY,b.maxY)}:b;
+    }
+    if(!box)continue;
+    const {c,ctx,s}=cropCanvas(img,box,1400,.08);
+    const labels=[];
+    for(const r of L.solve.regions){
+      if(!onSheet(r))continue;
+      const q=floorStateAt(r,f);
+      let fill=null,txt=null,dash=false;
+      if(q.kind==='pattern'){fill=patColor(L,f,q.pattern);txt=q.pattern}
+      else if(q.kind==='pending'){fill=PAT_PEND;txt='pick shore';dash=true}
+      else if(q.kind==='nofit'){fill=PAT_PEND;txt=q.st.supportLevel?'no shore reaches':'nothing below';dash=true}
+      else if(q.kind==='absorbed'){fill=PAT_ABSORB;txt='no shores'}
+      else continue;
+      const path=r.mp?mpPath(r.mp,T):regionCellPath(r.cells,r.cellStep,T,new Set(),false);
+      if(!path)continue;
+      ctx.save();ctx.globalAlpha=.45;ctx.fillStyle=fill;ctx.fill(path,'evenodd');ctx.restore();
+      ctx.lineWidth=1.2/s;ctx.strokeStyle='rgba(0,0,0,.45)';
+      if(dash)ctx.setLineDash([6/s,4/s]);ctx.stroke(path);ctx.setLineDash([]);
+      const b=pxBoxOf(r.bb,T);if(b&&txt)labels.push({x:(b.minX+b.maxX)/2,y:(b.minY+b.maxY)/2,txt});
+    }
+    ctx.font=`700 ${14/s}px ${cssVar('--font-display')||'Calibri, sans-serif'}`;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    for(const l of labels){ctx.lineWidth=4/s;ctx.strokeStyle='rgba(255,255,255,.9)';ctx.strokeText(l.txt,l.x,l.y);ctx.fillStyle='#111';ctx.fillText(l.txt,l.x,l.y)}
+    out.push({page:pg,url:c.toDataURL('image/png')});
+  }
+  return out;
+}
+async function fillPrintSnippets(win,L){
+  let doc;try{doc=win&&win.document}catch(e){return}
+  if(!doc||typeof doc.querySelectorAll!=='function')return;
+  const s=L.solve;if(!s||!s.spatial)return;
+  const slots=[...doc.querySelectorAll('[data-snip]')];
+  for(const el of slots){
+    const key=el.dataset.snip||'';
+    try{
+      if(key.startsWith('r:')){
+        const ri=+key.slice(2),r=s.regions[ri];
+        const url=r?await regionSnippet(r,L,regionLabel(r,ri,L),false):null;
+        el.innerHTML=url?`<img src="${url}" alt="">`:'';
+      }else if(key.startsWith('b:')){
+        const bi=+key.slice(2),b=(s.beams||[])[bi];
+        const url=b?await regionSnippet(b,L,beamLabel(b,bi),true):null;
+        el.innerHTML=url?`<img src="${url}" alt="">`:'';
+      }else if(key.startsWith('f:')){
+        const f=resultsTabFloors(L).find(x=>x.key===key.slice(2));
+        const imgs=f?await floorOverviewImages(L,f):[];
+        const slot=el.querySelector('.snip-ov');
+        if(slot)slot.innerHTML=imgs.map(i=>`<img src="${i.url}" alt=""><div class="note">sheet ${i.page}</div>`).join('')||'<span class="note">no sheet to draw on</span>';
+      }
+    }catch(e){console.error('print snippet',e);el.innerHTML=''}
+  }
+}
+
 
 function capturePlanImage(){
   try{
@@ -20168,7 +20318,8 @@ async function startOpeningScan(){
   toast('Looking for opening tags on this sheet…',1500);
   const res=await detectOpenings(num);
   if(!res.items.length){toast(`No opening tags found on sheet ${num}. They may be marked another way on this set.`,4600);return}
-  beamScan={...res,levelIdx:li,sel:-1,what:'openings',view:'queue'};
+  beamScan={...res,levelIdx:li,startLevelIdx:li,sel:-1,what:'openings',view:'queue'};
+  scanDropDrawn(beamScan.items);
   scanAdvance();
 }
 // ── AUTO DETECT ─────────────────────────────────────────────
@@ -20263,9 +20414,9 @@ async function runAutoDetect(opt){
     targets.sort((a,b)=>(a.page===state.pdf.current?-1:b.page===state.pdf.current?1:0)||(a.levelIdx-b.levelIdx));
     const token={};scanToken=token;
     const what=opt.beams&&opt.openings?'both':(opt.openings?'openings':'beams');
-    beamScan={page:targets.length===1?targets[0].page:null,levelIdx:targets[0].levelIdx,
+    beamScan={page:targets.length===1?targets[0].page:null,levelIdx:targets[0].levelIdx,startLevelIdx:targets[0].levelIdx,
               items:[],sel:-1,multi:targets.length>1,what,view:'queue',
-              progress:{done:0,total:targets.length,page:targets[0].page},notes:{outside:0,crossings:0,skipped}};
+              progress:{done:0,total:targets.length,page:targets[0].page},notes:{outside:0,crossings:0,skipped,drawn:0}};
     renderBeamPanel();
     let n=0;
     for(const t of targets){
@@ -20284,21 +20435,25 @@ async function runAutoDetect(opt){
       }
       const c=clipItemsToEdge(found,lv,t.page);
       beamScan.notes.outside+=c.dropped;
+      beamScan.notes.drawn+=scanDropDrawn(c.kept);
       beamScan.items.push(...c.kept);
       beamScan.items.sort((a,b)=>(a.levelIdx-b.levelIdx)||(b.areaPx2-a.areaPx2));
       n++;
       const nx=targets[n];
       beamScan.progress=n<targets.length?{done:n,total:targets.length,page:nx&&nx.page}:null;
       renderBeamPanel();renderCanvas();
-      if(n===1&&c.kept.length&&beamScan.view==='queue')scanShow(scanCurrent());
+      // the first candidate is shown at once only when it sits on the sheet
+      // already on screen — a zoom, never a page flip under the user's hands
+      if(n===1&&c.kept.length&&beamScan.view==='queue'&&scanMayJump()){const cur=scanCurrent();if(cur&&(cur.page!=null?cur.page:beamScan.page)===state.pdf.current)scanShow(cur)}
     }
     if(scanToken!==token||!beamScan)return;
     const notes=[],nt=beamScan.notes;
     if(nt.outside)notes.push(`${nt.outside} shape${nt.outside>1?'s':''} outside the floor edge ignored`);
+    if(nt.drawn)notes.push(`${nt.drawn} already drawn on the floor, not offered again`);
     if(nt.crossings)notes.push(`${nt.crossings} crossing${nt.crossings>1?'s':''} of dimension or grid lines with no outline round them not offered as openings`);
     if(nt.skipped)notes.push(`${nt.skipped} sheet${nt.skipped>1?'s':''} without a confirmed edge not read`);
     if(notes.length)toast(notes.join(' · ')+'.',6000);
-    if(!beamScan.items.length){
+    if(!beamScan.items.some(it=>!it.done)){
       beamScan=null;renderBeamPanel();renderCanvas();
       toast('Nothing found to propose on '+(targets.length>1?'those sheets':'this sheet')+'.',4200);
     }
@@ -20329,7 +20484,8 @@ async function startBeamScan(){
   toast('Reading the grey shapes on this sheet…',1500);
   const res=await detectGreyShapes(num);
   if(!res.items.length){toast(`Nothing grey and solid found on sheet ${num}. Beams on this set may be drawn another way.`,4600);return}
-  beamScan={...res,levelIdx:li,sel:-1,what:'beams',view:'queue'};
+  beamScan={...res,levelIdx:li,startLevelIdx:li,sel:-1,what:'beams',view:'queue'};
+  scanDropDrawn(beamScan.items);
   scanAdvance();
 }
 function cancelBeamScan(){beamScan=null;scanToken=null;renderBeamPanel();renderSidebar();renderCanvas()}
@@ -20360,10 +20516,43 @@ function beamGeomWidthIn(it){
 // type. The old list is one click away for anyone who wants to tick.
 const SCAN_TYPE_ORDER={beam:0,slab:1,opening:2};
 function scanTypeName(kind,n){return kind==='beam'?(n===1?'beam':'beams'):kind==='opening'?(n===1?'opening':'openings'):(n===1?'thickened slab':'thickened slabs')}
+// Floors are walked from the one on screen when the scan started down the
+// stack, then round to the ones above — so the review begins where the user
+// is looking rather than at the roof.
+function scanLevelRank(li){
+  const n=state.levels.length||1,start=beamScan&&beamScan.startLevelIdx!=null?beamScan.startLevelIdx:0;
+  return ((li==null?0:li)-start+n)%n;
+}
 function scanQueue(){
   if(!beamScan)return [];
   return beamScan.items.filter(it=>!it.done&&!it.failed&&it.polygon&&it.polygon.length>2)
-    .sort((a,b)=>((SCAN_TYPE_ORDER[a.kind]||0)-(SCAN_TYPE_ORDER[b.kind]||0))||(a.levelIdx-b.levelIdx)||(b.areaPx2-a.areaPx2));
+    .sort((a,b)=>((SCAN_TYPE_ORDER[a.kind]||0)-(SCAN_TYPE_ORDER[b.kind]||0))||(scanLevelRank(a.levelIdx)-scanLevelRank(b.levelIdx))||(b.areaPx2-a.areaPx2));
+}
+// A candidate that is already drawn on the floor — the same kind of shape
+// covering the same ground — is not offered again.
+function scanAlreadyDrawn(it){
+  const lv=state.levels[it.levelIdx!=null?it.levelIdx:(beamScan?beamScan.levelIdx:-1)];
+  if(!lv||!it.polygon||it.polygon.length<3)return false;
+  const pg=it.page!=null?it.page:(beamScan?beamScan.page:null);
+  const a=mpOf(it.polygon),pc=PC();
+  const areaA=a?mpArea(a):0;
+  if(!areaA)return false;
+  const same=z=>z.kind===it.kind||(it.kind==='slab'&&z.kind==='beam')||(it.kind==='beam'&&z.kind==='slab');
+  for(const z of zonesOf(lv,'slab')){
+    if(!same(z)||!z.polygon||z.polygon.length<3)continue;
+    if(pg!=null&&z.page!=null&&z.page!==pg)continue;
+    const b=mpOf(z.polygon);if(!b)continue;
+    let inter=0;
+    try{inter=pc?mpArea(pc.intersection(a,b)):0}catch(e){inter=0}
+    const areaB=mpArea(b);
+    if(inter>0&&inter/Math.min(areaA,areaB)>0.7)return true;
+  }
+  return false;
+}
+function scanDropDrawn(items){
+  let n=0;
+  for(const it of items)if(!it.done&&scanAlreadyDrawn(it)){it.done='drawn';n++}
+  return n;
 }
 function scanCurrent(){
   if(!beamScan)return null;
@@ -20417,6 +20606,19 @@ function scanCommit(list,label){
   if(opens)bits.push(`${opens} opening${opens===1?'':'s'}`);
   if(picks.length>1)toast((bits.join(' and ')||'Nothing')+' added'+(blank?` — ${blank} still need${blank===1?'s':''} a depth typed in`:'')+'.',4200);
   return added;
+}
+// The background read may only pull the view to its first candidate while
+// the user is not in the middle of something else: on Areas, nothing selected,
+// no tool armed, no floor edge being picked or drawn.
+function scanMayJump(){
+  if(typeof curStep==='undefined'||groupOf(curStep).id!=='areas')return false;
+  if(state.activeZoneIdx!=null)return false;
+  if(state.tool&&state.tool!=='select'&&state.tool!=='pan')return false;
+  if(state.drawing&&state.drawing.points&&state.drawing.points.length)return false;
+  if(typeof edgeProposal!=='undefined'&&edgeProposal)return false;
+  if(typeof edgeDraw!=='undefined'&&edgeDraw)return false;
+  if(typeof autoTraceEditing==='function'&&autoTraceEditing())return false;
+  return true;
 }
 function scanAdvance(){
   const it=scanCurrent();
@@ -20473,9 +20675,9 @@ function scanQueueHtml(){
   const tally=beamScan.tally||{added:0,skipped:0};
   const listBtn=`<button type="button" class="btn btn-sm" id="bsList" title="Every candidate as a list with tick boxes">List</button>`;
   if(!it){
-    const skipped=beamScan.items.filter(x=>x.done==='skipped').length;
+    const skipped=beamScan.items.filter(x=>x.done==='skipped').length,drawn=beamScan.items.filter(x=>x.done==='drawn').length;
     const body=pr?`<p class="step-help dim">Nothing on the sheets read so far. Reading on…</p>`
-      :`<p class="step-help dim">${tally.added?`${tally.added} shape${tally.added===1?'':'s'} added`:'Nothing added'}${skipped?` · ${skipped} skipped — open the list to add any of them`:''}.</p>`;
+      :`<p class="step-help dim">${tally.added?`${tally.added} shape${tally.added===1?'':'s'} added`:'Nothing added'}${skipped?` · ${skipped} skipped — open the list to add any of them`:''}${drawn?` · ${drawn} already drawn, left alone`:''}.</p>`;
     return `<div class="mp-panel sq-panel">
       <div class="mp-head">Read from the sheets <span class="lm-dim">nothing is written until you accept it</span></div>
       ${progress}${body}
@@ -20507,6 +20709,7 @@ function scanQueueHtml(){
         :`<button type="button" class="btn btn-sm btn-primary" id="bsAccept" title="Add this shape to ${esc(lv.name||'the floor')} and move on (Enter)">Accept</button>
            <button type="button" class="btn btn-sm" id="bsAdjust" title="Add it and leave its corners live to drag before moving on (A)">Accept &amp; adjust</button>
            <button type="button" class="btn btn-sm" id="bsSkip" title="Leave this one out and move on (N)">Skip</button>`}
+      ${(it.page!=null?it.page:beamScan.page)!==state.pdf.current?`<button type="button" class="btn btn-sm" id="bsShow" title="Open its sheet and zoom to it">Show</button>`:''}
       <span class="sq-gap"></span>
       ${allN>1&&!adjusting?`<button type="button" class="btn btn-sm" id="bsAllType" title="Accept every remaining ${esc(scanTypeName(it.kind,2))} in the queue${it.kind==='beam'?' that has a size':''}">Accept all ${allN} ${esc(scanTypeName(it.kind,allN))}</button>`:''}
       ${beamScan.items.some(x=>x.done==='skipped')?`<button type="button" class="btn btn-sm" id="bsBack" title="Back to the last one skipped">\u25c2 Back</button>`:''}
@@ -20521,6 +20724,7 @@ function bindScanQueue(el){
   on('bsAdjust',()=>scanAccept(true));
   on('bsSkip',scanSkip);
   on('bsNext',scanNext);
+  on('bsShow',()=>scanShow(scanCurrent()));
   on('bsBack',scanBack);
   on('bsAllType',scanAcceptAllType);
   on('bsList',()=>{beamScan.view='list';renderBeamPanel();renderCanvas()});
@@ -20544,7 +20748,7 @@ function renderBeamPanel(){
   const nPick=beamScan.items.filter(i=>i.pick).length;
   const sf=it=>{const f=beamFtPerPx(it);return f?fmtArea(it.areaPx2*f*f):`${Math.round(it.areaPx2/1000)}k px&sup2;`};
   const rows=beamScan.items.map((it,i)=>{
-    if(it.done==='added')return '';                  // written already, from the queue
+    if(it.done==='added'||it.done==='drawn')return '';   // written already, or drawn before the scan
     const bad=it.failed||(it.kind!=='opening'&&!it.sized);
     let name,stat;
     if(it.kind==='opening'){
@@ -20602,7 +20806,7 @@ function drawBeamScan(zoom,F_MONO){
   const queue=beamScan.view!=='list';
   beamScan.items.forEach((it,i)=>{
     if((it.page!=null?it.page:beamScan.page)!==state.pdf.current)return;
-    if(it.done==='added')return;                    // a real zone now, drawn as one
+    if(it.done==='added'||it.done==='drawn')return; // a real zone (now, or before), drawn as one
     const p=it.polygon;if(!p||p.length<3)return;   // a tag with no traceable outline
     drawCtx.beginPath();drawCtx.moveTo(p[0].x,p[0].y);
     for(let k=1;k<p.length;k++)drawCtx.lineTo(p[k].x,p[k].y);

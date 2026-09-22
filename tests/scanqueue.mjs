@@ -166,6 +166,21 @@ ok(E.curKind === 'opening' && E.added === 1 && E.kind === 'opening', 'Enter acce
 ok(/added/.test(E.doneHead), 'with the queue empty the panel sums up: ' + E.doneHead.slice(0, 120));
 ok(E.rows === E.skipped && E.ticks === E.skipped, `the list shows the ${E.skipped} skipped ones with tick boxes, not the ones already added: ${E.rows} rows`);
 
+console.log('F. what is already drawn is not offered again; the queue starts at the sheet on screen');
+const F = await page.evaluate(() => {
+  const lv = state.levels[0];
+  const z = zonesOf(lv, 'slab').find(x => x.kind === 'beam');
+  const dup = { kind: 'beam', polygon: z.polygon.map(p => ({ x: p.x + 1, y: p.y + 1 })), areaPx2: 5000, page: 4, levelIdx: 0, sized: true, widthIn: 24, depthIn: 17 };
+  const fresh = { kind: 'beam', polygon: [{ x: 3000, y: 3000 }, { x: 3400, y: 3000 }, { x: 3400, y: 3040 }, { x: 3000, y: 3040 }], areaPx2: 16000, page: 4, levelIdx: 0, sized: true, widthIn: 24, depthIn: 17 };
+  const dropped = scanDropDrawn([dup, fresh]);
+  // the walk starts at the floor on screen when the scan began
+  beamScan.startLevelIdx = 1;
+  const ranks = [0, 1, 2].map(li => scanLevelRank(li));
+  return { dropped, dupDone: dup.done, freshDone: fresh.done || null, ranks };
+});
+ok(F.dropped === 1 && F.dupDone === 'drawn' && !F.freshDone, 'a candidate covering a beam already on the floor is marked drawn and left out; a new one is kept');
+ok(F.ranks.join() === '2,0,1', 'floors are walked from the one on screen down the stack, then round to the top: ' + F.ranks.join());
+
 await browser.close();
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

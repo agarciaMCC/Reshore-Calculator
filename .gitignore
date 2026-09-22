@@ -24,3 +24,4 @@ tests/.run-state.json
 *.ifc
 Revit export/extract-*.json
 __pycache__/
+shots/
