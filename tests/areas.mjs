@@ -1,4 +1,4 @@
-// @rules ARE-01, ARE-02, ARE-04, ARE-05, ARE-06, ARE-07, UI-08, UI-10, LOD-06, UI-15  (see DECISIONS.md)
+// @rules ARE-01, ARE-02, ARE-04, ARE-05, ARE-06, ARE-07, UI-08, UI-10, ARE-12, UI-15  (see DECISIONS.md)
 // The Areas panel: per-layer Draw buttons that arm the tool themselves, the
 // slab kind menu, derived shape names, grouping by type, and the help behind
 // the ? on the title.
@@ -41,12 +41,12 @@ ok(await page.evaluate(()=>!!state.project.handTools.areas),'opening it is remem
 ok(await page.$eval('#btnDrawLoading',e=>e.offsetParent!==null&&e.textContent==='Draw loading area'),'Draw loading area shown on the loading layer');
 ok(await page.$eval('#drawSlabWrap',e=>e.style.display==='none'),'the slab draw button is hidden');
 ok(await page.$eval('#btnCopyFrom',e=>/Copy loading areas/.test(e.textContent)),'copy button names the layer');
-// Auto-trace moved to the LOADS step in the flow rework — reading the load
-// map is Loads-step work, and what it writes is reviewed here. So the Draw
-// button is no longer above it; they are on different panels.
+// ARE-12 (Sep 21 2026): the trace is back on the Loading tab — the floor's
+// own load map as the primary card up top, the all-floors pass behind "or do
+// it by hand" beside Draw and Copy; nothing about it on Loads.
 ok(await page.evaluate(()=>{const a=document.getElementById('btnDrawLoading'),b=document.getElementById('btnAutoTrace');
-  return !!a&&!!b&&a.closest('.step-panel')!==b.closest('.step-panel')
-    &&b.closest('.step-panel').dataset.step==='loads'}),'auto-trace lives on the Loads step, the Draw button here');
+  return !!a&&!!b&&b.closest('.step-panel').dataset.step==='areas'&&!!b.closest('details[data-byhand="areas"], #byhand-areas')
+    &&!document.getElementById('p-loads').querySelector('#btnAutoTrace')}),'the all-floors trace lives behind by-hand on the Loading tab, nothing on Loads');
 await page.click('#btnDrawLoading');
 ok(await page.evaluate(()=>state.tool==='polygon'),'clicking it arms the polygon tool');
 await page.keyboard.press('Escape');

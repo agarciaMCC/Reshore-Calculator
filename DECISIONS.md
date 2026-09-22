@@ -105,11 +105,11 @@ the system; this file holds the rules and is versioned with the code.
 | LOD-03 | The Excel import reads his chart as written (Designation, SDL psf, LL psf, TOTAL CAPACITY psf, with * meaning reducible live load), with a downloadable blank template and a review panel before anything is written. | Sep 14 |
 | LOD-04 | A re-scan keeps hand-entered marks and flags where the drawings disagree. | Sep 14 |
 | LOD-05 | Verifying a mark stays on the Loads tab and highlights the schedule row the value was read from — never jumps to another step. | Sep 15 |
-| LOD-06 | Auto-trace lives on the Loads step. A typical loading mark per level is auto-picked from the mark covering the largest traced area. | Sep 15 |
+| LOD-06 | A typical loading mark per level is auto-picked from the mark covering the largest traced area. (Where the trace lives: ARE-12.) | Sep 15 |
 | LOD-08 | The typical capacity per floor has ONE home: the Loads step, with the marks. The Levels row and the Areas typical row show it read-only and link there. | Sep 21 |
 | LOD-09 | Results waits for a schedule it can price: a chart whose rows carry no numbers does not open Results. | Sep 21 |
 | LOD-10 | The typical capacity per floor is a card of its own on Loads, with its state in its head (all N set / N to confirm / N still to set) and amber while anything is missing — and the Loads step is NOT done until every carrying floor has one and no assumed value is left unconfirmed. The rail and Next carry the same count. | Sep 21 |
-| LOD-07 | Load-map tracing is one pass over every load-map sheet, on the Loads step after the schedule. Plans filed under the floor their title names with level and zone pickers, one review grouped by floor, traced areas landing on whichever zone sheet they fall in. | Sep 17 |
+| LOD-07 | The all-floors pass reads every load-map sheet in one go: plans filed under the floor their title names with level and zone pickers, one review grouped by floor, traced areas landing on whichever zone sheet they fall in. It is the fallback behind "or do it by hand" on the Loading tab (ARE-12). | Sep 17 |
 
 ## ARE — Areas step and markup
 
@@ -126,6 +126,7 @@ the system; this file holds the rules and is versioned with the code.
 | ARE-09 | Where a traced pocket is much smaller than the enclosure it sits in, FLAG it rather than guess. | Sep 15 |
 | ARE-10 | A loading area split by a floor edge appearing in several zones is split into one piece per zone sheet, cut along each sheet's floor edge — for load-map-traced areas only. | Sep 17 |
 | ARE-11 | THE SCAN IS A REVIEW QUEUE. The sheet on screen is read first and the review opens on it at once; the other sheets are read behind it, their shapes joining the queue, with the progress said in the head. One candidate at a time, shown and zoomed on its sheet with a glow, BY TYPE (beams, thickened slabs, openings) then floor by floor. Accept writes that one shape; Accept & adjust writes it and opens its PROPERTIES INSIDE THE ACCEPTANCE CARD with the corners live, the one button reading "Done — next candidate" (never a bare Next, which was mistaken for the step's Next: Results); Skip writes nothing; Accept all remaining <type> takes the rest of that type (sized beams only). Enter / A / N drive it. The tick list stays one click away and still writes only what is ticked (BEM-08 holds: nothing is written until you say so). Leaving Areas PAUSES the review and coming back resumes it — it is never thrown away by a step change. | Sep 21 |
+| ARE-12 | THE TRACE LIVES ON THE LOADING TAB, where the beam scan lives on the Slab tab; "Detect again" is slab-only and does not show there. Arriving reads the load maps in the background (cached per schedule) and offers a card — "12 loading areas read from L3's load map — Review"; nothing moves until Review is pressed. Review takes you to THIS FLOOR's load map and walks its areas one at a time in the same queue as the beams (Accept / Accept & adjust / Skip / Accept all; Enter, A, N), with the plan's floor, zone and grid match above the area. Nothing is written until "Add N loading areas & back", which writes them and returns you to the sheet you started from, Loading layer up. Cancel returns too. | Sep 21 |
 | ARE-11 | Markup is LOCKED on Results and Sequence: nothing selects, drags, erases corners or deletes, and the drawing tools cannot be armed. Pan, zoom, paging and clicking a region still work, with a standing locked badge. | Sep 10, Sep 15 |
 
 ## RES — Results
@@ -258,6 +259,7 @@ the system; this file holds the rules and is versioned with the code.
 | One-shot sheet review panel, edge column on the Sheets step | BLD-04 | Sep 17 |
 | Orange selected-region highlight | RES-06 | Sep 8 |
 | Green selected-region highlight with marching ants | RES-10 | Sep 21 |
+| Auto-trace button and review panel on the Loads step | ARE-12 | Sep 21 |
 | "Start a combined chart / Start split schedules" asked cold on an empty Loads step | LOD-01 | Sep 21 |
 | Typical capacity editable on the Levels row, the level modal and the Areas typical row | LOD-08 | Sep 21 |
 | The level modal (double-click a level / …) | UI-19 | Sep 21 |

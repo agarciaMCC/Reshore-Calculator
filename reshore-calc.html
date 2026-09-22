@@ -1085,6 +1085,9 @@ select.sched-shore option,select.sel-styled option{background:var(--surface-rais
 .sq-adjust{margin:6px 0 2px;padding:6px 8px;border:1px dashed var(--select);border-radius:4px;font-size:var(--fs-sm);color:var(--text-secondary)}
 .sq-adjust .sq-props{margin-top:4px}
 .sq-adjust #propsHead.inline,.sq-adjust #propsContent.inline{margin-left:0;border-left:0;padding-left:0}
+.lp-card{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 10px;border:1px solid var(--border);border-left:3px solid var(--select);border-radius:4px;background:var(--surface);font-size:var(--fs-md)}
+.lp-card .lp-txt{flex:1 1 200px;min-width:0;color:var(--text-secondary)}
+.sq-plan{margin:6px 0 4px}
 </style>
 
 <div id="app">
@@ -6250,6 +6253,7 @@ document.addEventListener('keydown',e=>{
 
   // the scan review queue: Enter accepts, A accepts and adjusts, N skips (ARE-10)
   if(typeof scanKeys==='function'&&scanKeys(e))return;
+  if(typeof traceKeys==='function'&&traceKeys(e))return;
   if(e.key==='F3'){e.preventDefault();setSnap(!state.snap);toast('Object snap '+(state.snap?'on':'off'),1200);return}
   if(e.key==='F8'){e.preventDefault();setOrtho(!state.ortho);toast('Ortho '+(state.ortho?'on':'off'),1200);return}
   if(e.key==='1'){setLayer('slab');return}
@@ -7790,9 +7794,51 @@ function placePropsPanel(){
   else{if(head.parentElement!==home)home.appendChild(head);if(body.parentElement!==home)home.appendChild(body)}
 }
 // The line over the Areas list: what the sheet read is doing, or has done.
+// ── THE LOADING TAB'S PRIMARY ACTION (ARE-12) ──
+// Arriving on the Loading tab reads the load maps quietly (cached) and offers
+// a card: "12 loading areas read from L3's load map — Review". Pressing it is
+// what flips to the map; nothing moves under the user's hands.
+let traceReady=null,traceBgBusy=false;
+function floorTraceState(li){
+  const lv=state.levels[li];if(!lv)return null;
+  const have=zonesOf(lv,'loading').filter(z=>z.fromLoadMap).length;
+  const ready=traceReady&&traceReady.key===traceCacheKey()?traceReady.byLevel[li]:null;
+  return {lv,have,ready,reading:traceBgBusy};
+}
+async function autoTraceBackground(){
+  if(traceBgBusy)return;
+  if(!state.pdf.doc||scheduleShape()==='none'||!state.levels.length)return;
+  if(typeof autoTrace!=='undefined'&&autoTrace)return;
+  if(traceReady&&traceReady.key===traceCacheKey())return;
+  traceBgBusy=true;renderAreasPrimary();
+  try{
+    const T=await tracedLoadMaps();
+    const byLevel={};
+    for(const pl of T.plans){if(pl.levelIdx<0)continue;byLevel[pl.levelIdx]=(byLevel[pl.levelIdx]||0)+pl.fills.length}
+    traceReady={key:traceCacheKey(),byLevel,plans:T.plans.length};
+  }catch(e){console.error(e)}
+  finally{traceBgBusy=false;renderAreasPrimary()}
+}
+function loadingPrimaryHtml(){
+  const li=state.activeLevelIdx;const st=floorTraceState(li);
+  if(!st)return '';
+  const name=esc(st.lv.name);
+  if(st.have)return `<span class="lm-dim">${st.have} loading area${st.have===1?'':'s'} on ${name} came from its load map — <button type="button" class="btn btn-xs" id="btnTraceFloor">Trace it again</button></span>`;
+  if(st.reading)return `<div class="lp-card">${pillHtml('read',`reading the load maps…`)}<span class="lm-dim">${name}'s loading areas are offered here when the read is done</span></div>`;
+  if(st.ready)return `<div class="lp-card">${pillHtml('need',`${st.ready} loading area${st.ready===1?'':'s'} read`)}<span class="lp-txt">from ${name}'s load map — review them on the map, then you are brought back here</span><button type="button" class="btn btn-sm btn-primary" id="btnTraceFloor">Review</button></div>`;
+  if(traceReady&&traceReady.key===traceCacheKey())return `<div class="lp-card">${pillHtml('read','no load map names '+name)}<span class="lp-txt">draw its areas by hand, or</span><button type="button" class="btn btn-sm" id="btnTraceFloor">Trace from a load map…</button></div>`;
+  return `<div class="lp-card"><span class="lp-txt">Read ${name}'s loading areas off its load map, confirm them there, and come back.</span><button type="button" class="btn btn-sm btn-primary" id="btnTraceFloor">Trace from ${name}'s load map</button></div>`;
+}
 function renderAreasPrimary(){
   const el=document.getElementById('areasPrimary');if(!el)return;
   if(typeof beamScan!=='undefined'&&beamScan){el.innerHTML='';return}
+  if(!isSlabLayer()){
+    if(typeof autoTrace!=='undefined'&&autoTrace){el.innerHTML='';return}
+    el.innerHTML=loadingPrimaryHtml();
+    const b=el.querySelector('#btnTraceFloor');if(b)b.addEventListener('click',()=>startFloorTrace(state.activeLevelIdx));
+    if(typeof curStep!=='undefined'&&groupOf(curStep).id==='areas')autoTraceBackground();
+    return;
+  }
   const rows=typeof planSheetRows==='function'?planSheetRows():[];
   const conf=rows.filter(r=>r.confirmed).length;
   const done=typeof autoScanDone==='function'?autoScanDone():[];
@@ -7815,6 +7861,8 @@ function renderZoneList(){
   const dsw=document.getElementById('drawSlabWrap');if(dsw)dsw.style.display=isSlabLayer()?'':'none';
   const dsp=document.getElementById('drawSlabPop');if(dsp&&!isSlabLayer())dsp.classList.remove('open');
   const atb=document.getElementById('btnAutoTrace');if(atb)atb.style.display=isSlabLayer()?'none':'';
+  const adb=document.getElementById('btnAutoDetect');if(adb)adb.style.display=isSlabLayer()?'':'none';   // slab-only, not on the Loading tab (ARE-12)
+  {const bh=document.getElementById('byhand-areas');const sm=bh&&bh.querySelector('summary');if(sm&&bh.dataset.slabLabel)sm.textContent=isSlabLayer()?bh.dataset.slabLabel:bh.dataset.loadLabel}
   const edb=document.getElementById('btnDetectEdge');if(edb)edb.style.display=isSlabLayer()?'':'none';
   const eda=document.getElementById('btnDetectEdgeAll');if(eda)eda.style.display=isSlabLayer()?'':'none';
   const bmb=document.getElementById('btnDetectBeams');if(bmb)bmb.style.display=isSlabLayer()?'':'none';
@@ -15470,7 +15518,9 @@ function renderStepFoot(){
   // the left half says what is wanted, in words, with the section it lives in
   let now;
   const reviewing=typeof beamScan!=='undefined'&&beamScan&&beamScan.view!=='list'&&curGroup().id==='areas'&&typeof scanQueue==='function'&&scanQueue().length;
-  if(reviewing)now=`${pillHtml('need','Reviewing')}<span class="sf-txt"><b>${scanQueue().length} shape${scanQueue().length===1?'':'s'}</b> from the sheets still to accept or skip, in the card above</span>`;
+  const tracing=typeof autoTrace!=='undefined'&&autoTrace&&autoTrace.queue&&curGroup().id==='areas';
+  if(tracing){const n=traceQueue().length;now=n?`${pillHtml('need','Reviewing')}<span class="sf-txt"><b>${n} loading area${n===1?'':'s'}</b> from the load map still to accept or skip, in the card above</span>`:`${pillHtml('need','Reviewing')}<span class="sf-txt">Load map reviewed — <b>Add</b> the accepted areas or Cancel, in the card above</span>`}
+  else if(reviewing)now=`${pillHtml('need','Reviewing')}<span class="sf-txt"><b>${scanQueue().length} shape${scanQueue().length===1?'':'s'}</b> from the sheets still to accept or skip, in the card above</span>`;
   else if(!act)now=`${pillHtml('ok','Done')}<span class="sf-txt">${esc(t.gate.text||'Ready to continue')}</span>`;
   else if(act.st.locked)now=`${pillHtml('lock',stepTitle(act.sec))}<span class="sf-txt">${esc(act.st.text)}</span>`;
   else now=`${pillHtml('need',stepTitle(act.sec))}<span class="sf-txt"><b>Now:</b> ${esc(act.st.text)}</span>`;
@@ -16382,13 +16432,15 @@ function mountFlow(){
   // you arrive and the proposal sits at the top; drawing and copying are the
   // fallback, behind "or draw / copy by hand".
   const bh5=byHandBox('areas','or draw / copy by hand / detect again'),bb5=bh5.querySelector('.by-hand-body');
+  bh5.dataset.slabLabel='or draw / copy by hand / detect again';bh5.dataset.loadLabel='or draw / copy by hand / trace every load map';
   bb5.appendChild(dlBtn);bb5.appendChild(dsWrap);
-  // Reading the load map is Loads-step work, so the control and its review
-  // panel live there. What it writes is reviewed and adjusted on Areas.
+  // ARE-12 (Adolfo, Sep 21 2026): the trace belongs on the Loading tab. The
+  // floor's own load map is the primary action (in #areasPrimary); the
+  // all-floors pass is the fallback, behind "or do it by hand".
   const atBtn=document.createElement('button');atBtn.className='btn btn-sm btn-wide';atBtn.id='btnAutoTrace';
-  atBtn.textContent='Trace loading areas from every load map…';atBtn.title='Read every load-map sheet in the set, trace the outlined area around each load code, and file each map under the floor its title names — one review, one Add';
+  atBtn.textContent='Trace every load map in the set…';atBtn.title='Read every load-map sheet in the set, trace the outlined area around each load code, and file each map under the floor its title names — one review, grouped by floor';
   atBtn.addEventListener('click',()=>startAutoTrace());
-  document.getElementById('p-loads').appendChild(atBtn);
+  bb5.appendChild(atBtn);
   const cpBtn=document.createElement('button');cpBtn.className='btn btn-sm btn-wide';cpBtn.id='btnCopyFrom';
   cpBtn.textContent='Copy loading areas from another floor…';cpBtn.title='Bring this floor\'s areas over from a floor you have already marked up';
   cpBtn.addEventListener('click',()=>openCopyFrom());
@@ -16408,8 +16460,9 @@ function mountFlow(){
   const arNote=document.createElement('div');arNote.id='areasPrimary';arNote.className='primary-act';
   host5.insertBefore(arNote,bmp.nextSibling);
   host5.appendChild(bh5);
+  // ARE-12: the trace review lives on the Loading tab, at the top like the beam scan
   const atp=document.createElement('div');atp.id='autoTracePanel';atp.className='at-panel';atp.style.display='none';
-  document.getElementById('p-loads').appendChild(atp);
+  host5.insertBefore(atp,bmp.nextSibling);
   {const ss=document.createElement('div');ss.id='sheetStack';ss.className='ss-panel';ss.style.display='none';
    document.getElementById('p-areas').appendChild(ss)}
   mv('#zoneList','p-areas');
@@ -20891,35 +20944,61 @@ async function loadMapPageList(){
   try{for(const c of await findLoadMapPages())out.add(c.page)}catch(e){}
   return [...out].sort((a,b)=>a-b);
 }
-async function startAutoTrace(){
-  if(!state.pdf.doc){toast('Load the drawing set first.');return}
-  if(scheduleShape()==='none'){toast('Read the load schedule first — the tags are matched against it.',3600);return}
-  if(!state.levels.length){toast('Add your levels first (Building step).');return}
-  const btn=document.getElementById('btnAutoTrace');
-  const was=btn?btn.textContent:null;
+// ── READING THE LOAD MAPS, ONCE ──
+// Every load-map sheet is traced at most once per schedule; the per-floor
+// review (ARE-12) and the all-floors pass both draw on the same cache, so
+// arriving on a second floor's Loading tab costs nothing.
+let traceCache=new Map();
+function traceCacheKey(){return scheduleShape()+'|'+(scheduleShape()==='split'?llSchedule().length+'/'+sdlSchedule().length:getConditions().length)}
+async function tracedLoadMaps(onProgress){
   let pages=await loadMapPageList();
   if(!pages.length)pages=[state.pdf.current];
+  const key=traceCacheKey();
   const plans=[],failed=[],read=[],empty=[];let nTags=0;
-  try{
-    for(let i=0;i<pages.length;i++){
-      const pg=pages[i];
-      if(btn){btn.disabled=true;btn.textContent=`Tracing load map ${i+1} of ${pages.length}…`}
+  for(let i=0;i<pages.length;i++){
+    const pg=pages[i];
+    if(onProgress)onProgress(i,pages.length,pg);
+    let hit=traceCache.get(pg);
+    if(!hit||hit.key!==key){
       let res;
       try{res=await autoTracePage(pg)}catch(e){console.error(e);res={error:e.message}}
-      if(res.error||!res.plans.length){if(sheetRead&&sheetRead.get(pg)&&sheetRead.get(pg).kind==='loadmap')empty.push(pg);continue}
-      read.push(pg);nTags+=res.nTags||0;
-      for(const pl of res.plans){
-        pl.page=pg;
-        // the zone the title states, if any ("LEVEL 2 LOADING PLAN - NORTH")
-        pl.zone=sheetZoneFromTitle(pl.title)||'';
-        pl.unsure=pl.levelIdx<0||!pl.token;
-        plans.push(pl);
-      }
-      for(const f of res.failed)failed.push({...f,page:pg});
+      hit={key,res};traceCache.set(pg,hit);
     }
-  }finally{if(btn){btn.disabled=false;btn.textContent=was}}
+    const res=hit.res;
+    if(res.error||!res.plans||!res.plans.length){if(sheetRead&&sheetRead.get(pg)&&sheetRead.get(pg).kind==='loadmap')empty.push(pg);continue}
+    read.push(pg);nTags+=res.nTags||0;
+    for(const pl0 of res.plans){
+      // a fresh copy per review: the cache stays as read
+      const pl={...pl0,fills:pl0.fills.map(f=>({...f,polygon:f.polygon.map(q=>({x:q.x,y:q.y})),bPoly:f.bPoly?f.bPoly.map(q=>({x:q.x,y:q.y})):f.bPoly,accepted:false,edited:false}))};
+      pl.page=pg;
+      // the zone the title states, if any ("LEVEL 2 LOADING PLAN - NORTH")
+      pl.zone=sheetZoneFromTitle(pl.title)||'';
+      pl.unsure=pl.levelIdx<0||!pl.token;
+      plans.push(pl);
+    }
+    for(const f of res.failed||[])failed.push({...f,page:pg});
+  }
+  return {pages,plans,failed,read,empty,nTags};
+}
+function traceGuard(){
+  if(!state.pdf.doc){toast('Load the drawing set first.');return false}
+  if(scheduleShape()==='none'){toast('Read the load schedule first — the tags are matched against it.',3600);return false}
+  if(!state.levels.length){toast('Add your levels first (Building step).');return false}
+  return true;
+}
+// The all-floors pass: every load map, one review grouped by floor (LOD-07),
+// now behind "or do it by hand" on the Loading tab.
+async function startAutoTrace(){
+  if(!traceGuard())return;
+  const btn=document.getElementById('btnAutoTrace');
+  const was=btn?btn.textContent:null;
+  let T;
+  try{T=await tracedLoadMaps((i,n)=>{if(btn){btn.disabled=true;btn.textContent=`Tracing load map ${i+1} of ${n}…`}})}
+  finally{if(btn){btn.disabled=false;btn.textContent=was}}
+  const {pages,plans,failed,read,empty,nTags}=T;
   if(!plans.length){toast(`No load-map tags found on ${pages.length>1?'any of the '+pages.length+' load-map sheets':'sheet '+pages[0]}. Flip to a sheet with a load map and try again.`,4800);return}
-  autoTrace={pages:read,page:read.includes(state.pdf.current)?state.pdf.current:read[0],plans,failed,nTags,empty};
+  autoTrace={pages:read,page:read.includes(state.pdf.current)?state.pdf.current:read[0],plans,failed,nTags,empty,
+             returnPage:state.pdf.current,returnLevelIdx:state.activeLevelIdx};
   for(const pl of plans)for(const f of pl.fills)f.accepted=!f.untagged;
   state.activeZoneIdx=null;state.ui.vertexIdx=null;
   if(!read.includes(state.pdf.current))await goToPage(read[0]);
@@ -20927,13 +21006,213 @@ async function startAutoTrace(){
   renderPageBar();renderSidebar();renderCanvas();
   if(plans.some(p=>p.match&&p.match.defined))toast('The building grid was defined from a load map\'s bubbles.',3000);
 }
-function cancelAutoTrace(){autoTrace=null;state.activeZoneIdx=null;state.ui.vertexIdx=null;renderAutoTracePanel();renderPageBar();renderSidebar();renderCanvas()}
+// ── TRACE THIS FLOOR'S LOAD MAP (ARE-12) ──
+// Adolfo, Sep 21 2026: the trace belongs on the Loading tab, replacing the
+// slab-only "detect again"; it takes you to the floor's load map, asks you to
+// confirm the shapes one by one, then brings you back to the sheet you were
+// on. Same queue as the beam scan: Accept / Accept & adjust / Skip / Accept
+// all remaining; nothing is written until the end.
+async function startFloorTrace(li,opts){
+  opts=opts||{};
+  if(!traceGuard())return;
+  if(li==null||li<0||!state.levels[li]){toast('Pick a floor first.');return}
+  const lv=state.levels[li];
+  const btn=document.getElementById('btnTraceFloor');
+  const was=btn?btn.textContent:null;
+  let T;
+  try{T=await tracedLoadMaps((i,n)=>{if(btn){btn.disabled=true;btn.textContent=`Reading load map ${i+1} of ${n}…`}})}
+  finally{if(btn){btn.disabled=false;btn.textContent=was}}
+  let plans=T.plans.filter(pl=>pl.levelIdx===li);
+  if(!plans.length){
+    if(!T.plans.length){toast(`No load-map tags found on ${T.pages.length>1?'any of the '+T.pages.length+' load-map sheets':'sheet '+T.pages[0]}.`,4800);return}
+    if(opts.quiet)return;
+    // no map names this floor: offer the floor's own pick from every plan read
+    toast(`No load map is titled for ${lv.name} — every load map is offered; set the floor on each plan.`,5200);
+    plans=T.plans;
+  }
+  const pages=[...new Set(plans.map(pl=>pl.page))];
+  autoTrace={pages,page:pages[0],plans,failed:T.failed.filter(f=>pages.includes(f.page)),nTags:T.nTags,empty:[],
+             queue:true,floorIdx:li,returnPage:state.pdf.current,returnLevelIdx:state.activeLevelIdx,cur:null,adjusting:false};
+  for(const pl of plans)for(const f of pl.fills){f.accepted=false;f.queued=null}
+  state.activeZoneIdx=null;state.ui.vertexIdx=null;
+  setLayer('loading');
+  await traceShow(traceCurrent());
+  renderAutoTracePanel();renderPageBar();renderSidebar();renderCanvas();
+}
+// the fills still to decide, plan by plan, in drawing order
+function traceQueue(){
+  const R=autoTrace;if(!R||!R.queue)return [];
+  const out=[];
+  R.plans.forEach((pl,pi)=>pl.fills.forEach((f,fi)=>{if(f.queued==null)out.push({pl,pi,f,fi})}));
+  return out;
+}
+function traceCurrent(){
+  const R=autoTrace;if(!R||!R.queue)return null;
+  const q=traceQueue();
+  if(!q.length){R.cur=null;return null}
+  if(R.cur&&q.some(x=>x.f===R.cur.f))return q.find(x=>x.f===R.cur.f);
+  R.cur=q[0];return q[0];
+}
+async function traceShow(item){
+  const R=autoTrace;if(!R||!item)return;
+  R.cur=item;
+  if(item.pl.page!=null&&item.pl.page!==state.pdf.current){await goToPage(item.pl.page);if(!autoTrace)return;R.page=item.pl.page;autoTraceInvalidate()}
+  state.activeZoneIdx=null;state.ui.vertexIdx=null;
+  zoomToPolygon(item.f.polygon);
+  renderAutoTracePanel();renderPageBar();renderSidebar();renderCanvas();
+}
+function traceAdvance(){
+  const R=autoTrace;if(!R)return;
+  R.adjusting=false;state.activeZoneIdx=null;state.ui.vertexIdx=null;
+  if(typeof renderStepFoot==='function')renderStepFoot();
+  const it=traceCurrent();
+  if(it)traceShow(it);else{renderAutoTracePanel();renderCanvas()}
+}
+function traceAccept(adjust){
+  const R=autoTrace,it=traceCurrent();if(!R||!it)return;
+  if(it.f.untagged&&!it.f.pick){toast('Pick a code for this area first, or skip it.',3200);return}
+  it.f.accepted=true;it.f.queued='acc';
+  if(adjust){
+    // the traced outline is live on the load map: its corners drag, Shift+click removes one
+    R.adjusting=true;
+    const idx=autoTraceFillList().indexOf(it.f);
+    if(idx>=0){state.activeZoneIdx=idx;state.ui.vertexIdx=null}
+    setTool('select');
+    renderAutoTracePanel();renderSidebar();renderCanvas();
+    if(typeof renderStepFoot==='function')renderStepFoot();
+    return;
+  }
+  traceAdvance();
+}
+function traceSkip(){
+  const it=traceCurrent();if(!it)return;
+  it.f.accepted=false;it.f.queued='skip';
+  traceAdvance();
+}
+function traceBack(){
+  const R=autoTrace;if(!R)return;
+  const done=[];R.plans.forEach(pl=>pl.fills.forEach(f=>{if(f.queued==='skip')done.push(f)}));
+  if(!done.length)return;
+  const f=done[done.length-1];f.queued=null;f.accepted=false;
+  R.cur=null;
+  const q=traceQueue();const it=q.find(x=>x.f===f);
+  if(it)traceShow(it);
+}
+function traceAcceptAll(){
+  const R=autoTrace;if(!R)return;
+  for(const x of traceQueue())if(!x.f.untagged||x.f.pick){x.f.accepted=true;x.f.queued='acc'}
+  traceAdvance();
+}
+// back to the sheet the trace was started from
+async function traceReturn(R){
+  if(!R)return;
+  if(R.returnLevelIdx!=null&&state.levels[R.returnLevelIdx])state.activeLevelIdx=R.returnLevelIdx;
+  else if(R.floorIdx!=null&&state.levels[R.floorIdx])state.activeLevelIdx=R.floorIdx;
+  if(R.returnPage!=null&&R.returnPage!==state.pdf.current&&state.pdf.pages){try{await goToPage(R.returnPage)}catch(e){}}
+  setLayer('loading');
+  renderPageBar();renderSidebar();renderCanvas();
+}
+function cancelAutoTrace(){
+  const R=autoTrace;
+  autoTrace=null;state.activeZoneIdx=null;state.ui.vertexIdx=null;
+  renderAutoTracePanel();renderPageBar();renderSidebar();renderCanvas();
+  if(R&&R.returnPage!=null)traceReturn(R);
+}
 
+function traceQueueHtml(){
+  const R=autoTrace,q=traceQueue(),it=traceCurrent();
+  const lv=state.levels[R.floorIdx]||{};
+  const nAcc=R.plans.reduce((n,p)=>n+p.fills.filter(f=>f.queued==='acc').length,0);
+  const nSkip=R.plans.reduce((n,p)=>n+p.fills.filter(f=>f.queued==='skip').length,0);
+  const total=R.plans.reduce((n,p)=>n+p.fills.length,0);
+  const back=R.returnPage!=null?`sheet ${R.returnPage}`:'your sheet';
+  const listBtn=`<button type="button" class="btn btn-sm" id="atList" title="Every traced area as a list with tick boxes">List</button>`;
+  if(!it&&!R.adjusting){
+    return `<div class="mp-panel sq-panel">
+      <div class="mp-head"><span class="sq-type">Load map read</span>${pillHtml('read',`${esc(lv.name||'')}`)}
+        <span class="lm-dim">${nAcc} of ${total} accepted${nSkip?` · ${nSkip} skipped`:''} &middot; nothing is written until you add them</span></div>
+      <div class="mp-actions sq-acts">
+        <button type="button" class="btn btn-sm btn-primary" id="atAccept"${nAcc?'':' disabled'} title="Write the accepted areas onto ${esc(lv.name||'the floor')}'s sheets and go back to ${esc(back)}">Add ${nAcc} loading area${nAcc===1?'':'s'} &amp; back to ${esc(back)}</button>
+        ${nSkip?`<button type="button" class="btn btn-sm" id="atBack" title="Back to the last one skipped">◂ Back</button>`:''}
+        <span class="sq-gap"></span>${listBtn}
+        <button type="button" class="btn btn-sm" id="atCancel" title="Add nothing and go back to ${esc(back)}">Cancel</button></div></div>`;
+  }
+  const shown=R.adjusting&&R.cur?R.cur:it;
+  const pl=shown.pl,f=shown.f,pi=shown.pi,fi=shown.fi;
+  const pos=total-q.length+(R.adjusting?0:1);
+  const lvOpts=(sel)=>`<option value="-1"${sel<0?' selected':''}>— which floor? —</option>`+state.levels.map((l,i)=>`<option value="${i}"${i===sel?' selected':''}>${esc(isRange(l)?rangeLabel(l):l.name)}</option>`).join('');
+  const zOpts=(pl)=>{
+    const lv2=state.levels[pl.levelIdx];
+    const zs=lv2?levelSheets(lv2).map(x=>sheetZoneName(lv2,x.page)).filter(Boolean):[];
+    const all=[...new Set([...zs,...projectZones(),...(pl.zone?[pl.zone]:[])])];
+    return `<option value=""${pl.zone?'':' selected'}>by position</option>`+all.map(z=>`<option value="${esc(z)}"${z.toLowerCase()===String(pl.zone||'').toLowerCase()&&pl.zone?' selected':''}>${esc(z)}</option>`).join('');
+  };
+  const planCard=`<div class="at-plan sq-plan${pl.unsure?' at-unsure':''}" data-atpl="${pi}">
+      <div class="at-plan-head"><span class="at-title">${esc(pl.title)}</span><span class="lm-dim">sheet ${pl.page}</span>
+        ${pl.unsure?`<span class="st-unsure" title="The title did not name a floor the job knows — pick it">check</span>`:''}
+        <select class="at-level" data-pi="${pi}" title="The floor this load map is for">${lvOpts(pl.levelIdx)}</select>
+        <select class="at-zone" data-pi="${pi}" title="Which sheet of the floor takes these areas">${zOpts(pl)}</select></div>
+      <div class="at-match ${pl.match.ok?'ok':'bad'}">${pl.match.ok
+        ?`${pl.match.manual?'matched from clicked crossings':`matched from ${pl.match.nBubbles} grid bubbles`} · 1" = ${pl.match.fit.ftPerInch.toFixed(1)}' · ±${(pl.match.fit.rmsFt*12).toFixed(1)}"`
+        :`not matched: ${esc(pl.match.reason)} — <button class="btn btn-sm" data-atmatch="${pi}">Match this plan by clicking</button>`}</div></div>`;
+  const acts=`<div class="mp-actions sq-acts">
+      ${R.adjusting
+        ?`<button type="button" class="btn btn-sm btn-primary" id="atNext" title="Done adjusting — on to the next area (Enter)">Done — next area ▸</button>`
+        :`<button type="button" class="btn btn-sm btn-primary" id="atAcc" title="Keep this area and move on (Enter)">Accept</button>
+           <button type="button" class="btn btn-sm" id="atAdj" title="Keep it and drag its corners on the load map before moving on (A)">Accept &amp; adjust</button>
+           <button type="button" class="btn btn-sm" id="atSkip" title="Leave this one out and move on (N)">Skip</button>`}
+      <span class="sq-gap"></span>
+      ${!R.adjusting&&q.length>1?`<button type="button" class="btn btn-sm" id="atAll" title="Accept every remaining tagged area on this load map">Accept all ${q.filter(x=>!x.f.untagged||x.f.pick).length}</button>`:''}
+      ${!R.adjusting&&nSkip?`<button type="button" class="btn btn-sm" id="atBack" title="Back to the last one skipped">◂ Back</button>`:''}
+      ${!R.adjusting?listBtn:''}
+      <button type="button" class="btn btn-sm" id="atCancel" title="Add nothing and go back to ${esc(back)}">Cancel</button></div>`;
+  return `<div class="mp-panel sq-panel">
+    <div class="mp-head"><span class="sq-type">${R.adjusting?'Adjusting':'Loading areas'}</span>
+      ${R.adjusting?'':`<span class="sq-count">${pos} of ${total}</span>`}
+      ${pillHtml('read',`${esc(lv.name||'')} load map · sheet ${pl.page}`)}
+      <span class="lm-dim">${q.length} to review${nAcc?` · ${nAcc} accepted`:''} &middot; nothing is written until you add them</span></div>
+    ${planCard}
+    <div class="sq-card${f.untagged&&!f.pick?' v-warn':''}${R.adjusting?' adj':''}">
+      <div class="sq-name">${R.adjusting?pillHtml('ok','accepted')+' ':''}<span class="lm-swatch" style="background:${zoneColor(fi,0.85)}"></span>
+        ${f.untagged?`<select class="at-code" data-pi="${pi}" data-fi="${fi}" title="No tag was found in this area — pick its load">${codeOptionsHtml(f.pick)}</select>`:`<b>${esc(f.code)}</b>`}
+        <span class="lm-dim">${f.capacity!=null?f.capacity+' PSF':(f.untagged?'untagged area':'')}${f.areaSF!=null?' · '+fmtArea(f.areaSF):''}${f.viaLeader?' · via leader':''}${f.edited?' · edited':''}</span></div>
+      <div class="mp-why">${R.adjusting?'Drag its corners on the load map; Shift+click removes one. Then <b>Done — next area</b>.':(f.untagged?'No load tag sits inside this outline — pick the code it should carry, or skip it.':'Traced round the outline drawn around this tag.')}</div>
+    </div>
+    ${acts}
+    <div class="sq-keys lm-dim">${R.adjusting?'Enter moves to the next area':'Enter accepts &middot; A accepts and adjusts &middot; N skips'}</div></div>`;
+}
+function bindTraceQueue(host){
+  const R=autoTrace;
+  const on=(id,fn)=>{const b=host.querySelector('#'+id);if(b)b.addEventListener('click',fn)};
+  on('atAcc',()=>traceAccept(false));on('atAdj',()=>traceAccept(true));on('atSkip',traceSkip);on('atNext',traceAdvance);
+  on('atBack',traceBack);on('atAll',traceAcceptAll);on('atAccept',acceptAutoTrace);on('atCancel',cancelAutoTrace);
+  on('atList',()=>{R.queue=false;R.plans.forEach(pl=>pl.fills.forEach(f=>{if(f.queued==null)f.accepted=!f.untagged}));renderAutoTracePanel();renderCanvas()});
+  host.querySelectorAll('.at-level').forEach(sel=>sel.addEventListener('change',()=>{const pl=R.plans[+sel.dataset.pi];pl.levelIdx=+sel.value;pl.unsure=pl.levelIdx<0;renderAutoTracePanel()}));
+  host.querySelectorAll('.at-zone').forEach(sel=>sel.addEventListener('change',()=>{R.plans[+sel.dataset.pi].zone=sel.value}));
+  host.querySelectorAll('.at-code').forEach(sel=>sel.addEventListener('change',()=>{
+    const f=R.plans[+sel.dataset.pi].fills[+sel.dataset.fi];
+    const info=tagCodeInfo(sel.value);
+    f.pick=sel.value;
+    if(info){Object.assign(f,info);f.code=info.code}else{f.code='?';f.capacity=null;f.llMark=f.sdlMark=f.mark=undefined}
+    renderAutoTracePanel();renderCanvas();
+  }));
+  host.querySelectorAll('button[data-atmatch]').forEach(b=>b.addEventListener('click',()=>startPlanMatch(+b.dataset.atmatch)));
+}
+function traceKeys(e){
+  const R=autoTrace;
+  if(!R||!R.queue||typeof curStep==='undefined'||groupOf(curStep).id!=='areas')return false;
+  if(!traceCurrent()&&!R.adjusting)return false;
+  if(e.key==='Enter'){e.preventDefault();R.adjusting?traceAdvance():traceAccept(false);return true}
+  if(!R.adjusting&&(e.key==='a'||e.key==='A')){e.preventDefault();traceAccept(true);return true}
+  if(!R.adjusting&&(e.key==='n'||e.key==='N')){e.preventDefault();traceSkip();return true}
+  return false;
+}
 function renderAutoTracePanel(){
   const host=document.getElementById('autoTracePanel');
   if(!host)return;
   if(!autoTrace){host.style.display='none';host.innerHTML='';return}
   host.style.display='';
+  if(autoTrace.queue){host.innerHTML=traceQueueHtml();bindTraceQueue(host);return}
   const R=autoTrace;
   const pages=R.pages||[R.page];
   const lvOpts=(sel)=>`<option value="-1"${sel<0?' selected':''}>— which floor? —</option>`+state.levels.map((l,i)=>`<option value="${i}"${i===sel?' selected':''}>${esc(isRange(l)?rangeLabel(l):l.name)}</option>`).join('');
@@ -21072,7 +21351,9 @@ async function acceptAutoTrace(){
   toast(`${added} loading area${added===1?'':'s'} added${pending?` — ${pending} will appear once their floor sheets are matched`:''}`
     +(split?` · ${split} cross${split===1?'es':''} between zone sheets and ${split===1?'is':'are'} drawn on each`:'')
     +(offSheet?` · ${offSheet} left out: not on any sheet of ${[...offNames].join(', ')}`:'')
-    +`. Open Areas to check and adjust them.`,6200);
+    +(R.returnPage!=null?`. Back on your sheet — they are in the Loading list.`:`. Open Areas to check and adjust them.`),6200);
+  // ARE-12: back to the sheet the trace was started from
+  if(R.returnPage!=null)await traceReturn(R);
 }
 
 // Manual match of a key plan (two clicks, like a floor) when bubbles fail.
@@ -21108,9 +21389,31 @@ function polyCentroid(poly){let x=0,y=0;for(const p of poly){x+=p.x;y+=p.y}retur
 function drawAutoTraceOverlay(zoom,F_MONO){
   const R=autoTrace;
   if(!R||!autoTraceOn(state.pdf.current))return;
+  const curF=R.queue&&R.cur?R.cur.f:null;
   R.plans.filter(pl=>pl.page==null||pl.page===state.pdf.current).forEach(pl=>pl.fills.forEach((f,fi)=>{
     const poly=f.polygon;if(!poly||poly.length<3)return;
     drawCtx.beginPath();drawCtx.moveTo(poly[0].x,poly[0].y);for(let i=1;i<poly.length;i++)drawCtx.lineTo(poly[i].x,poly[i].y);drawCtx.closePath();
+    if(R.queue&&f===curF){
+      // the one under review glows (ARE-12), the rest wait in quiet grey
+      drawCtx.fillStyle=selectRgba(.16);drawCtx.fill();
+      const path=new Path2D();path.moveTo(poly[0].x,poly[0].y);for(let i=1;i<poly.length;i++)path.lineTo(poly[i].x,poly[i].y);path.closePath();
+      glowStroke(drawCtx,path,zoom,2);
+      if(R.adjusting)poly.forEach(pt=>{drawCtx.fillStyle=selectRgba(.9);drawCtx.fillRect(pt.x-3/zoom,pt.y-3/zoom,6/zoom,6/zoom)});
+      const c=polyCentroid(poly);
+      drawCtx.font=`700 ${Math.max(11,13/zoom)}px ${cssVar('--font-display')||F_MONO}`;
+      drawCtx.textAlign='center';drawCtx.textBaseline='middle';
+      drawCtx.lineWidth=4/zoom;drawCtx.strokeStyle='rgba(255,255,255,.92)';
+      const t=String(f.code||'?')+(f.areaSF!=null?` · ${fmtArea(f.areaSF)}`:'');
+      drawCtx.strokeText(t,c.x,c.y+16/zoom);drawCtx.fillStyle=selectRgba(1);drawCtx.fillText(t,c.x,c.y+16/zoom);
+      return;
+    }
+    if(R.queue){
+      drawCtx.fillStyle=f.queued==='acc'?zoneColor(fi,0.22):f.queued==='skip'?'rgba(120,120,120,.05)':'rgba(120,120,120,.10)';
+      drawCtx.fill();
+      drawCtx.strokeStyle=f.queued==='acc'?zoneColor(fi,0.85):f.queued==='skip'?'rgba(110,110,110,.35)':'rgba(110,110,110,.6)';
+      drawCtx.lineWidth=1.2/zoom;drawCtx.setLineDash(f.queued==='acc'?[]:[6/zoom,4/zoom]);drawCtx.stroke();drawCtx.setLineDash([]);
+      return;
+    }
     drawCtx.fillStyle=f.accepted?zoneColor(fi,0.32):'rgba(120,120,120,.12)';
     drawCtx.fill();
     const sel=autoTraceEditing()&&getActiveZone()===f;
