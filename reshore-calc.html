@@ -8756,10 +8756,34 @@ function labelsInBubbles(items,pageNum){
   });
   return{list:out,verified:true};
 }
+// BLD-17. A CONTAMINATED BAND BELONGS TO THE KIND THAT DOMINATES IT.
+//
+// A band is a run of bubbles sharing a baseline, and it should be all
+// letters or all numbers. A mixed one used to be thrown away WHOLE — and on
+// a plan drawn at an angle, which is every Kalae podium sheet, the letter
+// bubbles run diagonally, so one of them lands within the cluster tolerance
+// of the row of numbers. Sheet 1's eight column bubbles at y=413 went in the
+// bin because a single "B" sat at y=391. Four of his ten podium sheets read
+// ZERO column bubbles that way and had to be matched by hand.
+//
+// So a mixed band is not discarded, it is resolved: the kind with more
+// distinct labels is the band, the other kind is the stray that wandered in.
+// A band that is genuinely half and half has nothing to say and still goes.
+// (Dropping the homogeneity test entirely was tried first and was worse — it
+// let a pair of stray letters on the test set into the grid as row lines 65
+// ft beyond the building.)
 function gridBubbleBands(items,pageNum){
   const lb=labelsInBubbles(items,pageNum);
   const cands=lb.list;
-  const homogeneous=g=>{const n=g.items.filter(i=>/^\d/.test(i.s.trim())).length;return n===0||n===g.items.length};
+  const isNum=i=>/^\d/.test(i.s.trim());
+  const minDistinct=lb.verified?2:3;
+  const resolve=g=>{
+    const num=g.items.filter(isNum),let_=g.items.filter(i=>!isNum(i));
+    if(!num.length||!let_.length)return g;
+    const dn=new Set(num.map(i=>i.s.trim())).size,dl=new Set(let_.map(i=>i.s.trim())).size;
+    if(dn===dl)return null;
+    return{...g,items:dn>dl?num:let_};
+  };
   const cluster=(key,tol)=>{
     const groups=[];
     for(const c of cands){
@@ -8767,8 +8791,7 @@ function gridBubbleBands(items,pageNum){
       if(!g){g={k:c[key],items:[]};groups.push(g)}
       g.items.push(c);g.k=(g.k*(g.items.length-1)+c[key])/g.items.length;
     }
-    // a real bubble band has several DISTINCT labels, all letters or all numbers
-    return groups.filter(g=>new Set(g.items.map(i=>i.s.trim())).size>=(lb.verified?2:3)&&homogeneous(g));
+    return groups.map(resolve).filter(g=>g&&new Set(g.items.map(i=>i.s.trim())).size>=minDistinct);
   };
   return{cols:cluster('y',22),rows:cluster('x',22),verified:lb.verified};
 }

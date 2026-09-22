@@ -98,6 +98,7 @@ the system; this file holds the rules and is versioned with the code.
 | BLD-11 | A level may hold several sheets as named zones, one zone per sheet, with the grid running continuously across the split. Zones are names only for now. | Sep 10, Sep 17 |
 | BLD-15 | A sheet that states its floor once, in a strip under the drawing title ("T.O.S. 9'-3" · typical slab 5" · SLAB ON GRADE"), is read. It is a SEPARATE channel from the T/SLAB - B/SLAB callouts: it fills only what they left empty, never overrides them, and never feeds the plan-vs-section test. One figure for the whole sheet or none — a set calling out an absolute T.O.S. per bay is the callout channel's job. | Sep 22 |
 | BLD-16 | A title that names its level names it in FULL: "LEVEL MECH ROOF FLOOR PLAN" is MECH ROOF, not Roof. An explicit "LEVEL &lt;name&gt; … PLAN" beats the ROOF / PENTHOUSE / MEZZANINE shortcuts, which are for a sheet titled only "ROOF PLAN"; the designation stops at the words naming the kind of plan. | Sep 22 |
+| BLD-17 | Number bubbles and letter bubbles are banded SEPARATELY. Clustered together, a band that came out mixed was discarded whole — and on a plan drawn at an angle one diagonal letter bubble lands in the row of numbers, so four of the ten Kalae podium sheets read zero column bubbles. Banding each kind on its own says what the homogeneity test meant without one stray bubble costing the band it strayed into. | Sep 22 |
 
 ## LOD — Loads
 
