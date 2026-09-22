@@ -1,4 +1,4 @@
-// @rules RES-01, RES-05, RES-06, RES-07, RES-08, RGN-09, RGN-10, BEM-01, BEM-05  (see DECISIONS.md)
+// @rules RES-01, RES-05, RES-06, RES-10, RES-07, RES-08, RGN-09, RGN-10, BEM-01, BEM-05  (see DECISIONS.md)
 // The rebuilt Results step (Sep 10, 2026).
 //
 //  A. the plan and the schedule side by side, with a draggable, remembered
@@ -269,11 +269,11 @@ const picked = await page.evaluate(() => ({
   label: state.ui.highlight && state.ui.highlight.label,
   lit: document.querySelectorAll('#schedBody .sched-region.lit').length,
   litName: document.querySelector('#schedBody .sched-region.lit b') && document.querySelector('#schedBody .sched-region.lit b').textContent.trim(),
-  ants: typeof antsRAF !== 'undefined' && antsRAF != null,
+  ants: antsWanted(),
 }));
 ok(picked.key === at.key, 'a click on the plan picks the region under it: ' + picked.label + ' vs ' + at.label);
 ok(picked.lit === 1 && picked.litName === at.label, 'exactly that region lights up in the schedule: ' + picked.litName);
-ok(picked.ants, 'and the marching ants are running');
+ok(picked.ants, 'and the glow is on the plan (RES-10)');
 // a click on bare sheet, away from the placement, clears the pick
 const away = await page.evaluate(() => {
   // clear of the zoom bar (bottom left) and the coordinate readout (bottom right)

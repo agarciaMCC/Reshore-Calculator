@@ -112,7 +112,7 @@ const C = await page.evaluate(() => {
   const okAll = document.getElementById('stOkAll'); if (okAll) okAll.click();
   return { zopts, unsure, st0, pg, other, changed, unsureAfter: sheetUnsure().length,
     st1: stepStatus('sheets'), rows: host.querySelectorAll('.st-row').length, edgeCol: host.querySelectorAll('button[data-stedge]').length,
-    next: (() => { renderSheetTable(); const b = document.getElementById('stNext'); return b ? { there: true, disabled: b.disabled, text: b.textContent } : { there: false }; })() };
+    next: (() => { renderSheetTable(); renderStepFoot(); const b = document.querySelector('#stepFoot #stepNext, #stepFoot #stepGo'); return b ? { there: true, disabled: b.disabled, text: b.textContent, inPanel: !!document.getElementById('stNext') } : { there: false }; })() };
 });
 ok(C.zopts[0] === '' && C.zopts.includes('North') && C.zopts.includes('South') && C.zopts.includes('__new'),
   'the zone is a picker: Whole floor, the job\'s zones, add a zone: ' + JSON.stringify(C.zopts));
@@ -120,8 +120,9 @@ ok(C.changed === C.other, 'picking a zone writes it to the sheet: ' + C.changed)
 ok(C.unsure > 0 || C.st0.done, 'doubtful rows arrive flagged (or nothing was doubtful): ' + C.unsure);
 ok(C.unsureAfter === 0, '"All look right" clears the flags');
 ok(C.edgeCol === 0, 'no edge column on the Sheets table — the edge is the next step\'s business');
-ok(C.next.there && /Floor edge/.test(C.next.text), 'the table ends in a Next: Floor edge button: ' + JSON.stringify(C.next));
-ok(C.next.disabled === !C.st1.done, 'enabled exactly when the sheets are done: ' + JSON.stringify([C.next.disabled, C.st1]));
+// UI-26 (Sep 21 2026): the one Next bar at the foot of the pane is the way on — a Go to Floor edge once the sheets are done, a waiting Next while they are not; no second Next inside the table
+ok(C.next.there && !C.next.inPanel, 'the way forward is the foot bar, not a button inside the table: ' + JSON.stringify(C.next));
+ok(C.st1.done ? /Floor edge|Next/.test(C.next.text) && !C.next.disabled : C.next.disabled, 'it moves on exactly when the sheets are done: ' + JSON.stringify([C.next.text, C.next.disabled, C.st1]));
 console.log('   sheets status: ' + JSON.stringify(C.st1));
 
 // ── D. the floor edge ─────────────────────────────────────────────────────

@@ -80,14 +80,14 @@ const B = await page.evaluate(async () => {
   const T = screenTransform(lv);
   const inside = T && e.bb ? (() => { const a = buildingToPixel(e.bb.minX, e.bb.minY, T); return !!a })() : false;
   return { fl, pattern: e.pattern, before, page: state.pdf.current, onFloorSheet: levelHasPage(lv, state.pdf.current), active: state.levels[state.activeLevelIdx].name,
-    key: h && h.regionKey, label: h && h.label, cells: h && h.cells.length / 2, ants: antsRAF != null, lit, fills, inside, step: curStep };
+    key: h && h.regionKey, label: h && h.label, cells: h && h.cells.length / 2, ants: antsWanted(), lit, fills, inside, step: curStep };
 });
 console.log('   ' + JSON.stringify(B));
 ok(B.key === `tighten:${B.fl}|0`, 'the highlight is the tighter patch: ' + B.key);
 ok(/^tighten to \d+×\d+ under /.test(B.label || ''), 'labelled for what it is: ' + B.label);
 ok(B.onFloorSheet && B.active === B.fl, `the plan is on the sheet of the floor it sits under (${B.fl}, sheet ${B.page})`);
 ok(B.fills > 0 && B.inside, 'the patch is painted on that sheet');
-ok(B.ants, 'with the marching outline running');
+ok(B.ants, 'with the glow on the plan');
 // the same floor is spelt out twice on the tab (in the placement row and in
 // "each floor's reshoring"), so its patch lights in both places
 ok(B.lit.length >= 1 && new Set(B.lit).size === 1, 'and the button you pressed is lit wherever that patch is listed: ' + JSON.stringify(B.lit));

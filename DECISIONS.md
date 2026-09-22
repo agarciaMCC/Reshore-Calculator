@@ -136,10 +136,11 @@ the system; this file holds the rules and is versioned with the code.
 | RES-03 | The "pick a shore" chip must stand out from the other chips. | Sep 18 |
 | RES-04 | On a floor split across zones, results are split by zone. | Sep 17 |
 | RES-05 | Clicking a result shows only the areas in question; irrelevant shapes are hidden. The pour floor's own loading areas do not show; the reshore-under floors' do, with the pour region as the overlay. | Sep 9 |
-| RES-06 | The selected region highlight is GREEN with marching ants, independent of which Areas layer was last on, and the selected slab area shows over the carrying floor's loading area. | Sep 8, Sep 9 |
+| RES-06 | The selected region highlight is independent of which Areas layer was last on, and the selected slab area shows over the carrying floor's loading area. (Colour and motion: see RES-10.) | Sep 8, Sep 9 |
 | RES-07 | "Nothing to shore against" is not a block of its own: a count in the summary head and the reason on the region rows. | Sep 17 |
 | RES-08 | A shore-height alert names the floor, region and height, and the line clicks onto the plan. No taller-shore suggestion, no inline catalog link, no permanent warning hatch. | Sep 10 |
 | RES-09 | Region titles carry no pour-slab loading mark; each reshore row carries the CARRYING floor's mark. | Sep |
+| RES-10 | The selected region is a TEAL GLOW on its outline with a light tint inside — no dashes, nothing animated — so the drawing under the edge stays readable. While one region is selected the others step back. The same teal marks the lit row in the schedule. | Sep 21 |
 | RES-10 | Print refuses results that no longer match the inputs. | Sep 15 |
 
 ## SEQ — Sequence
@@ -183,6 +184,9 @@ the system; this file holds the rules and is versioned with the code.
 | UI-21 | The floor-edge candidates are drawn on the sheet, numbered and colour-matched to their rows in the pane. Hovering a row or an outline lights it; a click on the plan picks that outline and a second click on the picked one uses it; ← → cycle and Enter uses the one on screen. While they are up the plan is the picker — nothing else on the canvas hovers — and a click on bare sheet writes nothing. | Sep 21 |
 | UI-22 | The Floor edge step is ONE list — a row per plan sheet, no second review panel. A read that has not been written sits on the sheet it came from, saying what it found and, where that sheet already has an edge, what it would change (area either side, how far the outline moves, how many drawn areas would fall outside it), with Show · Use this · Pick from the sheet · Keep current. Nothing is written until Use. The top action is Confirm all N drawn while anything is drawn, and Use all N read / proposed only when nothing is. | Sep 21 |
 | UI-23 | A pass that reads every sheet says where it is in its own step's primary slot — "Reading sheet 3 of 6 for its grid bubbles…" — never only on a button folded away inside "or do it by hand". Applies to the arrival match pass and the floor-edge sweep. | Sep 21 |
+| UI-24 | ONE TYPE SCALE: four sizes (18 / 14 / 12.5 / 11 px as `--fs-xl/lg/md/sm`) and nothing else. Importance is carried by weight, colour and position, never a fifth size. Every state is a PILL in one vocabulary — amber "needs you", green "done", grey "read, unconfirmed", dashed "cannot start yet" — on section heads, rail rows, tabs and cards. | Sep 21 |
+| UI-25 | THE RAIL IS A CHECKLIST: the four steps, and under the current step every section with its own state and one-line status, each clickable. A step with sections is summed up as "n of m done"; a one-section step says its own status. | Sep 21 |
+| UI-26 | ONE NEXT BAR, same place on every step: the left names what this step still wants ("Now: 5 sheets still to place") with the section it lives in; the right is the one way forward — "Go to <section>" while a section other than the one in focus wants something, "Next: <step>" once nothing here does. | Sep 21 |
 | UI-14 | PDF fidelity: device-pixel-ratio-correct canvases, no PNG round trip, the visible patch re-rendered at on-screen magnification, auto-trace and floor-edge raster at 144 DPI. | Sep 9 |
 
 ## BRD — Brand
@@ -245,6 +249,7 @@ the system; this file holds the rules and is versioned with the code.
 | Seven steps in the rail | BLD-01 | Sep 15 |
 | One-shot sheet review panel, edge column on the Sheets step | BLD-04 | Sep 17 |
 | Orange selected-region highlight | RES-06 | Sep 8 |
+| Green selected-region highlight with marching ants | RES-10 | Sep 21 |
 | "Start a combined chart / Start split schedules" asked cold on an empty Loads step | LOD-01 | Sep 21 |
 | Typical capacity editable on the Levels row, the level modal and the Areas typical row | LOD-08 | Sep 21 |
 | The level modal (double-click a level / …) | UI-19 | Sep 21 |

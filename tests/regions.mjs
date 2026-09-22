@@ -1,4 +1,4 @@
-// @rules RGN-06, RES-05  (see DECISIONS.md)
+// @rules RGN-06, RES-05, RES-10  (see DECISIONS.md)
 // The Results plan: a region is painted as the outline it was sampled from,
 // not as the sample grid, and only the shapes that decided its answer stay on
 // screen while it is up. Run against Adolfo's own Bothell job.
@@ -246,43 +246,50 @@ ok(drawn.lower.loading < drawn.lower.totalLoading, 'and only that one: ' + drawn
 ok(drawn.pourAreas.loading === drawn.pourAreas.totalLoading,
    'on the Areas step the pour draws all of them again: ' + drawn.pourAreas.loading + ' of ' + drawn.pourAreas.totalLoading);
 
-// ── G. marching ants ────────────────────────────────────────────────────
-console.log('G. the selected region marches');
-const ants = await page.evaluate(async () => {
+// ── G. the selection glows, nothing marches ─────────────────────────────
+// RES-10 (Adolfo, Sep 21 2026): dashes over the outline hid the drawing under
+// them; the selection is a teal glow and a light tint, nothing animates, and
+// the other regions step back while one is selected.
+console.log('G. the selected region glows; nothing marches');
+const glow = await page.evaluate(async () => {
   const L = schedSolve.levels[schedPourIdx];
   const r = L.solve.regions[0];
   const pourIdx = state.levels.findIndex(l => l.name === L.pour.name);
   setStep('results'); await goToPage(state.levels[pourIdx].pdfPage);
-  stopAnts();
-  const atRest = antsPhase;
+  const dashes = [], strokes = [], alphas = new Set();
+  const oDash = drawCtx.setLineDash, oStroke = drawCtx.stroke;
+  let inGlow = 0, glowCalls = 0;
+  const oGlow = glowStroke;
+  glowStroke = function () { glowCalls++; inGlow++; try { return oGlow.apply(this, arguments) } finally { inGlow-- } };
+  drawCtx.setLineDash = function (d) { if (d && d.length && inGlow) dashes.push(d.slice()); return oDash.apply(this, arguments) };
+  drawCtx.stroke = function () { if (inGlow) strokes.push(drawCtx.strokeStyle); return oStroke.apply(this, arguments) };
+  const oFill = drawCtx.fill;
+  drawCtx.fill = function () { alphas.add(drawCtx.globalAlpha); return oFill.apply(this, arguments) };
   setResultHighlight({ cells: r.cells, step: r.cellStep, bb: r.bb, label: 'R1', regionKey: r.key, pour: L.pour.name });
-  const started = antsRAF != null;
-  await new Promise(res => setTimeout(res, 400));
-  const moved = antsPhase;
-  // the boundary is actually dashed while it runs
-  const dashes = [];
-  const oDash = drawCtx.setLineDash;
-  drawCtx.setLineDash = function (d) { if (d && d.length) dashes.push(d.slice()); return oDash.apply(this, arguments) };
   renderNow();
-  drawCtx.setLineDash = oDash;
+  await new Promise(res => setTimeout(res, 300));
+  const running = antsRAF != null;
+  drawCtx.setLineDash = oDash; drawCtx.stroke = oStroke; drawCtx.fill = oFill; glowStroke = oGlow;
+  const teal = strokes.some(c => /14, ?143, ?150|#0e8f96|63, ?199, ?207|#3fc7cf/i.test(String(c)));
+  const green = strokes.some(c => /20, ?110, ?60|46, ?160, ?90/.test(String(c)));
   setResultHighlight(null);
-  const stopped = antsRAF == null;
-  await new Promise(res => setTimeout(res, 200));
-  return { atRest, started, moved, stopped, dashes: dashes.length, afterClear: antsPhase };
+  // the floor tab's region map dims the rest to 16%; on the Overview there is no map to dim
+  return { glowCalls, dashes: dashes.length, running, teal, green, dimmed: alphas.has(0.16) || !alphas.has(0.45), phase: antsPhase };
 });
-ok(ants.started, 'selecting a region starts the clock');
-ok(ants.moved > ants.atRest, 'and the dash offset advances: ' + ants.atRest + ' → ' + ants.moved);
-ok(ants.dashes >= 1, 'the boundary is stroked dashed: ' + ants.dashes + ' dashed strokes');
-ok(ants.stopped && ants.afterClear === 0, 'clearing the highlight stops it and resets the phase');
+ok(glow.glowCalls >= 1, 'the selected outline is drawn with the glow: ' + glow.glowCalls + ' strokes');
+ok(glow.dashes === 0, 'and no dash pattern is set on it: ' + glow.dashes);
+ok(!glow.running, 'nothing animates');
+ok(glow.teal && !glow.green, 'the glow is teal, not the old green: teal ' + glow.teal + ', green ' + glow.green);
+ok(glow.dimmed, 'the other regions step back to 16% while one is selected');
 const left = await page.evaluate(async () => {
   const L = schedSolve.levels[schedPourIdx]; const r = L.solve.regions[0];
   setStep('results');
   setResultHighlight({ cells: r.cells, step: r.cellStep, bb: r.bb, label: 'R1', regionKey: r.key, pour: L.pour.name });
   setStep('areas');
   await new Promise(res => setTimeout(res, 250));
-  return antsRAF == null;
+  return !state.ui.highlight && antsRAF == null;
 });
-ok(left, 'and leaving Results stops it too — nothing animates in the background');
+ok(left, 'and leaving Results clears the highlight');
 
 // ── K. the clip has to be the extent the solver used ────────────────────
 console.log('K. with a floor edge on the pour, the clip is the edge, not the areas');

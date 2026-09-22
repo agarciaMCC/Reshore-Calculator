@@ -118,7 +118,7 @@ const D = await page.evaluate(async () => {
   const notes = [...host.querySelectorAll('.seq-note.seq-later')].map(x => x.textContent.replace(/\s+/g, ' ').trim());
   const btn = host.querySelector('button[data-seqlater]');
   let after = null;
-  if (btn) { btn.click(); await new Promise(r => setTimeout(r, 1500)); after = { key: state.ui.highlight && state.ui.highlight.regionKey, label: state.ui.highlight && state.ui.highlight.label, ants: antsRAF != null, step: curStep }; }
+  if (btn) { btn.click(); await new Promise(r => setTimeout(r, 1500)); after = { key: state.ui.highlight && state.ui.highlight.regionKey, label: state.ui.highlight && state.ui.highlight.label, ants: antsWanted(), step: curStep }; }
   return { lg, notes, after };
 });
 ok(D.lg.some(t => /tightened by a later pour/.test(t)), 'the floor tab legend lists the ground a later pour governs: ' + JSON.stringify(D.lg));
