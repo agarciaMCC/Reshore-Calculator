@@ -1082,6 +1082,9 @@ select.sched-shore option,select.sel-styled option{background:var(--surface-rais
 .sq-acts{align-items:center}
 .sq-acts .sq-gap{flex:1}
 .sq-keys{font-size:var(--fs-sm);margin-top:5px}
+.sq-adjust{margin:6px 0 2px;padding:6px 8px;border:1px dashed var(--select);border-radius:4px;font-size:var(--fs-sm);color:var(--text-secondary)}
+.sq-adjust .sq-props{margin-top:4px}
+.sq-adjust #propsHead.inline,.sq-adjust #propsContent.inline{margin-left:0;border-left:0;padding-left:0}
 </style>
 
 <div id="app">
@@ -7773,11 +7776,17 @@ function placePropsPanel(){
   const head=document.getElementById('propsHead'),body=document.getElementById('propsContent');
   const home=propsHome();
   if(!head||!body||!home)return;
-  const row=(list&&state.activeZoneIdx!=null&&!autoTraceEditing())
+  // ACCEPT & ADJUST (ARE-11): while the shape just accepted is being adjusted
+  // its properties open inside the acceptance card, not at the foot of the
+  // pane — going down there is how the wrong Next got pressed
+  const slot=(typeof beamScan!=='undefined'&&beamScan&&beamScan.adjusting&&state.activeZoneIdx!=null)
+    ?document.querySelector('#beamPanel .sq-props'):null;
+  const row=(!slot&&list&&state.activeZoneIdx!=null&&!autoTraceEditing())
     ?list.querySelector('.sb-item[data-zone="'+state.activeZoneIdx+'"]'):null;
-  head.classList.toggle('inline',!!row);
-  body.classList.toggle('inline',!!row);
-  if(row){row.insertAdjacentElement('afterend',body);row.insertAdjacentElement('afterend',head)}
+  head.classList.toggle('inline',!!row||!!slot);
+  body.classList.toggle('inline',!!row||!!slot);
+  if(slot){slot.appendChild(head);slot.appendChild(body)}
+  else if(row){row.insertAdjacentElement('afterend',body);row.insertAdjacentElement('afterend',head)}
   else{if(head.parentElement!==home)home.appendChild(head);if(body.parentElement!==home)home.appendChild(body)}
 }
 // The line over the Areas list: what the sheet read is doing, or has done.
@@ -15460,7 +15469,9 @@ function renderStepFoot(){
   const act=nextAction();
   // the left half says what is wanted, in words, with the section it lives in
   let now;
-  if(!act)now=`${pillHtml('ok','Done')}<span class="sf-txt">${esc(t.gate.text||'Ready to continue')}</span>`;
+  const reviewing=typeof beamScan!=='undefined'&&beamScan&&beamScan.view!=='list'&&curGroup().id==='areas'&&typeof scanQueue==='function'&&scanQueue().length;
+  if(reviewing)now=`${pillHtml('need','Reviewing')}<span class="sf-txt"><b>${scanQueue().length} shape${scanQueue().length===1?'':'s'}</b> from the sheets still to accept or skip, in the card above</span>`;
+  else if(!act)now=`${pillHtml('ok','Done')}<span class="sf-txt">${esc(t.gate.text||'Ready to continue')}</span>`;
   else if(act.st.locked)now=`${pillHtml('lock',stepTitle(act.sec))}<span class="sf-txt">${esc(act.st.text)}</span>`;
   else now=`${pillHtml('need',stepTitle(act.sec))}<span class="sf-txt"><b>Now:</b> ${esc(act.st.text)}</span>`;
   // the right half is the one way forward: to the section that wants
@@ -15738,7 +15749,10 @@ function setStep(id){
   curStep=id;
   state.ui.assumptionOverlay=null;
   if(groupOf(id).id!=='loads')state.ui.sourceBox=null;
-  if(groupOf(id).id!=='areas'&&typeof beamScan!=='undefined'&&beamScan)beamScan=null;
+  // the scan review is paused, not thrown away, while the user is on another
+  // step (Adolfo, Sep 21 2026: pressing Next: Results by mistake left the
+  // review dead "until you detect again"); it is back on return
+  if(groupOf(id).id!=='areas'&&typeof beamScan!=='undefined'&&beamScan){beamScan.adjusting=null;state.activeZoneIdx=null}
   renderReviewStatus();
   try{localStorage.setItem('reshore-calc-step',id)}catch(e){}
   const grp=groupOf(id);
@@ -15783,6 +15797,7 @@ function setStep(id){
   if(id==='edge'&&typeof proposeOnGrade==='function')proposeOnGrade();
   if(id==='edge'&&typeof autoDetectEdges==='function')autoDetectEdges();
   if(grp.id==='areas'&&typeof autoScanAreas==='function')autoScanAreas();
+  if(grp.id==='areas'&&typeof beamScan!=='undefined'&&beamScan&&typeof renderBeamPanel==='function')renderBeamPanel();   // a paused review comes back
   if(typeof renderPageBar==='function')renderPageBar();
   if(id==='loads'&&scheduleShape()==='none'&&state.pdf.doc)openLoadMapModal(false);
   if(id==='loads'){if(scheduleShape()!=='none')prefillTypicals();renderLoadActions()}
@@ -20621,6 +20636,7 @@ function scanMayJump(){
   return true;
 }
 function scanAdvance(){
+  if(typeof renderStepFoot==='function')renderStepFoot();
   const it=scanCurrent();
   if(it)scanShow(it);else{renderBeamPanel();renderCanvas()}
 }
@@ -20634,9 +20650,11 @@ function scanAccept(adjust){
     const li=state.levels.indexOf(lv);if(li>=0)state.activeLevelIdx=li;
     setLayer('slab');setTool('select');
     state.activeZoneIdx=zonesOf(lv,'slab').indexOf(z);state.ui.vertexIdx=null;
-    beamScan.adjusting=z.id;
+    beamScan.adjusting=z.id;beamScan.adjustingItem=it;
     persist();renderBeamPanel();renderSidebar();renderCanvas();
-    toast('Drag the corners; Shift+click removes one. Next moves on when you are done.',4200);
+    if(typeof renderStepFoot==='function')renderStepFoot();
+    const f=document.querySelector('#beamPanel .sq-props input,#beamPanel .sq-props select');
+    if(f)try{f.focus()}catch(e){}
     return;
   }
   beamScan.adjusting=null;
@@ -20674,7 +20692,7 @@ function scanQueueHtml(){
   const sf=x=>{const f=beamFtPerPx(x);return f?fmtArea(x.areaPx2*f*f):`${Math.round(x.areaPx2/1000)}k px&sup2;`};
   const tally=beamScan.tally||{added:0,skipped:0};
   const listBtn=`<button type="button" class="btn btn-sm" id="bsList" title="Every candidate as a list with tick boxes">List</button>`;
-  if(!it){
+  if(!it&&!beamScan.adjusting){
     const skipped=beamScan.items.filter(x=>x.done==='skipped').length,drawn=beamScan.items.filter(x=>x.done==='drawn').length;
     const body=pr?`<p class="step-help dim">Nothing on the sheets read so far. Reading on…</p>`
       :`<p class="step-help dim">${tally.added?`${tally.added} shape${tally.added===1?'':'s'} added`:'Nothing added'}${skipped?` · ${skipped} skipped — open the list to add any of them`:''}${drawn?` · ${drawn} already drawn, left alone`:''}.</p>`;
@@ -20683,40 +20701,45 @@ function scanQueueHtml(){
       ${progress}${body}
       <div class="mp-actions">${skipped?listBtn:''}<button type="button" class="btn btn-sm${pr?'':' btn-primary'}" id="bsClose">${pr?'Stop':'Done'}</button></div></div>`;
   }
-  const kindQ=q.filter(x=>x.kind===it.kind),pos=kindQ.indexOf(it)+1;
-  const lv=state.levels[it.levelIdx!=null?it.levelIdx:beamScan.levelIdx]||{};
-  const bad=it.kind!=='opening'&&!it.sized;
+  const adjusting=!!beamScan.adjusting;
+  const kindQ=it?q.filter(x=>x.kind===it.kind):[],pos=it?kindQ.indexOf(it)+1:0;
+  // while adjusting, the card is about the shape just accepted, not the next one
+  const shown=adjusting&&beamScan.adjustingItem?beamScan.adjustingItem:it;
+  const lv=state.levels[shown.levelIdx!=null?shown.levelIdx:beamScan.levelIdx]||{};
+  const bad=shown.kind!=='opening'&&!shown.sized;
   let name;
-  if(it.kind==='opening')name=`Opening${it.label&&!/^OPNG$/i.test(it.label)?' &middot; '+esc(it.label):''}`;
-  else{const gw=beamGeomWidthIn(it);
-    name=(it.kind==='beam'?'Beam ':'Thickened slab ')+(it.sized?`${it.widthIn}&Prime; &times; ${it.depthIn}&Prime;`
+  if(shown.kind==='opening')name=`Opening${shown.label&&!/^OPNG$/i.test(shown.label)?' &middot; '+esc(shown.label):''}`;
+  else{const gw=beamGeomWidthIn(shown);
+    name=(shown.kind==='beam'?'Beam ':'Thickened slab ')+(shown.sized?`${shown.widthIn}&Prime; &times; ${shown.depthIn}&Prime;`
       :`<span class="lm-warn">size not read</span>${gw?` &middot; measures ${gw}&Prime; wide`:''}`)}
   const allN=kindQ.filter(x=>x.kind!=='beam'||x.sized).length;
-  const adjusting=!!beamScan.adjusting;
-  return `<div class="mp-panel sq-panel">
-    <div class="mp-head"><span class="sq-type">${esc(scanTypeName(it.kind,2)).replace(/^./,c=>c.toUpperCase())}</span>
-      <span class="sq-count">${pos} of ${kindQ.length}</span>
-      ${pillHtml('read',`${esc(lv.name||'')}${it.page?` · sheet ${it.page}`:''}`)}
-      <span class="lm-dim">${q.length} to review${beamScan.items.filter(x=>x.done==='added').length?` · ${beamScan.items.filter(x=>x.done==='added').length} added`:''} &middot; nothing is written until you accept it</span></div>
-    ${progress}
-    <div class="sq-card${bad?' v-warn':''}">
-      <div class="sq-name">${name} <span class="lm-dim">${sf(it)}</span></div>
-      <div class="mp-why">${esc(it.why||'')}${bad?' — the size can be typed in after it is added.':''}</div>
-    </div>
-    <div class="mp-actions sq-acts">
+  const added=beamScan.items.filter(x=>x.done==='added').length;
+  const acts=`<div class="mp-actions sq-acts">
       ${adjusting
-        ?`<button type="button" class="btn btn-sm btn-primary" id="bsNext" title="Done adjusting — on to the next candidate (Enter)">Next \u25b8</button>`
+        ?`<button type="button" class="btn btn-sm btn-primary" id="bsNext" title="Done adjusting — on to the next candidate (Enter)">Done \u2014 next candidate \u25b8</button>`
         :`<button type="button" class="btn btn-sm btn-primary" id="bsAccept" title="Add this shape to ${esc(lv.name||'the floor')} and move on (Enter)">Accept</button>
-           <button type="button" class="btn btn-sm" id="bsAdjust" title="Add it and leave its corners live to drag before moving on (A)">Accept &amp; adjust</button>
+           <button type="button" class="btn btn-sm" id="bsAdjust" title="Add it and edit it right here before moving on (A)">Accept &amp; adjust</button>
            <button type="button" class="btn btn-sm" id="bsSkip" title="Leave this one out and move on (N)">Skip</button>`}
-      ${(it.page!=null?it.page:beamScan.page)!==state.pdf.current?`<button type="button" class="btn btn-sm" id="bsShow" title="Open its sheet and zoom to it">Show</button>`:''}
+      ${!adjusting&&it&&(it.page!=null?it.page:beamScan.page)!==state.pdf.current?`<button type="button" class="btn btn-sm" id="bsShow" title="Open its sheet and zoom to it">Show</button>`:''}
       <span class="sq-gap"></span>
-      ${allN>1&&!adjusting?`<button type="button" class="btn btn-sm" id="bsAllType" title="Accept every remaining ${esc(scanTypeName(it.kind,2))} in the queue${it.kind==='beam'?' that has a size':''}">Accept all ${allN} ${esc(scanTypeName(it.kind,allN))}</button>`:''}
-      ${beamScan.items.some(x=>x.done==='skipped')?`<button type="button" class="btn btn-sm" id="bsBack" title="Back to the last one skipped">\u25c2 Back</button>`:''}
-      ${listBtn}
+      ${allN>1&&!adjusting&&it?`<button type="button" class="btn btn-sm" id="bsAllType" title="Accept every remaining ${esc(scanTypeName(it.kind,2))} in the queue${it.kind==='beam'?' that has a size':''}">Accept all ${allN} ${esc(scanTypeName(it.kind,allN))}</button>`:''}
+      ${!adjusting&&beamScan.items.some(x=>x.done==='skipped')?`<button type="button" class="btn btn-sm" id="bsBack" title="Back to the last one skipped">\u25c2 Back</button>`:''}
+      ${!adjusting?listBtn:''}
       <button type="button" class="btn btn-sm" id="bsClose" title="Close the review; what was accepted stays">Close</button>
+    </div>`;
+  return `<div class="mp-panel sq-panel">
+    <div class="mp-head"><span class="sq-type">${adjusting?'Adjusting':esc(scanTypeName(it?it.kind:'beam',2)).replace(/^./,c=>c.toUpperCase())}</span>
+      ${adjusting?'':`<span class="sq-count">${pos} of ${kindQ.length}</span>`}
+      ${pillHtml('read',`${esc(lv.name||'')}${shown.page?` · sheet ${shown.page}`:''}`)}
+      <span class="lm-dim">${q.length} to review${added?` · ${added} added`:''} &middot; nothing is written until you accept it</span></div>
+    ${progress}
+    <div class="sq-card${bad?' v-warn':''}${adjusting?' adj':''}">
+      <div class="sq-name">${adjusting?pillHtml('ok','added')+' ':''}${name} <span class="lm-dim">${sf(shown)}</span></div>
+      <div class="mp-why">${adjusting?'Drag its corners on the plan, or edit it below; then <b>Done \u2014 next candidate</b>.':esc((it&&it.why)||'')+(bad?' — the size can be typed in after it is added.':'')}</div>
     </div>
-    <div class="sq-keys lm-dim">Enter accepts &middot; A accepts and adjusts &middot; N skips</div></div>`;
+    ${acts}
+    ${adjusting?`<div class="sq-adjust"><div class="sq-props"></div></div>`:''}
+    <div class="sq-keys lm-dim">${adjusting?'Enter moves to the next candidate':'Enter accepts &middot; A accepts and adjusts &middot; N skips'}</div></div>`;
 }
 function bindScanQueue(el){
   const on=(id,fn)=>{const b=el.querySelector('#'+id);if(b)b.addEventListener('click',fn)};
@@ -20732,7 +20755,7 @@ function bindScanQueue(el){
 }
 function scanKeys(e){
   if(!beamScan||beamScan.view==='list'||typeof curStep==='undefined'||groupOf(curStep).id!=='areas')return false;
-  if(!scanCurrent())return false;
+  if(!scanCurrent()&&!beamScan.adjusting)return false;
   if(e.key==='Enter'){e.preventDefault();beamScan.adjusting?scanNext():scanAccept(false);return true}
   if(!beamScan.adjusting&&(e.key==='a'||e.key==='A')){e.preventDefault();scanAccept(true);return true}
   if(!beamScan.adjusting&&(e.key==='n'||e.key==='N')){e.preventDefault();scanSkip();return true}
@@ -20741,9 +20764,10 @@ function scanKeys(e){
 function renderBeamPanel(){
   const el=document.getElementById('beamPanel');
   if(!el)return;
+  if(typeof detachPropsPanel==='function')detachPropsPanel();   // the props may be living inside the card
   if(!beamScan){el.style.display='none';el.innerHTML='';return}
   el.style.display='';
-  if(beamScan.view!=='list'){el.innerHTML=scanQueueHtml();bindScanQueue(el);return}
+  if(beamScan.view!=='list'){el.innerHTML=scanQueueHtml();bindScanQueue(el);if(beamScan.adjusting&&typeof placePropsPanel==='function')placePropsPanel();return}
   const lvName=(state.levels[beamScan.levelIdx]||{}).name||'';
   const nPick=beamScan.items.filter(i=>i.pick).length;
   const sf=it=>{const f=beamFtPerPx(it);return f?fmtArea(it.areaPx2*f*f):`${Math.round(it.areaPx2/1000)}k px&sup2;`};
@@ -20803,6 +20827,7 @@ function renderBeamPanel(){
 }
 function drawBeamScan(zoom,F_MONO){
   if(!beamScan)return;
+  if(typeof curStep!=='undefined'&&groupOf(curStep).id!=='areas')return;   // paused while elsewhere
   const queue=beamScan.view!=='list';
   beamScan.items.forEach((it,i)=>{
     if((it.page!=null?it.page:beamScan.page)!==state.pdf.current)return;

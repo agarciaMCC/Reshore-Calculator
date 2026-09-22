@@ -116,14 +116,24 @@ const C = await page.evaluate(async () => {
   const panel = document.getElementById('beamPanel');
   const buttons = [...panel.querySelectorAll('.mp-actions button')].map(b => b.id);
   const stillCur = scanCurrent() === cur;
+  // the properties open inside the acceptance card, not at the foot of the pane
+  const props = document.getElementById('propsContent');
+  const inCard = !!props && !!props.closest('#beamPanel .sq-props');
+  const nextLabel = (document.getElementById('bsNext') || {}).textContent || '';
+  const foot = document.querySelector('#stepFoot .sf-now') ? document.querySelector('#stepFoot .sf-now').textContent.replace(/\s+/g, ' ') : '';
   // done adjusting: Next moves on
   document.getElementById('bsNext').click();
   await new Promise(r => setTimeout(r, 300));
-  return { layer: state.layer, tool: state.tool, selected: !!selZ && selZ.id === cur.zoneId, stillCur, buttons, movedOn: scanCurrent() !== cur, deselected: state.activeZoneIdx == null };
+  const propsHome = document.getElementById('propsContent') && !document.getElementById('propsContent').closest('#beamPanel');
+  return { layer: state.layer, tool: state.tool, selected: !!selZ && selZ.id === cur.zoneId, stillCur, buttons, inCard, nextLabel, foot, propsHome, movedOn: scanCurrent() !== cur, deselected: state.activeZoneIdx == null };
 });
 ok(C.selected && C.layer === 'slab' && C.tool === 'select', 'the added shape is selected on the slab layer with the select tool: ' + JSON.stringify([C.layer, C.tool, C.selected]));
 ok(C.buttons.includes('bsNext') && !C.buttons.includes('bsAccept'), 'while adjusting, the one action is Next: ' + JSON.stringify(C.buttons));
 ok(C.movedOn && C.deselected, 'Next moves on and drops the selection');
+ok(C.inCard, 'while adjusting, the shape\'s properties sit inside the acceptance card');
+ok(/Done — next candidate/.test(C.nextLabel), 'and the button says what it does, unlike the step\'s Next: ' + C.nextLabel);
+ok(/Reviewing/.test(C.foot) && /still to accept or skip/.test(C.foot), 'the foot bar says a review is open: ' + C.foot);
+ok(C.propsHome, 'after Next the properties go back to their home');
 
 console.log('D. Accept all remaining beams');
 const D = await page.evaluate(async () => {
@@ -180,6 +190,27 @@ const F = await page.evaluate(() => {
 });
 ok(F.dropped === 1 && F.dupDone === 'drawn' && !F.freshDone, 'a candidate covering a beam already on the floor is marked drawn and left out; a new one is kept');
 ok(F.ranks.join() === '2,0,1', 'floors are walked from the one on screen down the stack, then round to the top: ' + F.ranks.join());
+
+console.log('G. leaving Areas pauses the review; coming back resumes it');
+const G = await page.evaluate(async () => {
+  const items = [
+    { kind: 'beam', polygon: [{ x: 500, y: 500 }, { x: 900, y: 500 }, { x: 900, y: 540 }, { x: 500, y: 540 }], areaPx2: 16000, bbox: { minx: 500, miny: 500, maxx: 900, maxy: 540 }, page: 4, levelIdx: 0, sized: true, widthIn: 24, depthIn: 17, why: 'g1' },
+    { kind: 'beam', polygon: [{ x: 500, y: 700 }, { x: 900, y: 700 }, { x: 900, y: 740 }, { x: 500, y: 740 }], areaPx2: 16000, bbox: { minx: 500, miny: 700, maxx: 900, maxy: 740 }, page: 4, levelIdx: 0, sized: true, widthIn: 24, depthIn: 17, why: 'g2' },
+  ];
+  beamScan = { page: 4, levelIdx: 0, startLevelIdx: 0, items, sel: -1, multi: false, what: 'beams', view: 'queue' };
+  await scanShow(scanCurrent());
+  document.getElementById('bsAdjust').click();
+  await new Promise(r => setTimeout(r, 200));
+  // the wrong Next: off to Results and back
+  setStep('results'); await new Promise(r => setTimeout(r, 300));
+  const away = { alive: !!beamScan, adjusting: beamScan && beamScan.adjusting, panelShown: document.getElementById('beamPanel').closest('.step-panel').classList.contains('active') };
+  setStep('areas'); await new Promise(r => setTimeout(r, 400));
+  const panel = document.getElementById('beamPanel');
+  return { away, back: !!beamScan, card: !!panel.querySelector('#bsAccept'), left: scanQueue().length, head: panel.querySelector('.mp-head').textContent.replace(/\s+/g, ' ').trim() };
+});
+ok(G.away.alive && !G.away.adjusting, 'off on Results the review is kept, its adjustment closed');
+ok(!G.away.panelShown, 'and not shown there');
+ok(G.back && G.card && G.left === 1, 'back on Areas the card is there with the next candidate: ' + G.head);
 
 await browser.close();
 console.log(`\n${pass} passed, ${fail} failed`);
