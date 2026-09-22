@@ -125,7 +125,7 @@ ok(C.items >= 1 && C.picked === 0, 'the proposal opens with NONE ticked (BEM-08)
 ok(C.what === 'both' && C.multi === (C.confirmed.length > 1), 'beams AND openings, over every confirmed sheet');
 ok(JSON.stringify(C.done) === JSON.stringify(C.confirmed), 'every confirmed sheet is remembered as read on the job: ' + JSON.stringify(C.done));
 ok(C.pages.every(p => C.confirmed.includes(p)), 'nothing was read off a sheet without a confirmed edge');
-ok(C.panelFirst === 'beamPanel' && /nothing is written until you apply/i.test(C.head), 'the proposal sits at the top of the pane and says nothing is written yet');
+ok(C.panelFirst === 'beamPanel' && /nothing is written until you (apply|accept)/i.test(C.head), 'the proposal sits at the top of the pane and says nothing is written yet');
 ok(C.nonInput, 'the scan memory is bookkeeping, not a calculation input');
 const C2 = await page.evaluate(async () => { cancelBeamScan(); setStep('loads'); setStep('areas'); await new Promise(r => setTimeout(r, 800)); return { again: !!beamScan, note: document.getElementById('areasPrimary').textContent.replace(/\s+/g, ' ').trim() }; });
 ok(!C2.again, 'closing it and coming back does not scan the same sheets again');

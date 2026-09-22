@@ -75,7 +75,7 @@ const B = await page.evaluate(async () => {
   const lit = [...document.querySelectorAll('#p-sequence button.exc-go.lit')].map(x => x.textContent.trim());
   // the patch is drawn: the highlight fill lands on the canvas
   const c = document.getElementById('drawCanvas').getContext('2d');
-  let fills = 0; const f0 = c.fill.bind(c); c.fill = function () { if (String(this.fillStyle).replace(/\s/g, '') === 'rgba(46,160,90,0.22)') fills++; return f0.apply(c, arguments) };
+  let fills = 0; const f0 = c.fill.bind(c); c.fill = function () { if (/^rgba\(14,143,150,0\.13\)|^rgba\(63,199,207,0\.13\)/.test(String(this.fillStyle).replace(/\s/g, ''))) fills++; /* the selection tint (RES-10) */ return f0.apply(c, arguments) };
   renderNow(); c.fill = f0;
   const T = screenTransform(lv);
   const inside = T && e.bb ? (() => { const a = buildingToPixel(e.bb.minX, e.bb.minY, T); return !!a })() : false;

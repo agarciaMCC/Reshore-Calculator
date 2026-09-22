@@ -63,8 +63,8 @@ const A = await page.evaluate(() => {
 });
 console.log('   tabs: ' + JSON.stringify(A.tabs.map(t => t.text)));
 console.log('A. the tabs');
-ok(A.tabs.length === A.floors.length + 1 && A.tabs[0].text === 'Overview' && A.tabs[0].active, 'Overview plus one tab per floor that gets reshoring: ' + JSON.stringify(A.floors));
-ok(A.tabs.slice(1).every((t, i) => t.key === A.floors[i][0] && new RegExp('^under ' + A.floors[i][1]).test(t.text)), 'each tab names its floor (and zone): ' + JSON.stringify(A.tabs.slice(1).map(t => t.text)));
+ok(A.tabs.length === A.floors.length + 1 && A.tabs[0].text === 'All floors' && A.tabs[0].active, 'All floors plus one tab per floor that gets reshoring: ' + JSON.stringify(A.floors));
+ok(A.tabs.slice(1).every((t, i) => t.key === A.floors[i][0] && new RegExp('^Under ' + A.floors[i][1]).test(t.text)), 'each tab names its floor (and zone): ' + JSON.stringify(A.tabs.slice(1).map(t => t.text)));
 ok(A.tabs.some(t => /North/.test(t.text)) && A.tabs.some(t => /South/.test(t.text)), 'split floors get a tab per zone');
 ok(A.tabs.slice(1).some(t => /\d+×\d+/.test(t.text)), 'a tab shows the floor\'s general pattern once shores are chosen');
 

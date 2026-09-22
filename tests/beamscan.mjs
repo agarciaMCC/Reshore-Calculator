@@ -100,6 +100,9 @@ const D = await page.evaluate(async () => {
   const before = zonesOf(lv, 'slab').length;
   await startBeamScan();
   const panel = document.getElementById('beamPanel');
+  // ARE-10: the proposal opens as a one-at-a-time queue; the tick list is one click away
+  const queueFirst = !!panel.querySelector('#bsAccept') && !panel.querySelector('input[data-bpick]');
+  panel.querySelector('#bsList').click();
   const boxes = [...panel.querySelectorAll('input[data-bpick]')];
   const checked0 = boxes.filter(b => b.checked).length;
   const text = panel.textContent.replace(/\s+/g, ' ');
@@ -112,10 +115,11 @@ const D = await page.evaluate(async () => {
   const btnText = panel.querySelector('#bsApply').textContent.trim();
   acceptBeamScan();
   const after = zonesOf(lv, 'slab');
-  return { before, n: boxes.length, checked: checked0, text, applyDisabled, stillNone, applyAfterTick, btnText,
+  return { before, queueFirst, n: boxes.length, checked: checked0, text, applyDisabled, stillNone, applyAfterTick, btnText,
            added: after.length - before, kinds: after.map(z => [z.kind, z.widthIn, z.depthIn, !!z.fromSheet, z.srcPage]), panelGone: !beamScan };
 });
-ok(D.n === 7 && D.checked === 0, 'seven rows in the panel, none ticked: ' + JSON.stringify([D.n, D.checked]));
+ok(D.queueFirst, 'the proposal opens one candidate at a time, with Accept (ARE-10)');
+ok(D.n === 7 && D.checked === 0, 'seven rows in the list, none ticked: ' + JSON.stringify([D.n, D.checked]));
 ok(/Nothing is ticked to begin with/.test(D.text) && /nothing is written until you apply/i.test(D.text), 'the panel says so in words');
 ok(/size comes from a BM label/.test(D.text), 'and where the size comes from');
 ok(D.applyDisabled && D.stillNone === D.before, 'Apply is disabled and nothing has been written');

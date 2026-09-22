@@ -125,6 +125,7 @@ the system; this file holds the rules and is versioned with the code.
 | ARE-08 | The typical loading area is a hatched, labelled fill BOUNDED BY THE FLOOR EDGE — drawn, not a second shape to keep in sync — with drawn areas punched out as exceptions, a muted fill where there is no capacity yet, and a Typical capacity row editing the same level default. | Sep 9 |
 | ARE-09 | Where a traced pocket is much smaller than the enclosure it sits in, FLAG it rather than guess. | Sep 15 |
 | ARE-10 | A loading area split by a floor edge appearing in several zones is split into one piece per zone sheet, cut along each sheet's floor edge — for load-map-traced areas only. | Sep 17 |
+| ARE-11 | THE SCAN IS A REVIEW QUEUE. The sheet on screen is read first and the review opens on it at once; the other sheets are read behind it, their shapes joining the queue, with the progress said in the head. One candidate at a time, shown and zoomed on its sheet with a glow, BY TYPE (beams, thickened slabs, openings) then floor by floor. Accept writes that one shape; Accept & adjust writes it and leaves its corners live until Next; Skip writes nothing; Accept all remaining <type> takes the rest of that type (sized beams only). Enter / A / N drive it. The tick list stays one click away and still writes only what is ticked (BEM-08 holds: nothing is written until you say so). | Sep 21 |
 | ARE-11 | Markup is LOCKED on Results and Sequence: nothing selects, drags, erases corners or deletes, and the drawing tools cannot be armed. Pan, zoom, paging and clicking a region still work, with a standing locked badge. | Sep 10, Sep 15 |
 
 ## RES — Results
@@ -141,6 +142,7 @@ the system; this file holds the rules and is versioned with the code.
 | RES-08 | A shore-height alert names the floor, region and height, and the line clicks onto the plan. No taller-shore suggestion, no inline catalog link, no permanent warning hatch. | Sep 10 |
 | RES-09 | Region titles carry no pour-slab loading mark; each reshore row carries the CARRYING floor's mark. | Sep |
 | RES-10 | The selected region is a TEAL GLOW on its outline with a light tint inside — no dashes, nothing animated — so the drawing under the edge stays readable. While one region is selected the others step back. The same teal marks the lit row in the schedule. | Sep 21 |
+| RES-11 | RESULTS READ TOP-DOWN LIKE A FIELD SHEET: one context row (pour · area · print); real warnings stay in view, explanatory notes fold into "Notes & assumptions"; the pane opens on the pour's own sheet; tabs read "All floors / Under 3" and chips "under 3" (a floor called 3 must never read as a count); the install row leads with the floor and its pattern at the title size; "Next pick" is the pane's one primary button. | Sep 21 |
 | RES-10 | Print refuses results that no longer match the inputs. | Sep 15 |
 
 ## SEQ — Sequence

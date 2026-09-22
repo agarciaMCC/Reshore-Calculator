@@ -124,6 +124,8 @@ ok(/crosses between zone sheets/.test(C.toastText), 'the toast says one crossed:
 
 console.log('D. the Areas list on each sheet');
 const D = await page.evaluate(async () => {
+  // the arrival scan (UI-17 / ARE-11) may still be showing its first candidate; this section is about the list, so close it
+  if (typeof beamScan !== 'undefined' && beamScan) cancelBeamScan();
   const li = state.levels.findIndex(l => l.name === '2');
   state.activeLevelIdx = li; state.layer = 'loading'; state.activeZoneIdx = null;
   await goToPage(8); renderSidebar();

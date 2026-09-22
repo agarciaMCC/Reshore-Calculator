@@ -1050,6 +1050,38 @@ select.sched-shore option,select.sel-styled option{background:var(--surface-rais
 .step-foot .sf-now{flex:1;min-width:0;display:flex;align-items:center;gap:8px;font-size:var(--fs-md);color:var(--text-secondary);overflow:hidden}
 .step-foot .sf-now .sf-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .step-foot .sf-now .sf-txt b{color:var(--text)}
+/* ── RESULTS READ TOP-DOWN LIKE A FIELD SHEET (RES-11) ── */
+.sched-region-head{align-items:center}
+.sched-region-head .card-name{font-family:var(--font-display);font-size:var(--fs-lg);font-weight:700;white-space:normal;line-height:1.25}
+.sched-region:not(.folded) .card-chips{flex-basis:100%;margin-left:22px}
+.inst-fl{font-family:var(--font-display);font-size:var(--fs-lg)}
+.inst-fl small{font-family:var(--font-body)}
+.inst-spec .rs-pat{font-size:var(--fs-lg);padding:2px 8px}
+.inst-spec .rs-shore{font-size:var(--fs-md);font-weight:600}
+.rs-next{border-color:#F1D9A3;background:#FBF1DC}
+:root[data-theme="dark"] .rs-next{border-color:#5A4515;background:#2E2410}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .rs-next{border-color:#5A4515;background:#2E2410}}
+.rs-next .rs-next-go{margin-left:auto}
+.rs-notes{margin:6px 0 4px;color:var(--text-secondary);line-height:1.45}
+.rs-tab b{font-family:var(--font-display)}
+.pat-chip.quiet{opacity:.75}
+.ra-res{font-family:var(--font-body)}
+.ra-res b{font-family:var(--font-mono)}
+.inst-spec .rs-dim,.rs-bulk .rs-dim,.inst-row.none .rs-dim{font-family:var(--font-body)}
+.rs-pat.pend{font-family:var(--font-body)}
+.inst-fl small{font-family:var(--font-body)}
+
+/* ── THE SCAN REVIEW QUEUE (ARE-10) ── */
+.sq-panel .mp-head{flex-wrap:wrap;align-items:center;gap:6px 8px}
+.sq-type{font-family:var(--font-display);font-size:var(--fs-lg)}
+.sq-count{font-family:var(--font-mono);font-weight:400;color:var(--text-secondary)}
+.sq-progress{margin:2px 0 6px;font-size:var(--fs-sm)}
+.sq-card{padding:7px 9px;border:1px solid var(--border);border-left:3px solid var(--select);border-radius:4px;background:var(--surface)}
+.sq-card.v-warn{border-left-color:var(--warn)}
+.sq-name{font-weight:600;font-size:var(--fs-md)}
+.sq-acts{align-items:center}
+.sq-acts .sq-gap{flex:1}
+.sq-keys{font-size:var(--fs-sm);margin-top:5px}
 </style>
 
 <div id="app">
@@ -6213,6 +6245,8 @@ document.addEventListener('keydown',e=>{
     if(e.key==='Enter'){e.preventDefault();acceptDetectFloorEdge();return}
   }
 
+  // the scan review queue: Enter accepts, A accepts and adjusts, N skips (ARE-10)
+  if(typeof scanKeys==='function'&&scanKeys(e))return;
   if(e.key==='F3'){e.preventDefault();setSnap(!state.snap);toast('Object snap '+(state.snap?'on':'off'),1200);return}
   if(e.key==='F8'){e.preventDefault();setOrtho(!state.ortho);toast('Ortho '+(state.ortho?'on':'off'),1200);return}
   if(e.key==='1'){setLayer('slab');return}
@@ -13568,7 +13602,8 @@ function patColor(L,f,pattern){const sc=floorPatternScale(L,f);return (sc&&sc.co
 // A floor chip on a region card: "under 2 · 6×8"
 function floorChip(r,f,L,active){
   const q=floorStateAt(r,f);
-  const who=`<span class="pc-fl">${esc(f.name)}${f.zone&&!pourIsZoned(L)?' '+esc(f.zone):''}</span>`;
+  // "under 3", not a bare "3" — a floor called 3 read as a count of three (RES-11)
+  const who=`<span class="pc-fl">under ${esc(f.name)}${f.zone&&!pourIsZoned(L)?' '+esc(f.zone):''}</span>`;
   const cls=`pat-chip${active?' active':''}`;
   switch(q.kind){
     case 'pattern':{
@@ -13597,13 +13632,13 @@ function resultsTabsHtml(L){
   if(!floors.length)return '';
   const cur=resultsFloorKey();
   return `<div class="rs-tabs" role="tablist">
-    <button type="button" class="rs-tab${cur?'':' active'}" data-rsf="" title="Every floor of this placement: the region map on the plan, the install summary and every region">Overview</button>
+    <button type="button" class="rs-tab${cur?'':' active'}" data-rsf="" title="Every floor of this placement: the region map on the plan, the install summary and every region">All floors</button>
     ${floors.map(f=>{
       const sc=floorPatternScale(L,f);
       const picks=Math.max(0,f.pending-f.noOptions);
       const pend=(picks?`<i class="rs-tab-pend" title="${picks} shore pick${picks>1?'s':''} outstanding">${picks}</i>`:'')
         +(f.noOptions?`<i class="rs-tab-warn" title="${f.noOptions} row${f.noOptions>1?'s':''} with nothing to shore against">!</i>`:'');
-      return `<button type="button" class="rs-tab${cur===f.key?' active':''}" data-rsf="${esc(f.key)}" title="What goes in under ${esc(installFloorName(f))}: the plan shaded by spacing, the regions that decide it">under <b>${esc(f.name)}</b>${f.zone?` <small>${esc(f.zone)}</small>`:''}${f.general!=null?` <span class="rs-tab-pat" style="--pc:${patColor(L,f,f.general)}">${esc(f.general)}</span>`:''}${pend}</button>`;
+      return `<button type="button" class="rs-tab${cur===f.key?' active':''}" data-rsf="${esc(f.key)}" title="What goes in under ${esc(installFloorName(f))}: the plan shaded by spacing, the regions that decide it">Under <b>${esc(f.name)}</b>${f.zone?` <small>${esc(f.zone)}</small>`:''}${f.general!=null?` <span class="rs-tab-pat" style="--pc:${patColor(L,f,f.general)}">${esc(f.general)}</span>`:''}${pend}</button>`;
     }).join('')}
   </div>`;
 }
@@ -13680,10 +13715,10 @@ function nextHtml(L){
   const ord=state.ui.nextOrd;
   const at=ord==null?0:items.filter(x=>x.ord<=ord).length;
   return `<div class="rs-next" title="Step through the rows that still need a shore: each one opens its card, lands on the plan and focuses the picker">
-    <b>${items.length} shore pick${items.length>1?'s':''} outstanding</b>
+    ${pillHtml('need',`${items.length} shore pick${items.length>1?'s':''} to make`)}
+    <span class="rs-next-n">${at?`${at} of ${items.length}`:'start at the largest'}</span>
     <button type="button" class="btn btn-sm" id="rsPrev" title="Previous row still needing a shore">\u25c2</button>
-    <span class="rs-next-n">${at?`${at} of ${items.length}`:`${items.length} to go`}</span>
-    <button type="button" class="btn btn-sm rs-next-go" id="rsNext" title="Next row still needing a shore">Next \u25b8</button>
+    <button type="button" class="btn btn-sm btn-primary rs-next-go" id="rsNext" title="Next row still needing a shore: opens its card, lands on the plan, focuses the picker">Next pick \u25b8</button>
   </div>`;
 }
 function goOutstanding(L,dir){
@@ -13789,6 +13824,18 @@ function bindBulkBar(L){
   });
 }
 
+// RES-11: Results opens on the pour's own plan sheet, not on whatever page
+// was last on screen — a region can only be read against the floor it is on.
+function showPourSheet(){
+  if(!schedSolve||!schedSolve.levels.length||!state.pdf.pages)return;
+  const L=schedSolve.levels[schedPourIdx];if(!L||!L.pour)return;
+  const li=state.levels.findIndex(l=>l.id===(L.pour.defId||L.pour.id));
+  if(li<0)return;
+  const pages=(typeof levelSheets==='function'?levelSheets(state.levels[li]):[]).map(sh=>sh.page!=null?sh.page:sh).filter(p=>Number.isFinite(p));
+  if(!pages.length||pages.includes(state.pdf.current))return;
+  state.activeLevelIdx=li;
+  goToPage(pages[0]).then(()=>{renderCanvas();if(typeof renderPageBar==='function')renderPageBar()});
+}
 function renderSchedule(){
   const host=document.getElementById('schedBody');
   const head=document.getElementById('schedHead');
@@ -13832,16 +13879,20 @@ function renderSchedule(){
   // the control that answers them — saying it twice just pushes the answer
   // further down the pane.
 
+  // RES-11 (Sep 21 2026): the head is one context row — pour, what it is,
+  // print. Real warnings stay in view; the notes about how the number came
+  // about ("1.6k SF drawn as openings…") fold into the assumptions box with
+  // everything else that explains rather than asks.
+  const warns=warnBits.filter(w=>/lm-warn/.test(w)),notes=warnBits.filter(w=>!/lm-warn/.test(w));
   head.innerHTML=`
     <div class="sched-head-row">
-      <label>Pour level <select id="schedPour">${sel}</select></label>
+      <label>Pour <select id="schedPour">${sel}</select></label>
       <!-- regions are exact polygons now; there is no grid to choose -->
-      <span class="sched-stat">${s.spatial?`${fmtArea(s.areaSF)} · ${s.regions.length} region${s.regions.length>1?'s':''} · ${Math.round(schedSolve.ms)} ms`:''}</span>
+      <span class="sched-stat">${s.spatial?`${fmtArea(s.areaSF)} · ${s.regions.length} region${s.regions.length>1?'s':''}`:''}</span>
       <button class="btn btn-sm" id="schedPrint">Print / PDF</button>
     </div>
-    <span class="review-current">Calculated from current inputs</span>
-    ${warnBits.length?`<div class="lm-conflicts">${warnBits.join('<br>')}</div>`:''}
-    ${assumptionsHtml(L)}
+    ${warns.length?`<div class="lm-conflicts">${warns.join('<br>')}</div>`:''}
+    ${assumptionsHtml(L,false,notes)}
     ${importImpact?`<div class="review-impact"><b>Load import applied:</b> ${esc(importImpact)}. This result uses the updated loads.</div>`:''}
     ${s.spatial?resultsTabsHtml(L):''}
     ${s.spatial&&resultsFloor(L)?floorLegendHtml(L,resultsFloor(L)):''}`;
@@ -13979,7 +14030,7 @@ function renderSchedule(){
       <div class="sched-region-head sched-go" data-ri="${ri}" data-lv="${defIdxOf(L.pour)}" title="Show this region on the pour level's sheet${r.loadingMarks.length?` · pour-level mark${r.loadingMarks.length>1?'s':''} ${esc(r.loadingMarks.join(', '))}`:''}">
         <button type="button" class="card-fold" data-fold="${esc(ck)}" title="${open?'Fold this region back to one line':'Open this region: the strip, the numbers, the diagram'}">${open?'\u25be':'\u25b8'}</button>
         <span class="lm-swatch" style="background:${regionColorCss(regionColorIdx(r,ri,L),0.9)}" title="This colour marks the region on the plan and in the print legend"></span>
-        <b>${esc(regionLabel(r,ri,L))}</b>
+        <b class="card-name">${esc(regionLabel(r,ri,L))}</b>
         <span class="card-sf">${fmtArea(r.areaSF)}</span>
         <span class="card-chips">${chips}</span>
       </div>
@@ -15568,7 +15619,7 @@ function setStep(id){
     state.activeZoneIdx=null;state.ui.vertexIdx=null;
     state.ui.hover=null;state.ui.hoverKey='';
   }
-  if(id==='results')runSchedule();
+  if(id==='results'){runSchedule();if(typeof showPourSheet==='function')showPourSheet()}
   if(id==='sequence')runSequence();
   if(grp.id==='areas')prefillTypicals();       // never arrive on a floor with a silent 0 PSF
   if(id==='levels')renderLevelList();          // default-capacity pickers follow the schedule
@@ -15744,7 +15795,7 @@ function confirmAllMatches(){
 // stored in sheet pixels, so they need nothing.
 let gridScaleCheck=null;
 function gridScaleKey(){
-  return JSON.stringify(matchSheetRows().filter(r=>r.matched).map(r=>[r.page,+r.alignment.ftPerInch.toFixed(4)]))+'|'+((state.project.grid&&state.project.grid.x||[]).length);
+  return JSON.stringify(matchSheetRows().filter(r=>r.matched).map(r=>[r.page,r.alignment&&r.alignment.ftPerInch!=null?+r.alignment.ftPerInch.toFixed(4):null]))+'|'+((state.project.grid&&state.project.grid.x||[]).length);
 }
 function ensureGridScaleCheck(){
   if(!state.pdf.doc)return;
@@ -19838,7 +19889,7 @@ let autoTrace=null;   // {page,plans,failed,...} while reviewing
 //  axis. No label, or two competing, means the size is left blank and the
 //  row is flagged rather than guessed.
 // ════════════════════════════════════════════════════════════
-let beamScan=null;
+let beamScan=null,scanToken=null;
 const GREY_LO=185,GREY_HI=248;      // the band a beam hatch lives in
 const BEAM_MIN_PX2=3000;            // smaller than this is a hatch scrap
 const BEAM_ASPECT=3;                // longer than this : 1 reads as a beam
@@ -20117,8 +20168,8 @@ async function startOpeningScan(){
   toast('Looking for opening tags on this sheet…',1500);
   const res=await detectOpenings(num);
   if(!res.items.length){toast(`No opening tags found on sheet ${num}. They may be marked another way on this set.`,4600);return}
-  beamScan={...res,levelIdx:li,sel:-1,what:'openings'};
-  renderBeamPanel();renderCanvas();
+  beamScan={...res,levelIdx:li,sel:-1,what:'openings',view:'queue'};
+  scanAdvance();
 }
 // ── AUTO DETECT ─────────────────────────────────────────────
 function autoTargets(all){
@@ -20205,36 +20256,50 @@ async function runAutoDetect(opt){
   }
   const wantSlab=opt.beams||opt.openings;
   if(wantSlab){
-    toast(`Reading ${targets.length>1?targets.length+' sheets':'this sheet'} inside the floor edge…`,1800);
-    const items=[];let outside=0,crossings=0;
+    // ARE-10 (Adolfo, Sep 21 2026: "takes a long time … they all show up at
+    // once"): the sheet on screen is read first and the review opens on it
+    // straight away; the other sheets are read behind it, each one's shapes
+    // joining the queue as they arrive, with the progress said in the head.
+    targets.sort((a,b)=>(a.page===state.pdf.current?-1:b.page===state.pdf.current?1:0)||(a.levelIdx-b.levelIdx));
+    const token={};scanToken=token;
+    const what=opt.beams&&opt.openings?'both':(opt.openings?'openings':'beams');
+    beamScan={page:targets.length===1?targets[0].page:null,levelIdx:targets[0].levelIdx,
+              items:[],sel:-1,multi:targets.length>1,what,view:'queue',
+              progress:{done:0,total:targets.length,page:targets[0].page},notes:{outside:0,crossings:0,skipped}};
+    renderBeamPanel();
+    let n=0;
     for(const t of targets){
       const lv=state.levels[t.levelIdx];
       const found=[];
       if(opt.beams){
         const r=await detectGreyShapes(t.page);
+        if(scanToken!==token||!beamScan)return;           // closed while reading
         for(const i of r.items)found.push({...i,page:t.page,levelIdx:t.levelIdx});
       }
       if(opt.openings){
         const r=await detectOpenings(t.page);
+        if(scanToken!==token||!beamScan)return;
         for(const i of r.items)found.push({...i,page:t.page,levelIdx:t.levelIdx});
-        crossings+=r.unoutlined||0;
+        beamScan.notes.crossings+=r.unoutlined||0;
       }
       const c=clipItemsToEdge(found,lv,t.page);
-      outside+=c.dropped;
-      items.push(...c.kept);
-    }
-    const notes=[];
-    if(outside)notes.push(`${outside} shape${outside>1?'s':''} outside the floor edge ignored`);
-    if(crossings)notes.push(`${crossings} crossing${crossings>1?'s':''} of dimension or grid lines with no outline round them not offered as openings`);
-    if(skipped)notes.push(`${skipped} sheet${skipped>1?'s':''} without a confirmed edge not read`);
-    if(notes.length)toast(notes.join(' · ')+'.',6000);
-    if(items.length){
-      items.sort((a,b)=>(a.levelIdx-b.levelIdx)||(b.areaPx2-a.areaPx2));
-      beamScan={page:targets.length===1?targets[0].page:null,levelIdx:targets[0].levelIdx,
-                items,sel:-1,multi:targets.length>1,
-                what:opt.beams&&opt.openings?'both':(opt.openings?'openings':'beams')};
+      beamScan.notes.outside+=c.dropped;
+      beamScan.items.push(...c.kept);
+      beamScan.items.sort((a,b)=>(a.levelIdx-b.levelIdx)||(b.areaPx2-a.areaPx2));
+      n++;
+      const nx=targets[n];
+      beamScan.progress=n<targets.length?{done:n,total:targets.length,page:nx&&nx.page}:null;
       renderBeamPanel();renderCanvas();
-    }else{
+      if(n===1&&c.kept.length&&beamScan.view==='queue')scanShow(scanCurrent());
+    }
+    if(scanToken!==token||!beamScan)return;
+    const notes=[],nt=beamScan.notes;
+    if(nt.outside)notes.push(`${nt.outside} shape${nt.outside>1?'s':''} outside the floor edge ignored`);
+    if(nt.crossings)notes.push(`${nt.crossings} crossing${nt.crossings>1?'s':''} of dimension or grid lines with no outline round them not offered as openings`);
+    if(nt.skipped)notes.push(`${nt.skipped} sheet${nt.skipped>1?'s':''} without a confirmed edge not read`);
+    if(notes.length)toast(notes.join(' · ')+'.',6000);
+    if(!beamScan.items.length){
+      beamScan=null;renderBeamPanel();renderCanvas();
       toast('Nothing found to propose on '+(targets.length>1?'those sheets':'this sheet')+'.',4200);
     }
   }
@@ -20264,10 +20329,10 @@ async function startBeamScan(){
   toast('Reading the grey shapes on this sheet…',1500);
   const res=await detectGreyShapes(num);
   if(!res.items.length){toast(`Nothing grey and solid found on sheet ${num}. Beams on this set may be drawn another way.`,4600);return}
-  beamScan={...res,levelIdx:li,sel:-1,what:'beams'};
-  renderBeamPanel();renderCanvas();
+  beamScan={...res,levelIdx:li,sel:-1,what:'beams',view:'queue'};
+  scanAdvance();
 }
-function cancelBeamScan(){beamScan=null;renderBeamPanel();renderCanvas()}
+function cancelBeamScan(){beamScan=null;scanToken=null;renderBeamPanel();renderSidebar();renderCanvas()}
 function beamFtPerPx(it){
   if(!beamScan)return null;
   const li=it&&it.levelIdx!=null?it.levelIdx:beamScan.levelIdx;
@@ -20282,15 +20347,204 @@ function beamGeomWidthIn(it){
   const w=it.bbox.maxx-it.bbox.minx,hh=it.bbox.maxy-it.bbox.miny;
   return Math.round(Math.min(w,hh)*f*12*10)/10;
 }
+// ── THE SCAN AS A REVIEW QUEUE (ARE-10) ──
+// Adolfo, Sep 21 2026: "you have to click show and then tick the box to be
+// sure what is highlighted. they all show up at once instead of being
+// presented level by level. they should be broken out by type when confirming
+// and have a confirm all button. you should also be able to adjust the shape
+// before confirming … something like a next button would be helpful."
+// So the proposal is a queue: one candidate at a time, shown on its sheet,
+// by type (beams, then thickened slabs, then openings) and floor by floor;
+// Accept writes that one shape, Accept & adjust writes it and leaves its
+// corners live, Skip passes it, Accept all remaining takes the rest of its
+// type. The old list is one click away for anyone who wants to tick.
+const SCAN_TYPE_ORDER={beam:0,slab:1,opening:2};
+function scanTypeName(kind,n){return kind==='beam'?(n===1?'beam':'beams'):kind==='opening'?(n===1?'opening':'openings'):(n===1?'thickened slab':'thickened slabs')}
+function scanQueue(){
+  if(!beamScan)return [];
+  return beamScan.items.filter(it=>!it.done&&!it.failed&&it.polygon&&it.polygon.length>2)
+    .sort((a,b)=>((SCAN_TYPE_ORDER[a.kind]||0)-(SCAN_TYPE_ORDER[b.kind]||0))||(a.levelIdx-b.levelIdx)||(b.areaPx2-a.areaPx2));
+}
+function scanCurrent(){
+  if(!beamScan)return null;
+  const q=scanQueue();
+  if(!q.length){beamScan.cur=null;return null}
+  if(beamScan.cur&&q.includes(beamScan.cur))return beamScan.cur;
+  beamScan.cur=q[0];return q[0];
+}
+async function scanShow(it){
+  if(!beamScan||!it)return;
+  beamScan.sel=beamScan.items.indexOf(it);
+  const pg=it.page!=null?it.page:beamScan.page;
+  if(pg&&pg!==state.pdf.current)await goToPage(pg);
+  if(!beamScan)return;
+  if(it.levelIdx!=null)state.activeLevelIdx=it.levelIdx;
+  zoomToPolygon(it.polygon);
+  renderBeamPanel();renderSidebar();renderCanvas();
+}
+// Write these candidates into the slab layer of their floors. Returns the
+// zones added.
+function scanCommit(list,label){
+  const picks=(list||[]).filter(it=>it&&it.polygon&&it.polygon.length>2);
+  if(!picks.length)return [];
+  history.record(label||'Add shapes from the sheet');
+  const added=[];let beams=0,slabs=0,opens=0,blank=0;
+  for(const it of picks){
+    const lv=state.levels[it.levelIdx!=null?it.levelIdx:beamScan.levelIdx];
+    if(!lv)continue;
+    const arr=zonesOf(lv,'slab');
+    const z={id:sid(),kind:it.kind,polygon:it.polygon.map(p=>({x:p.x,y:p.y})),
+             label:it.kind==='opening'&&it.label&&!/^OPNG$/i.test(it.label)?it.label:'',
+             colorIdx:arr.length,fromSheet:true,srcPage:it.page!=null?it.page:beamScan.page};
+    // the scan runs over EVERY sheet of the floor, so each shape is in its own
+    // sheet's pixels — stamp it, or they all pile onto the floor's first sheet
+    {const pg=it.page!=null?it.page:beamScan.page;if(state.pdf.pages&&pg!=null)z.page=pg}
+    if(it.kind==='beam'){
+      const w=it.sized?it.widthIn:beamGeomWidthIn(it);
+      if(w!=null)z.widthIn=w;
+      if(it.depthIn!=null)z.depthIn=it.depthIn; else blank++;
+      beams++;
+    }else if(it.kind==='opening'){opens++}
+    else{slabs++}
+    arr.push(z);
+    it.done='added';it.pick=false;it.zoneId=z.id;
+    added.push({lv,z});
+  }
+  state.results=null;
+  const bits=[];
+  if(beams)bits.push(`${beams} beam${beams===1?'':'s'}`);
+  if(slabs)bits.push(`${slabs} thickened slab area${slabs===1?'':'s'}`);
+  if(opens)bits.push(`${opens} opening${opens===1?'':'s'}`);
+  if(picks.length>1)toast((bits.join(' and ')||'Nothing')+' added'+(blank?` — ${blank} still need${blank===1?'s':''} a depth typed in`:'')+'.',4200);
+  return added;
+}
+function scanAdvance(){
+  const it=scanCurrent();
+  if(it)scanShow(it);else{renderBeamPanel();renderCanvas()}
+}
+function scanAccept(adjust){
+  const it=scanCurrent();if(!it)return;
+  const added=scanCommit([it],adjust?'Add a shape from the sheet and adjust it':'Add a shape from the sheet');
+  beamScan.tally=beamScan.tally||{added:0,skipped:0};beamScan.tally.added+=added.length;
+  if(adjust&&added.length){
+    // the shape is real now: select it with its corners live, on its own sheet
+    const {lv,z}=added[0];
+    const li=state.levels.indexOf(lv);if(li>=0)state.activeLevelIdx=li;
+    setLayer('slab');setTool('select');
+    state.activeZoneIdx=zonesOf(lv,'slab').indexOf(z);state.ui.vertexIdx=null;
+    beamScan.adjusting=z.id;
+    persist();renderBeamPanel();renderSidebar();renderCanvas();
+    toast('Drag the corners; Shift+click removes one. Next moves on when you are done.',4200);
+    return;
+  }
+  beamScan.adjusting=null;
+  persist();renderSidebar();
+  scanAdvance();
+}
+function scanSkip(){
+  const it=scanCurrent();if(!it)return;
+  it.done='skipped';it.pick=false;
+  beamScan.tally=beamScan.tally||{added:0,skipped:0};beamScan.tally.skipped++;
+  beamScan.adjusting=null;
+  scanAdvance();
+}
+function scanNext(){beamScan.adjusting=null;state.activeZoneIdx=null;state.ui.vertexIdx=null;scanAdvance()}
+function scanBack(){
+  // un-skip the most recently skipped candidate and return to it
+  const sk=beamScan.items.filter(it=>it.done==='skipped');
+  if(!sk.length)return;
+  const it=sk[sk.length-1];it.done=null;beamScan.cur=it;
+  if(beamScan.tally)beamScan.tally.skipped=Math.max(0,beamScan.tally.skipped-1);
+  scanShow(it);
+}
+function scanAcceptAllType(){
+  const it=scanCurrent();if(!it)return;
+  const same=scanQueue().filter(x=>x.kind===it.kind&&(x.kind!=='beam'||x.sized));
+  const added=scanCommit(same,`Add every remaining ${scanTypeName(it.kind,2)} from the sheets`);
+  beamScan.tally=beamScan.tally||{added:0,skipped:0};beamScan.tally.added+=added.length;
+  persist();renderSidebar();
+  scanAdvance();
+}
+function scanQueueHtml(){
+  const q=scanQueue(),it=scanCurrent();
+  const pr=beamScan.progress;
+  const progress=pr?`<div class="sq-progress" role="status">${pillHtml('read',`reading sheet ${pr.done+1} of ${pr.total}`)} <span class="lm-dim">${pr.page?`sheet ${pr.page} — `:''}shapes join the queue as each sheet is read</span></div>`:'';
+  const sf=x=>{const f=beamFtPerPx(x);return f?fmtArea(x.areaPx2*f*f):`${Math.round(x.areaPx2/1000)}k px&sup2;`};
+  const tally=beamScan.tally||{added:0,skipped:0};
+  const listBtn=`<button type="button" class="btn btn-sm" id="bsList" title="Every candidate as a list with tick boxes">List</button>`;
+  if(!it){
+    const skipped=beamScan.items.filter(x=>x.done==='skipped').length;
+    const body=pr?`<p class="step-help dim">Nothing on the sheets read so far. Reading on…</p>`
+      :`<p class="step-help dim">${tally.added?`${tally.added} shape${tally.added===1?'':'s'} added`:'Nothing added'}${skipped?` · ${skipped} skipped — open the list to add any of them`:''}.</p>`;
+    return `<div class="mp-panel sq-panel">
+      <div class="mp-head">Read from the sheets <span class="lm-dim">nothing is written until you accept it</span></div>
+      ${progress}${body}
+      <div class="mp-actions">${skipped?listBtn:''}<button type="button" class="btn btn-sm${pr?'':' btn-primary'}" id="bsClose">${pr?'Stop':'Done'}</button></div></div>`;
+  }
+  const kindQ=q.filter(x=>x.kind===it.kind),pos=kindQ.indexOf(it)+1;
+  const lv=state.levels[it.levelIdx!=null?it.levelIdx:beamScan.levelIdx]||{};
+  const bad=it.kind!=='opening'&&!it.sized;
+  let name;
+  if(it.kind==='opening')name=`Opening${it.label&&!/^OPNG$/i.test(it.label)?' &middot; '+esc(it.label):''}`;
+  else{const gw=beamGeomWidthIn(it);
+    name=(it.kind==='beam'?'Beam ':'Thickened slab ')+(it.sized?`${it.widthIn}&Prime; &times; ${it.depthIn}&Prime;`
+      :`<span class="lm-warn">size not read</span>${gw?` &middot; measures ${gw}&Prime; wide`:''}`)}
+  const allN=kindQ.filter(x=>x.kind!=='beam'||x.sized).length;
+  const adjusting=!!beamScan.adjusting;
+  return `<div class="mp-panel sq-panel">
+    <div class="mp-head"><span class="sq-type">${esc(scanTypeName(it.kind,2)).replace(/^./,c=>c.toUpperCase())}</span>
+      <span class="sq-count">${pos} of ${kindQ.length}</span>
+      ${pillHtml('read',`${esc(lv.name||'')}${it.page?` · sheet ${it.page}`:''}`)}
+      <span class="lm-dim">${q.length} to review${beamScan.items.filter(x=>x.done==='added').length?` · ${beamScan.items.filter(x=>x.done==='added').length} added`:''} &middot; nothing is written until you accept it</span></div>
+    ${progress}
+    <div class="sq-card${bad?' v-warn':''}">
+      <div class="sq-name">${name} <span class="lm-dim">${sf(it)}</span></div>
+      <div class="mp-why">${esc(it.why||'')}${bad?' — the size can be typed in after it is added.':''}</div>
+    </div>
+    <div class="mp-actions sq-acts">
+      ${adjusting
+        ?`<button type="button" class="btn btn-sm btn-primary" id="bsNext" title="Done adjusting — on to the next candidate (Enter)">Next \u25b8</button>`
+        :`<button type="button" class="btn btn-sm btn-primary" id="bsAccept" title="Add this shape to ${esc(lv.name||'the floor')} and move on (Enter)">Accept</button>
+           <button type="button" class="btn btn-sm" id="bsAdjust" title="Add it and leave its corners live to drag before moving on (A)">Accept &amp; adjust</button>
+           <button type="button" class="btn btn-sm" id="bsSkip" title="Leave this one out and move on (N)">Skip</button>`}
+      <span class="sq-gap"></span>
+      ${allN>1&&!adjusting?`<button type="button" class="btn btn-sm" id="bsAllType" title="Accept every remaining ${esc(scanTypeName(it.kind,2))} in the queue${it.kind==='beam'?' that has a size':''}">Accept all ${allN} ${esc(scanTypeName(it.kind,allN))}</button>`:''}
+      ${beamScan.items.some(x=>x.done==='skipped')?`<button type="button" class="btn btn-sm" id="bsBack" title="Back to the last one skipped">\u25c2 Back</button>`:''}
+      ${listBtn}
+      <button type="button" class="btn btn-sm" id="bsClose" title="Close the review; what was accepted stays">Close</button>
+    </div>
+    <div class="sq-keys lm-dim">Enter accepts &middot; A accepts and adjusts &middot; N skips</div></div>`;
+}
+function bindScanQueue(el){
+  const on=(id,fn)=>{const b=el.querySelector('#'+id);if(b)b.addEventListener('click',fn)};
+  on('bsAccept',()=>scanAccept(false));
+  on('bsAdjust',()=>scanAccept(true));
+  on('bsSkip',scanSkip);
+  on('bsNext',scanNext);
+  on('bsBack',scanBack);
+  on('bsAllType',scanAcceptAllType);
+  on('bsList',()=>{beamScan.view='list';renderBeamPanel();renderCanvas()});
+  on('bsClose',cancelBeamScan);
+}
+function scanKeys(e){
+  if(!beamScan||beamScan.view==='list'||typeof curStep==='undefined'||groupOf(curStep).id!=='areas')return false;
+  if(!scanCurrent())return false;
+  if(e.key==='Enter'){e.preventDefault();beamScan.adjusting?scanNext():scanAccept(false);return true}
+  if(!beamScan.adjusting&&(e.key==='a'||e.key==='A')){e.preventDefault();scanAccept(true);return true}
+  if(!beamScan.adjusting&&(e.key==='n'||e.key==='N')){e.preventDefault();scanSkip();return true}
+  return false;
+}
 function renderBeamPanel(){
   const el=document.getElementById('beamPanel');
   if(!el)return;
   if(!beamScan){el.style.display='none';el.innerHTML='';return}
   el.style.display='';
+  if(beamScan.view!=='list'){el.innerHTML=scanQueueHtml();bindScanQueue(el);return}
   const lvName=(state.levels[beamScan.levelIdx]||{}).name||'';
   const nPick=beamScan.items.filter(i=>i.pick).length;
   const sf=it=>{const f=beamFtPerPx(it);return f?fmtArea(it.areaPx2*f*f):`${Math.round(it.areaPx2/1000)}k px&sup2;`};
   const rows=beamScan.items.map((it,i)=>{
+    if(it.done==='added')return '';                  // written already, from the queue
     const bad=it.failed||(it.kind!=='opening'&&!it.sized);
     let name,stat;
     if(it.kind==='opening'){
@@ -20323,8 +20577,10 @@ function renderBeamPanel(){
     <div class="mp-actions">
       <button class="btn btn-sm btn-primary" id="bsApply"${nPick?'':' disabled'}>Add ${nPick||''} shape${nPick===1?'':'s'}</button>
       <button class="btn btn-sm" id="bsAllBeams">${isOpen?'Tick every traced opening':'Tick every sized beam'}</button>
+      <button class="btn btn-sm" id="bsQueue" title="Review them one at a time on the sheet">One at a time</button>
       <button class="btn btn-sm" id="bsClose">Close</button>
     </div></div>`;
+  const qb=el.querySelector('#bsQueue');if(qb)qb.addEventListener('click',()=>{beamScan.view='queue';beamScan.items.forEach(x=>{if(x.done==='skipped'&&x.pick)x.done=null});scanAdvance()});
   el.querySelectorAll('input[data-bpick]').forEach(c=>c.addEventListener('change',()=>{
     beamScan.items[+c.dataset.bpick].pick=c.checked;renderBeamPanel();renderCanvas();}));
   el.querySelectorAll('button[data-bshow]').forEach(b=>b.addEventListener('click',async()=>{
@@ -20343,13 +20599,30 @@ function renderBeamPanel(){
 }
 function drawBeamScan(zoom,F_MONO){
   if(!beamScan)return;
+  const queue=beamScan.view!=='list';
   beamScan.items.forEach((it,i)=>{
     if((it.page!=null?it.page:beamScan.page)!==state.pdf.current)return;
+    if(it.done==='added')return;                    // a real zone now, drawn as one
     const p=it.polygon;if(!p||p.length<3)return;   // a tag with no traceable outline
     drawCtx.beginPath();drawCtx.moveTo(p[0].x,p[0].y);
     for(let k=1;k<p.length;k++)drawCtx.lineTo(p[k].x,p[k].y);
     drawCtx.closePath();
     const sel=beamScan.sel===i;
+    if(queue){
+      // the one under review glows; the rest of the queue waits in quiet grey
+      const path=new Path2D();path.moveTo(p[0].x,p[0].y);for(let k=1;k<p.length;k++)path.lineTo(p[k].x,p[k].y);path.closePath();
+      drawCtx.fillStyle=sel?selectRgba(.16):(it.done==='skipped'?'rgba(120,120,120,.05)':'rgba(120,120,120,.10)');
+      drawCtx.fill();
+      if(sel)glowStroke(drawCtx,path,zoom,2);
+      else{drawCtx.strokeStyle=it.done==='skipped'?'rgba(110,110,110,.35)':'rgba(110,110,110,.6)';drawCtx.lineWidth=1.2/zoom;drawCtx.setLineDash([6/zoom,4/zoom]);drawCtx.stroke();drawCtx.setLineDash([])}
+      if(sel){const c=polyCentroid(p);
+        drawCtx.font=`700 ${Math.max(11,13/zoom)}px ${cssVar('--font-display')||F_MONO}`;
+        drawCtx.textAlign='center';drawCtx.textBaseline='middle';
+        drawCtx.lineWidth=4/zoom;drawCtx.strokeStyle='rgba(255,255,255,.92)';
+        const t=it.kind==='opening'?'OPENING':it.sized?`${it.widthIn}x${it.depthIn}`:(it.kind==='beam'?'beam ?':'slab ?');
+        drawCtx.strokeText(t,c.x,c.y);drawCtx.fillStyle=selectRgba(1);drawCtx.fillText(t,c.x,c.y)}
+      return;
+    }
     drawCtx.fillStyle=it.pick?'rgba(207,10,44,.22)':'rgba(120,120,120,.14)';
     drawCtx.fill();
     drawCtx.strokeStyle=sel?(cssVar('--zone-selected')||'#0a7'):it.pick?(cssVar('--mcc-red')||'#CF0A2C'):'rgba(110,110,110,.75)';
@@ -20365,39 +20638,14 @@ function drawBeamScan(zoom,F_MONO){
 }
 function acceptBeamScan(){
   if(!beamScan)return;
-  const picks=beamScan.items.filter(i=>i.pick);
+  const picks=beamScan.items.filter(i=>i.pick&&i.done!=='added');
   if(!picks.length)return;
-  history.record('Add shapes from the sheet');
-  let beams=0,slabs=0,opens=0,blank=0;
-  for(const it of picks){
-    if(!it.polygon)continue;
-    const lv=state.levels[it.levelIdx!=null?it.levelIdx:beamScan.levelIdx];
-    if(!lv)continue;
-    const arr=zonesOf(lv,'slab');
-    const z={id:sid(),kind:it.kind,polygon:it.polygon.map(p=>({x:p.x,y:p.y})),
-             label:it.kind==='opening'&&it.label&&!/^OPNG$/i.test(it.label)?it.label:'',
-             colorIdx:arr.length,fromSheet:true,srcPage:it.page!=null?it.page:beamScan.page};
-    // the scan runs over EVERY sheet of the floor, so each shape is in its own
-    // sheet's pixels — stamp it, or they all pile onto the floor's first sheet
-    {const pg=it.page!=null?it.page:beamScan.page;if(state.pdf.pages&&pg!=null)z.page=pg}
-    if(it.kind==='beam'){
-      const w=it.sized?it.widthIn:beamGeomWidthIn(it);
-      if(w!=null)z.widthIn=w;
-      if(it.depthIn!=null)z.depthIn=it.depthIn; else blank++;
-      beams++;
-    }else if(it.kind==='opening'){opens++}
-    else{slabs++}
-    arr.push(z);
-  }
-  beamScan=null;
+  const added=scanCommit(picks);
+  const blank=added.filter(a=>a.z.kind==='beam'&&a.z.depthIn==null).length;
+  beamScan=null;scanToken=null;
   state.activeZoneIdx=null;state.ui.vertexIdx=null;state.results=null;
   renderBeamPanel();renderSidebar();renderCanvas();persist();
-  const bits=[];
-  if(beams)bits.push(`${beams} beam${beams===1?'':'s'}`);
-  if(slabs)bits.push(`${slabs} thickened slab area${slabs===1?'':'s'}`);
-  if(opens)bits.push(`${opens} opening${opens===1?'':'s'}`);
-  toast((bits.join(' and ')||'Nothing')+' added'
-    +(blank?` — ${blank} still need${blank===1?'s':''} a depth typed in`:'')+'.',5600);
+  if(added.length===1)toast('1 shape added'+(blank?' — it still needs a depth typed in':'')+'.',4200);
 }
 
 // ── EVERY LOAD MAP IN ONE PASS ──
@@ -20900,16 +21148,17 @@ function assumptionText(a){
   const titles={extent:'No floor edge: slab assumed to extend everywhere',edge:`Overhang of ${OVERHANG_BEAR_FT} ft or less taken as bearing on the floor below`,capacity:'Typical capacity used outside tagged loading areas'};
   return a.floor+': '+titles[a.type]+' · '+fmtArea(a.areaSF);
 }
-function assumptionsHtml(L,printed=false){
+function assumptionsHtml(L,printed=false,notes){
   const items=assumptionItems(L);
   const small=L&&L.solve&&L.solve.regions?L.solve.regions.filter(r=>r.smallRegion).length:0;
   const anyAsm=(typeof assumedTypicalLevels==='function')?assumedTypicalLevels().length:0;
-  if(!items.length&&!small&&!anyAsm)return '';
+  notes=notes||[];
+  if(!items.length&&!small&&!anyAsm&&!notes.length)return '';
   const rows=items.map((a,i)=>printed?`<li>${esc(assumptionText(a))}</li>`:`<li><button class="assumption-link" data-assumption="${i}">${esc(assumptionText(a))}</button></li>`).join('');
   const note=small?`<p>${small} small region${small===1?'':'s'} below ${minRegionSF()} SF kept separate: no neighbouring region reads the same way down the stack, so each keeps its own calculation.</p>`:'';
   const asm=(typeof assumedTypicalLevels==='function')?assumedTypicalLevels():[];
   const typNote=asm.length?`<p><b>Typical capacity assumed on ${asm.map(l=>esc(l.name)).join(', ')}</b> — filled in automatically and not yet confirmed. Check it on the Areas step.</p>`:'';
-  return printed?`<h3>Calculation assumptions</h3><ul>${rows}</ul>${note}${typNote}`:`<details class="review-assumptions"${asm.length?' open':''}><summary>Calculation assumptions · ${items.length+asm.length} item${items.length+asm.length===1?'':'s'}</summary>${typNote}<p>Select an item to highlight its sampled footprint. Areas are approximate and may overlap between categories.</p><ul>${rows}</ul>${note}<button class="btn btn-sm" data-clear-assumptions="1">Clear overlay</button></details>`;
+  return printed?`<h3>Calculation assumptions</h3><ul>${rows}</ul>${note}${typNote}`:`<details class="review-assumptions"${asm.length?' open':''}><summary>Notes &amp; assumptions · ${items.length+asm.length+notes.length} item${items.length+asm.length+notes.length===1?'':'s'}</summary>${notes.length?`<p class="rs-notes">${notes.join('<br>')}</p>`:''}${typNote}<p>Select an item to highlight its sampled footprint. Areas are approximate and may overlap between categories.</p><ul>${rows}</ul>${note}<button class="btn btn-sm" data-clear-assumptions="1">Clear overlay</button></details>`;
 }
 async function showAssumption(index){
   if(!resultsCurrent()){invalidateCalculatedResults();return}
