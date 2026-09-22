@@ -1,4 +1,4 @@
-// @rules ARE-08, MDL-15, LOD-08, LOD-10  (see DECISIONS.md)
+// @rules BLD-14, ARE-08, MDL-15, LOD-08, LOD-10  (see DECISIONS.md)
 // The typical capacity, drawn from the floor edge rather than stored as a
 // second shape: it covers the slab, the drawn areas read as exceptions cut out
 // of it, it follows the edge through any edit because it IS the edge, and it
@@ -116,9 +116,11 @@ ok(row && /138 PSF/.test(row.text), 'showing the capacity');
 ok(row && /inside the floor edge/.test(row.text), 'and saying it is bounded by the edge');
 ok(row && !row.unset, 'not flagged, because it is set');
 ok(row && row.controls === 0 && row.ro && row.link, 'read-only, with a link to the Loads step: ' + JSON.stringify(row));
+// BLD-14 (Sep 21 2026): the Levels row says nothing about loads at all — no
+// capacity cell, no link, no PSF in its worked-out line; Building is geometry
 const lvRow = await page.evaluate(() => { renderLevelList(); const r = document.querySelector('#levelList .sb-item[data-level="1"]');
-  return { ro: !!r.querySelector('.lvl-cap-ro'), edits: r.querySelectorAll('.lvl-edit[data-f="cap"], .lvl-edit[data-f="defMark"], .lvl-edit[data-f="defLL"]').length, txt: r.querySelector('.lvl-cap-ro').textContent.trim() } });
-ok(lvRow.ro && lvRow.edits === 0 && /138 PSF/.test(lvRow.txt), 'the Levels row shows the same, read-only: ' + JSON.stringify(lvRow));
+  return { ro: !!r.querySelector('.lvl-cap-ro'), edits: r.querySelectorAll('.lvl-edit[data-f="cap"], .lvl-edit[data-f="defMark"], .lvl-edit[data-f="defLL"]').length, psf: /PSF/.test(r.textContent), capHead: !!document.querySelector('#levelList .lvl-cols span[data-col="cap"]') } });
+ok(!lvRow.ro && lvRow.edits === 0 && !lvRow.psf && !lvRow.capHead, 'the Levels row carries nothing about loads (BLD-14): ' + JSON.stringify(lvRow));
 
 const unset = await page.evaluate(() => {
   state.activeLevelIdx = 0; renderSidebar();          // Level 3 has no default

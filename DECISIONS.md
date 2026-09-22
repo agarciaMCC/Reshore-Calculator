@@ -106,7 +106,7 @@ the system; this file holds the rules and is versioned with the code.
 | LOD-04 | A re-scan keeps hand-entered marks and flags where the drawings disagree. | Sep 14 |
 | LOD-05 | Verifying a mark stays on the Loads tab and highlights the schedule row the value was read from — never jumps to another step. | Sep 15 |
 | LOD-06 | A typical loading mark per level is auto-picked from the mark covering the largest traced area. (Where the trace lives: ARE-12.) | Sep 15 |
-| LOD-08 | The typical capacity per floor has ONE home: the Loads step, with the marks. The Levels row and the Areas typical row show it read-only and link there. | Sep 21 |
+| LOD-08 | The typical capacity per floor has ONE home: the Loads step, with the marks. The Areas typical row shows it read-only and links there; the Levels row does not show it at all (BLD-14). | Sep 21 |
 | LOD-09 | Results waits for a schedule it can price: a chart whose rows carry no numbers does not open Results. | Sep 21 |
 | LOD-10 | The typical capacity per floor is a card of its own on Loads, with its state in its head (all N set / N to confirm / N still to set) and amber while anything is missing — and the Loads step is NOT done until every carrying floor has one and no assumed value is left unconfirmed. The rail and Next carry the same count. | Sep 21 |
 | LOD-07 | The all-floors pass reads every load-map sheet in one go: plans filed under the floor their title names with level and zone pickers, one review grouped by floor, traced areas landing on whichever zone sheet they fall in. It is the fallback behind "or do it by hand" on the Loading tab (ARE-12). | Sep 17 |
@@ -196,6 +196,7 @@ the system; this file holds the rules and is versioned with the code.
 | UI-24 | ONE TYPE SCALE: four sizes (18 / 14 / 12.5 / 11 px as `--fs-xl/lg/md/sm`) and nothing else. Importance is carried by weight, colour and position, never a fifth size. Every state is a PILL in one vocabulary — amber "needs you", green "done", grey "read, unconfirmed", dashed "cannot start yet" — on section heads, rail rows, tabs and cards. | Sep 21 |
 | UI-25 | THE RAIL IS A CHECKLIST: the four steps, and under the current step every section with its own state and one-line status, each clickable. A step with sections is summed up as "n of m done"; a one-section step says its own status. | Sep 21 |
 | UI-26 | ONE NEXT BAR, same place on every step: the left names what this step still wants ("Now: 5 sheets still to place") with the section it lives in; the right is the one way forward — "Go to <section>" while a section other than the one in focus wants something, "Next: <step>" once nothing here does. | Sep 21 |
+| UI-27 | ONE SECTION OPEN AT A TIME. Within a stacked step the section in focus is open and every other section folds to its one-line head with its state pill, finished or not. Clicking a folded head opens it alone and makes it the section in focus; clicking the open head folds it; moving to another section opens that one. | Sep 21 |
 | UI-14 | PDF fidelity: device-pixel-ratio-correct canvases, no PNG round trip, the visible patch re-rendered at on-screen magnification, auto-trace and floor-edge raster at 144 DPI. | Sep 9 |
 
 ## BRD — Brand
@@ -221,6 +222,7 @@ the system; this file holds the rules and is versioned with the code.
 | RVT-11 | A polygon is placed on the sheet it lands on and cut at the page edge, so a floor split North / South gets each half on its own sheet. | Sep 21 |
 | BLD-12 | A sheet can serve more than one floor — a typical tower plan serves every floor above the podium. Where several floors hold a page, the floor being worked on is the one meant. | Sep 21 |
 | BLD-13 | The fit is seeded from the two crossings that agree with the most others, refitted, and seeds over 3" RMS are discarded. A key plan in the title block carries its own bubbles at its own scale, and a fit taken over every crossing lands between the two plans and stays there. | Sep 21 |
+| BLD-14 | THE BUILDING STEP IS GEOMETRY ONLY: names, elevations, slab thickness, sheets, floor edge, match. The Levels row carries nothing about loads — no capacity cell, no link, no PSF in its worked-out line. Loads are assigned and confirmed on the Loads step, where the typical capacity has its one home (LOD-08). | Sep 21 |
 
 ---
 
@@ -260,6 +262,8 @@ the system; this file holds the rules and is versioned with the code.
 | Orange selected-region highlight | RES-06 | Sep 8 |
 | Green selected-region highlight with marching ants | RES-10 | Sep 21 |
 | Auto-trace button and review panel on the Loads step | ARE-12 | Sep 21 |
+| The typical capacity shown read-only on the Levels row | BLD-14 | Sep 21 |
+| Unfinished sections of a stacked step all open at once | UI-27 | Sep 21 |
 | "Start a combined chart / Start split schedules" asked cold on an empty Loads step | LOD-01 | Sep 21 |
 | Typical capacity editable on the Levels row, the level modal and the Areas typical row | LOD-08 | Sep 21 |
 | The level modal (double-click a level / …) | UI-19 | Sep 21 |

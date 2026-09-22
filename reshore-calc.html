@@ -7108,7 +7108,7 @@ function renderLevelList(){
     if(typeof renderLevelsConfirm==='function')renderLevelsConfirm();
     return;
   }
-  el.innerHTML=`<div class="lvl-cols" title="Type straight into the rows. Elevations are top of slab; floor-to-floor and shore height are worked out from the floor below."><span data-col="name">Level</span><span data-col="elevation" title="Top of slab elevation, feet">T.O.S. ft</span><span data-col="slab" title="Slab thickness, inches">slab</span><span data-col="cap">${scheduleShape()==='none'?'PSF':scheduleShape()==='split'?'LL · DL':'mark'}</span></div>`
+  el.innerHTML=`<div class="lvl-cols" title="Type straight into the rows. Elevations are top of slab; floor-to-floor and shore height are worked out from the floor below."><span data-col="name">Level</span><span data-col="elevation" title="Top of slab elevation, feet">T.O.S. ft</span><span data-col="slab" title="Slab thickness, inches">slab</span></div>`
   +state.levels.map((l,i)=>{
     const below=state.levels[i+1];
     const f2f=floorToFloorBelow(i);
@@ -7127,7 +7127,7 @@ function renderLevelList(){
     const sog=levelOnGrade(l);
     if(sog)bits.push(esc('slab on grade — absorbs all load'));
     else if(!below&&!rng)bits.push(esc('bottom level'));
-    if(!sog&&levelDefaultCapacity(l)>0)bits.push(kv(levelDefaultCode(l)?levelDefaultCode(l):'typical',levelDefaultCapacity(l)+' PSF'));
+    // BLD-14: the Building step describes geometry only — the typical capacity is the Loads step's business and is not shown here
     const meta=bits.join(' <span class="lvl-sep">·</span> ');
     const tipParts=[l.name];
     if(hasElev(l))tipParts.push('T.O.S. elevation '+l.elevation.toFixed(2)+' ft');
@@ -7151,7 +7151,7 @@ function renderLevelList(){
              :`<input class="lvl-edit lvl-name-in" data-li="${i}" data-f="name" value="${esc(l.name||'')}" placeholder="Level name" title="Level name">`}${rng?`<span class="lvl-badge" title="${rangeFloorCount(l)} identical floors">&times;${rangeFloorCount(l)}</span>`:''}${l.alignment?`<span class="aligned-dot"${levelFullyMatched(l)?'':' style="opacity:.4"'} title="${esc((levelFullyMatched(l)?'':`sheet${levelSheetsUnmatched(l).length>1?'s':''} ${levelSheetsUnmatched(l).join(', ')} still to match · `)+(l.alignment.ftPerInch!=null?alignQualityText(l.alignment):'Matched'))}"></span>`:''}
         <label class="lvl-edit-wrap" title="Elevation, top of slab (ft)">EL <input class="lvl-edit" data-li="${i}" data-f="elevation" value="${hasElev(l)?l.elevation.toFixed(2):''}" placeholder="ft"></label>
         <label class="lvl-edit-wrap" title="Slab thickness (in)"><input class="lvl-edit" data-li="${i}" data-f="slab" value="${l.slabThickness!=null?l.slabThickness:''}" placeholder="in">"</label>
-        ${sog?`<span class="lvl-badge lvl-sog-badge" title="Slab on grade — no capacity needed; the soil takes whatever load reaches it">SOG</span>`:levelCapacityReadOnly(l)}
+        ${sog?`<span class="lvl-badge lvl-sog-badge" title="Slab on grade — the lowest floor; it absorbs all remaining load">SOG</span>`:''}
         ${rng?'':`<button class="lvl-sog${sog?' on':''}" data-soglevel="${i}" title="${sog?'Marked as slab on grade. Click to make it a suspended floor again.':'Mark as slab on grade — the lowest floor; it absorbs all remaining load and nothing is shored below it'}">&#9640;</button>`}
         <button class="lvl-more${rng||state.ui.rangeOpen===i?' on':''}" data-morelevel="${i}" title="${rng?'Edit the typical range':'Make this a typical range (one definition for a run of identical floors)'}">&#8943;</button>
         <button class="align-btn" data-alignlevel="${i}" title="Match this floor" style="display:none">Match</button>
@@ -15647,14 +15647,21 @@ function stepStatus(id){
   return{done:false,text:''};
 }
 
-// A section is open while it still wants something, and folds to its one-line
-// summary once it is satisfied — unless the user says otherwise.
+// ONE SECTION OPEN AT A TIME (UI-27, Adolfo Sep 21 2026): the section in
+// focus is open, every other section of the step folds to its one-line head
+// with its state pill — so the pane reads as a checklist, not a scroll.
+// Clicking a folded head opens it (and makes it the section in focus);
+// clicking the open head folds it.
 const secOverride=new Map();
 function secOpen(id){
   const o=secOverride.get(id);
   if(o)return o==='open';
-  if(id===curStep)return true;
-  return !stepStatus(id).done;
+  return id===curStep;
+}
+function toggleSection(s){
+  if(s===curStep){secOverride.set(s,secOpen(s)?'closed':'open');renderGroupChrome();return}
+  secOverride.clear();
+  setStep(s);
 }
 function renderGroupChrome(){
   const g=curGroup();
@@ -15685,7 +15692,7 @@ function renderGroupChrome(){
     }
     if(!head){
       head=document.createElement('button');head.type='button';head.className='sec-head';
-      head.addEventListener('click',()=>{secOverride.set(s,secOpen(s)?'closed':'open');renderGroupChrome()});
+      head.addEventListener('click',()=>toggleSection(s));
     }
     panel.prepend(head);
     const st=stepStatus(s),open=secOpen(s),i=g.sections.indexOf(s)+1;
@@ -15796,6 +15803,7 @@ async function autoScanAreas(){
 
 function setStep(id){
   if(!STEPS.some(s=>s.id===id))return;
+  if(id!==curStep&&typeof secOverride!=='undefined')secOverride.clear();
   curStep=id;
   state.ui.assumptionOverlay=null;
   if(groupOf(id).id!=='loads')state.ui.sourceBox=null;

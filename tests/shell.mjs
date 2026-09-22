@@ -1,4 +1,4 @@
-// @rules UI-24, UI-25, UI-26  (see DECISIONS.md)
+// @rules UI-24, UI-25, UI-26, UI-27  (see DECISIONS.md)
 // The shell after the Sep 21 2026 revamp: one type scale and one pill
 // vocabulary (UI-24), the rail as a checklist (UI-25), one Next bar that
 // names the next action (UI-26).
@@ -137,6 +137,36 @@ console.log('E. red is spent once per section');
   });
   const over = Object.entries(r).filter(([, n]) => n > 1);
   ok(over.length === 0, 'no open section shows more than one primary button: ' + JSON.stringify(r));
+}
+
+// ── F. one section open at a time ───────────────────────────────────────
+console.log('F. the Building step is an accordion (UI-27)');
+{
+  await page.evaluate(() => setStep('levels'));
+  await page.waitForTimeout(200);
+  const r = await page.evaluate(() => {
+    const st = [...document.querySelectorAll('#stepPanels .step-panel.active')].map(p => ({ id: p.dataset.step, open: !p.classList.contains('sec-collapsed'), done: stepStatus(p.dataset.step).done }));
+    return { st, open: st.filter(x => x.open).map(x => x.id) };
+  });
+  ok(r.open.join() === 'levels', 'only the section in focus is open, finished or not: ' + JSON.stringify(r.st.map(x => [x.id, x.open, x.done])));
+  // clicking a folded head opens it and folds the rest
+  await page.click('#stepPanels .step-panel[data-step="match"] .sec-head');
+  await page.waitForTimeout(200);
+  const r2 = await page.evaluate(() => ({ cur: curStep, open: [...document.querySelectorAll('#stepPanels .step-panel.active:not(.sec-collapsed)')].map(p => p.dataset.step) }));
+  ok(r2.cur === 'match' && r2.open.join() === 'match', 'clicking a folded head opens that one alone and makes it the section in focus: ' + JSON.stringify(r2));
+  // clicking the open head folds it
+  await page.click('#stepPanels .step-panel[data-step="match"] .sec-head');
+  await page.waitForTimeout(200);
+  const r3 = await page.evaluate(() => [...document.querySelectorAll('#stepPanels .step-panel.active:not(.sec-collapsed)')].map(p => p.dataset.step));
+  ok(r3.length === 0, 'clicking the open head folds it');
+  // a step change opens the new section regardless
+  await page.evaluate(() => setStep('sheets'));
+  await page.waitForTimeout(200);
+  const r4 = await page.evaluate(() => [...document.querySelectorAll('#stepPanels .step-panel.active:not(.sec-collapsed)')].map(p => p.dataset.step));
+  ok(r4.join() === 'sheets', 'moving to another section opens it: ' + r4.join());
+  // a folded head still says where it stands
+  const r5 = await page.evaluate(() => { const h = document.querySelector('#stepPanels .step-panel[data-step="levels"] .sec-head'); return { pill: !!h.querySelector('.pill'), txt: h.textContent.replace(/\s+/g, ' ').trim() } });
+  ok(r5.pill && /Levels/.test(r5.txt), 'a folded head keeps its title and state pill: ' + r5.txt);
 }
 
 await browser.close();
