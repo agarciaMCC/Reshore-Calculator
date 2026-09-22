@@ -5382,7 +5382,19 @@ function findSnap(sx,sy,exclude){
 function resetGeometry(){
   for(const k of Object.keys(geomCache))delete geomCache[k];
   if(typeof resetPageTextCache==='function')resetPageTextCache();
+  resetPageVectorCaches();
   updateSnapGeomInfo();
+}
+// LOD-11. Every cache keyed by page NUMBER belongs to one drawing set: the
+// strokes, painted shapes, rasters, X-marks and traced load maps of "page 5"
+// mean nothing once another set is loaded. Adolfo, Sep 22 2026, Kinect: the
+// load maps were traced against the previous set's page-5 linework, so the
+// tags were right and every shape was a flood-fill sliver.
+function resetPageVectorCaches(){
+  const wipe=o=>{if(o)for(const k of Object.keys(o))delete o[k]};
+  try{wipe(strokeCache);wipe(fillObjCache);wipe(rasterCache);wipe(edgeRasterCache);wipe(xMarkCache)}catch(e){console.error(e)}
+  try{if(typeof traceCache!=='undefined'&&traceCache)traceCache.clear()}catch(e){}
+  try{if(typeof traceReady!=='undefined')traceReady=null}catch(e){}
 }
 async function ensurePageGeometry(num){
   if(!state.pdf.doc)return;
@@ -17809,15 +17821,36 @@ function fillObjectOutlines(obj,page){
   obj._outlines=outs;
   return outs;
 }
+// Is the point painted by this object? Even-odd over the object's OWN rings,
+// so a hole (Kinect's corridor is a ring; the residential area has a hole per
+// column and per inner area) reads as outside — the traced outline alone is
+// the outer boundary and cannot tell. LOD-12.
+function fillObjectPaints(o,px,py){
+  if(!o.polys||!o.polys.length)return true;
+  let n=0;
+  for(const ring of o.polys){
+    let inside=false;
+    for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+      const xi=ring[i][0],yi=ring[i][1],xj=ring[j][0],yj=ring[j][1];
+      if((yi>py)!==(yj>py)&&px<(xj-xi)*(py-yi)/(yj-yi)+xi)inside=!inside;
+    }
+    if(inside)n++;
+  }
+  return (n&1)===1;
+}
+const FILL_MIN_PX2=3000;
 // The smallest painted region containing a point, if any.
 async function fillRegionAt(num,px,py){
   const objs=await fillRegionObjects(num);
   let best=null;
   for(const o of objs){
     if(px<o.bbox.minx||px>o.bbox.maxx||py<o.bbox.miny||py>o.bbox.maxy)continue;
-    if((o.bbox.maxx-o.bbox.minx)*(o.bbox.maxy-o.bbox.miny)<8000)continue;     // a tag square, not an area
+    // a tag square is ~30 px across (under 1,500 px²); a stair or shaft on a
+    // 1"=20' map can be 5,000 px², so the floor for "an area" sits between
+    if((o.bbox.maxx-o.bbox.minx)*(o.bbox.maxy-o.bbox.miny)<FILL_MIN_PX2)continue;
+    if(!fillObjectPaints(o,px,py))continue;                                    // in a hole of this shape
     for(const out of fillObjectOutlines(o,num)){
-      if(out.areaPx2<8000)continue;
+      if(out.areaPx2<FILL_MIN_PX2)continue;
       if(!pointInPoly({x:px,y:py},out.polygon))continue;
       if(!best||out.areaPx2<best.areaPx2)best={...out,obj:o};
     }
@@ -21168,7 +21201,15 @@ async function loadMapPageList(){
 // review (ARE-12) and the all-floors pass both draw on the same cache, so
 // arriving on a second floor's Loading tab costs nothing.
 let traceCache=new Map();
-function traceCacheKey(){return scheduleShape()+'|'+(scheduleShape()==='split'?llSchedule().length+'/'+sdlSchedule().length:getConditions().length)}
+function traceCacheKey(){
+  // the schedule (codes -> capacities), the drawing set (its page count is
+  // as much identity as the doc offers) and the project grid, since the
+  // plan fit is part of what is cached
+  const g=state.project&&state.project.grid||{x:[],y:[]};
+  const gs=(g.x||[]).map(o=>o.label+':'+o.pos).join(',')+'|'+(g.y||[]).map(o=>o.label+':'+o.pos).join(',');
+  let h=0;for(let i=0;i<gs.length;i++)h=(h*31+gs.charCodeAt(i))|0;
+  return scheduleShape()+'|'+(scheduleShape()==='split'?llSchedule().length+'/'+sdlSchedule().length:getConditions().length)+'|p'+(state.pdf.pages||0)+'|g'+h;
+}
 async function tracedLoadMaps(onProgress){
   let pages=await loadMapPageList();
   if(!pages.length)pages=[state.pdf.current];

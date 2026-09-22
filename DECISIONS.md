@@ -115,6 +115,8 @@ the system; this file holds the rules and is versioned with the code.
 | LOD-09 | Results waits for a schedule it can price: a chart whose rows carry no numbers does not open Results. | Sep 21 |
 | LOD-10 | The typical capacity per floor is a card of its own on Loads, with its state in its head (all N set / N to confirm / N still to set) and amber while anything is missing — and the Loads step is NOT done until every carrying floor has one and no assumed value is left unconfirmed. The rail and Next carry the same count. | Sep 21 |
 | LOD-07 | The all-floors pass reads every load-map sheet in one go: plans filed under the floor their title names with level and zone pickers, one review grouped by floor, traced areas landing on whichever zone sheet they fall in. It is the fallback behind "or do it by hand" on the Loading tab (ARE-12). | Sep 17 |
+| LOD-11 | Every cache keyed by page number — vector strokes, painted shapes, rasters, X-marks, the traced load maps and the "ready" flag — belongs to ONE drawing set and is cleared whenever a set is loaded or the job reset. The trace-results cache is also keyed on the schedule, the set's page count and the project grid, so a plan fit made before the sheets were matched is redone, never served stale. | Sep 22 |
+| LOD-12 | A tag is inside a painted load area only where that shape actually paints, even-odd over its own rings: a tag in a hole of a ring-shaped area (a corridor) or of an area with cut-outs belongs to what is drawn in the hole, not to the ring. The floor for "an area" (as against a tag square) is 3,000 image px². | Sep 22 |
 
 ## ARE — Areas step and markup
 
