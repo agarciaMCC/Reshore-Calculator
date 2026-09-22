@@ -36,6 +36,7 @@ the system; this file holds the rules and is versioned with the code.
 | MDL-14 | The topmost floor needs no capacity and gets no nag. | Sep 9 |
 | MDL-16 | The Floor edge step carries the slab-on-grade tick: the bottom of the stack arrives ticked (marked assumed), any row can be ticked or cleared by hand, and once cleared by hand it is never proposed again on that job. A floor on grade is asked for no capacity — it absorbs whatever reaches it. | Sep 21 |
 | MDL-15 | The floor edge carries no capacity of its own; the level default does that per sample point. The floor edge stands in as the pour's extent when no loading areas are drawn there. | Sep 9 |
+| MDL-17 | A sloped area (a ramp) carries a HIGH and a LOW top, and the shore height under it is a range. The TALLEST governs the pick — the floor at its high point standing on the floor below at its low one — and the low end is checked against the chosen shore's closed length, since a shore cannot close shorter than its own minimum height. A flat area answers the same to both ends, so nothing that does not know about slopes changes. | Sep 22 |
 
 ## RGN — Regions, merging and naming
 
@@ -208,6 +209,7 @@ the system; this file holds the rules and is versioned with the code.
 | RVT-10 | Registration is the Match step: fitting one of his sheets to the model's project grid from that sheet's own bubbles IS the transform, and the same transform places the model's polygons on it. Model geometry governs; the drawing is the backdrop. Nothing is written until Apply. | Sep 21 |
 | RVT-11 | A polygon is placed on the sheet it lands on and cut at the page edge, so a floor split North / South gets each half on its own sheet. | Sep 21 |
 | RVT-12 | Feet and inches on a rendered sheet are written as a drawing writes them — 9'-3", 77'-11 1/2" — never 77'-11.5". The decimal form is in no drawing and the calculator's own dimension reader does not parse it. | Sep 22 |
+| RVT-13 | A ramp is one element with a falling top, so its bounding box is the slope RISE plus the slab. The top face is grouped by the PLANE its triangles lie in: each run and each landing exports as its own piece with its own high and low T.O.S., and the thickness has the rise taken back out. An on-grade ramp is not flagged — it bears on the ground. | Sep 22 |
 | BLD-12 | A sheet can serve more than one floor — a typical tower plan serves every floor above the podium. Where several floors hold a page, the floor being worked on is the one meant. | Sep 21 |
 | BLD-13 | The fit is seeded from the two crossings that agree with the most others, refitted, and seeds over 3" RMS are discarded. A key plan in the title block carries its own bubbles at its own scale, and a fit taken over every crossing lands between the two plans and stays there. | Sep 21 |
 

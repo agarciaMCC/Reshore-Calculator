@@ -707,6 +707,10 @@ input[readonly],input.derived{background:var(--derived-bg);color:var(--text-seco
 .ra-thru.ok{color:var(--text-secondary)}
 .ra-thru .ss-ok{margin-left:6px;vertical-align:middle}
 .rs-thru{color:var(--danger)}
+/* MDL-17: a ramp's shore height is a range, and the range is not a fault —
+   amber, like a later pour, never the red of something wrong */
+.rs-ramp{font-style:normal;font-size:10px;color:#8a5a00;margin-left:3px;font-weight:700}
+.rs-slope{white-space:nowrap}
 /* a later pour needs it tighter here: amber, never red — nothing is wrong,
    it is just not this placement's number that goes in */
 .pat-chip.later{border-color:#b98600}
@@ -2220,6 +2224,12 @@ function gradeLevels(){return state.levels.filter(levelOnGrade)}
 // can be read without a sheet match. Adolfo, Sep 15, 2026.
 function levelNeedsAlignment(l){return !!l}
 function slabOffsetOf(z){return z&&z.offsetIn!=null&&!isNaN(z.offsetIn)?+z.offsetIn:0}
+// MDL-17: a ramp is one area with two tops. offsetIn is its HIGH point (the
+// tallest shore, which governs) and offsetLowIn its LOW one. A flat area
+// answers the same to both, so everything that does not know about slopes
+// keeps working unchanged.
+function slabOffsetLowOf(z){return z&&z.offsetLowIn!=null&&!isNaN(z.offsetLowIn)?+z.offsetLowIn:slabOffsetOf(z)}
+function isSlopedZone(z){return !!(z&&z.sloped&&z.offsetLowIn!=null&&!isNaN(z.offsetLowIn)&&Math.abs(+z.offsetLowIn-slabOffsetOf(z))>=0.25)}
 // Beams: a blank offset means "inherit" (from the slab area the footprint
 // sits in, else the level baseline); a number is the beam's own local T.O.S.
 function beamOffsetOf(z,inherited){return z&&z.offsetIn!=null&&z.offsetIn!==''&&!isNaN(z.offsetIn)?+z.offsetIn:(inherited||0)}
@@ -2243,10 +2253,11 @@ function slabAt(lv,z){
   if(z&&isOpening(z))return{open:true,thick:0,off:0,soffitIn:0,beam:null,zone:z};
   if(isBeam(z)){
     const t=slabThicknessOf(lv,null);
-    return{open:false,thick:t,off:beamOffsetOf(z,0),soffitIn:Math.max(t,+z.depthIn||t),beam:z,zone:z,grade:levelOnGrade(lv)};
+    return{open:false,thick:t,off:beamOffsetOf(z,0),offLow:beamOffsetOf(z,0),sloped:false,soffitIn:Math.max(t,+z.depthIn||t),beam:z,zone:z,grade:levelOnGrade(lv)};
   }
   const t=slabThicknessOf(lv,z);
-  return{open:false,thick:t,off:slabOffsetOf(z),soffitIn:t,beam:null,zone:z||null,grade:levelOnGrade(lv)||isGradeZone(z)};
+  return{open:false,thick:t,off:slabOffsetOf(z),offLow:slabOffsetLowOf(z),sloped:isSlopedZone(z),
+         soffitIn:t,beam:null,zone:z||null,grade:levelOnGrade(lv)||isGradeZone(z)};
 }
 // Slab state at a point given the pre-transformed slab-layer list: a beam
 // footprint may sit inside a slab step, so the beam and the step are read
@@ -2267,7 +2278,10 @@ function slabStateAt(lv,list,x,y){
   const d=+beamE.zone.depthIn||base.thick;
   // the beam's own T.O.S. offset wins when given; otherwise it rides on the
   // slab area it sits in (or the level baseline)
-  return{...base,off:beamOffsetOf(beamE.zone,base.off),soffitIn:Math.max(base.thick,d),beam:beamE.zone};
+  // a beam is flat even where the slab it sits in falls
+  return{...base,off:beamOffsetOf(beamE.zone,base.off),offLow:beamOffsetOf(beamE.zone,base.offLow),
+         sloped:base.sloped&&(beamE.zone.offsetIn==null||beamE.zone.offsetIn===''),
+         soffitIn:Math.max(base.thick,d),beam:beamE.zone};
 }
 // Colour follows the loading condition, not the draw order, so the same
 // condition reads the same on every level.
@@ -11740,6 +11754,22 @@ function chosenOption(options,key){
   if(!id)return null;
   return options.find(o=>o.shoreId===id)||null;
 }
+// MDL-17: how a ramp's shore height reads, and whether the shore picked for
+// its tall end still fits at the short one. A shore cannot close shorter than
+// its own minimum height, so a pattern chosen at 13'-4" is no use at the low
+// end of the ramp if that shore only closes to 9'-0".
+function shoreHeightText(st){
+  if(!st||st.shoreHeightFt==null)return '\u2014';
+  const hi=feetToStr(st.shoreHeightFt);
+  if(st.shoreHeightMinFt==null)return hi;
+  return `${feetToStr(st.shoreHeightMinFt)}\u2013${hi}`;
+}
+function slopeShortEndFail(st){
+  if(!st||st.shoreHeightMinFt==null||!st.chosen||!st.chosen.shore)return null;
+  const minH=+st.chosen.shore.minH;
+  if(isNaN(minH)||st.shoreHeightMinFt>=minH-1e-6)return null;
+  return{minH,at:st.shoreHeightMinFt,name:st.chosen.shore.name};
+}
 function patternSpacingFt(pattern){
   const m=String(pattern||'').match(/(\d+)/);
   return m?parseInt(m[1],10):0;
@@ -11781,9 +11811,18 @@ function cascadeAtPoint(stack,pourIdx,thickIn,dl,shores){
     for(let m=j+1;m<stack.length;m++){const t=stack[m]._slabAt;if(!t||!t.open){sj=m;break}}
     const sup=sj>=0?stack[sj]:null;
     const needShores=resultant>0;
-    const hFt=(needShores&&sup)?shoreHeightUnder(lv,sup,sl.soffitIn!=null?sl.soffitIn:sl.thick,sl.off,(sup._slabAt||{}).off||0):null;
+    const supSl=sup?(sup._slabAt||{}):null;
+    // MDL-17. Under a ramp the shore height is a RANGE. The TALLEST governs
+    // the pick — this floor at its high point standing on the floor below at
+    // its low one — and the shortest is carried alongside so the chosen
+    // shore can be checked against its closed length at the low end.
+    const hFt=(needShores&&sup)?shoreHeightUnder(lv,sup,sl.soffitIn!=null?sl.soffitIn:sl.thick,sl.off,(supSl.offLow!=null?supSl.offLow:supSl.off)||0):null;
+    const sloped=!!(sl.sloped||(supSl&&supSl.sloped));
+    const hMinFt=(needShores&&sup&&sloped)
+      ?shoreHeightUnder(lv,sup,sl.soffitIn!=null?sl.soffitIn:sl.thick,sl.offLow!=null?sl.offLow:sl.off,supSl.off||0):null;
     steps.push({levelIdx:j,level:lv,capacity:cap,remaining,resultant,
                 shoreHeightFt:hFt,supportLevel:sup,supportIdx:sj,
+                ...(sloped&&hMinFt!=null&&hFt!=null&&Math.abs(hFt-hMinFt)>=1/24?{shoreHeightMinFt:hMinFt,sloped:true}:{}),
                 spansOpen:sup?sj-j-1:0,
                 options:(needShores&&hFt!=null)?shoreOptionsFor(hFt,Math.max(resultant,0),shores):[]});
     if(resultant<=0){remaining=0;break}
@@ -12016,9 +12055,13 @@ function beamProfileAt(stack,pourIdx,regSteps,shores){
     let sj=-1;
     for(let m=j+1;m<stack.length;m++){const t=stack[m]._slabAt;if(!t||!t.open){sj=m;break}}
     const sup=sj>=0?stack[sj]:null;
-    const hFt=sup?shoreHeightUnder(lv,sup,sl.soffitIn!=null?sl.soffitIn:sl.thick,sl.off,(sup._slabAt||{}).off||0):null;
+    const supSl=sup?(sup._slabAt||{}):null;
+    const hFt=sup?shoreHeightUnder(lv,sup,sl.soffitIn!=null?sl.soffitIn:sl.thick,sl.off,(supSl.offLow!=null?supSl.offLow:supSl.off)||0):null;
+    const sloped=!!(sl.sloped||(supSl&&supSl.sloped));      // MDL-17
+    const hMinFt=(sup&&sloped)?shoreHeightUnder(lv,sup,sl.soffitIn!=null?sl.soffitIn:sl.thick,sl.offLow!=null?sl.offLow:sl.off,supSl.off||0):null;
     rows.push({levelIdx:j,level:lv,capacity:cap,slabRemaining:slabRem,sparePsf:Math.max(0,cap-slabRem),
                shoreHeightFt:hFt,supportLevel:sup,supportIdx:sj,spansOpen:sup?sj-j-1:0,
+               ...(sloped&&hMinFt!=null&&hFt!=null&&Math.abs(hFt-hMinFt)>=1/24?{shoreHeightMinFt:hMinFt,sloped:true}:{}),
                options:hFt!=null?shoreOptionsFor(hFt,0,shores):[]});
     if(!sup)break;
   }
@@ -13977,14 +14020,16 @@ function renderSchedule(){
       const thruHtml=thru?`<div class="ra-thru${thruOk?' ok':''}">${thruOk?'\u2713 ':'\u26a0 '}<b>${esc(feetToStr(st.shoreHeightFt))} through-shore</b> — ${esc(throughText(r,st))}: nothing to stand on directly under ${esc(st.level.name)}${
           thruOk?` <button type="button" class="ss-undo" data-thru="${esc(st.choiceKey)}" data-thru-on="0" title="Flag this through-shore again">recheck</button>`
                 :` <button type="button" class="btn btn-sm ss-ok" data-thru="${esc(st.choiceKey)}" data-thru-on="1" title="Accept that the reshore under ${esc(st.level.name)} runs ${esc(feetToStr(st.shoreHeightFt))} down to ${esc(st.supportLevel.name)} here">OK \u2014 shore through</button>`}</div>`:'';
-      return`<div class="ra-row${ch?'':' pend'}${thru&&!thruOk?' thru':''} sched-go" ${rowAttr}>${fl}
+      const shortEnd=slopeShortEndFail(st);
+      const slopeHtml=shortEnd?`<div class="ra-thru">\u26a0 <b>${esc(shortEnd.name)} will not close at the low end</b> \u2014 the ramp runs down to ${esc(feetToStr(shortEnd.at))} here and that shore closes to ${esc(feetToStr(shortEnd.minH))}. Pick a shorter shore for the low end, or split the ramp.</div>`:'';
+      return`<div class="ra-row${ch?'':' pend'}${thru&&!thruOk?' thru':''}${shortEnd?' thru':''} sched-go" ${rowAttr}>${fl}
         <div class="ra-res" title="${st.capacity} PSF capacity taken off what arrives"><b>${st.resultant.toFixed(1)}</b> psf</div>
         <div class="ra-pick">
-          <span class="rs-dim${thru?' rs-thru':''}" title="${st.supportLevel?`stands on ${esc(st.supportLevel.name)}${st.spansOpen?` through ${st.spansOpen} open floor${st.spansOpen>1?'s':''}`:''}`:'nothing below to stand on'}">${
-            st.shoreHeightFt!=null?esc(feetToStr(st.shoreHeightFt)):'—'}${thru?' \u2193'+esc(st.supportLevel.name):''}</span>
+          <span class="rs-dim${thru?' rs-thru':''}${st.sloped?' rs-slope':''}" title="${st.supportLevel?`stands on ${esc(st.supportLevel.name)}${st.spansOpen?` through ${st.spansOpen} open floor${st.spansOpen>1?'s':''}`:''}`:'nothing below to stand on'}${st.sloped?` \u00b7 sloped: ${esc(feetToStr(st.shoreHeightMinFt))} at the low end, ${esc(feetToStr(st.shoreHeightFt))} at the high \u2014 the tallest governs`:''}">${
+            esc(shoreHeightText(st))}${st.sloped?' <i class="rs-ramp" title="ramp \u2014 the shore height runs through this range">ramp</i>':''}${thru?' \u2193'+esc(st.supportLevel.name):''}</span>
           ${pick}
           ${ch?`<span class="rs-pat" title="${Math.round(ch.sfPerShore)} SF per shore">${esc(ch.pattern)}</span>`:''}
-        </div>${laterHtml}${thruHtml}</div>`;
+        </div>${laterHtml}${thruHtml}${slopeHtml}</div>`;
     }).join('');
     const rows=r.steps.map(st=>{
       const rowAttr=`data-ri="${ri}" data-lv="${defIdxOf(st.level)}" title="Show this region on ${esc(st.level.name)}'s sheet"`;
@@ -14010,7 +14055,7 @@ function renderSchedule(){
         <td>${st.code?esc(st.code):'—'}</td>
         <td>${st.capacity}</td>
         <td><b>${st.resultant.toFixed(1)}</b></td>
-        <td title="${standsOn}">${st.shoreHeightFt!=null?feetToStr(st.shoreHeightFt):'—'}${st.spansOpen?` <span class="lm-dim">↓${esc(st.supportLevel.name)}</span>`:''}</td>
+        <td title="${standsOn}${st.sloped?` · sloped: ${esc(feetToStr(st.shoreHeightMinFt))} at the low end — the tallest governs`:''}">${shoreHeightText(st)}${st.spansOpen?` <span class="lm-dim">↓${esc(st.supportLevel.name)}</span>`:''}</td>
         <td>${ch?esc(ch.shore.name)+' · '+ch.capacityAtHeight.toLocaleString()+' lb'
           :(st.options.length?`<span class="lm-warn">not chosen — ${st.options.length} legal above</span>`
             :`<span class="lm-warn">${st.supportLevel?'no shore fits this height':'no floor below to stand on'}</span>`)}</td>
@@ -20851,7 +20896,7 @@ function restoreBrowserBackup(){
 // Grouping is a view operation. It never combines cells, loads or beam profiles.
 function answerGroupKey(r){
   if(r.steps.some(s=>!s.open&&!s.grade&&s.resultant>0&&!s.chosen))return null;
-  return JSON.stringify(r.steps.map(s=>[s.levelIdx,s.level&&s.level.name,!!s.open,!!s.noSlab,!!s.grade,s.resultant>0,s.shoreHeightFt,s.supportIdx,s.chosen&&s.chosen.shoreId,s.chosen&&s.chosen.pattern]));
+  return JSON.stringify(r.steps.map(s=>[s.levelIdx,s.level&&s.level.name,!!s.open,!!s.noSlab,!!s.grade,s.resultant>0,s.shoreHeightFt,s.shoreHeightMinFt==null?null:s.shoreHeightMinFt,s.supportIdx,s.chosen&&s.chosen.shoreId,s.chosen&&s.chosen.pattern]));
 }
 function groupAnswerCards(host,L){
   const buckets=new Map();

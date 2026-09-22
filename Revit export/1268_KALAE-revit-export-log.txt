@@ -1,11 +1,4 @@
-opening HI_KALAE_MCC_ST.ifc
-  IfcSlab: 449 in 41s
-  IfcBeam: 459 in 2s
-  IfcOpeningElement: 549 in 1s
-  IfcColumn: 1403 in 12s
-  IfcWall: 1331 in 7s
-cached extraction → ./extract-811d07bf980e.json
-project datum: storey elevations sit 90'-9" above the model's Reference Level values (9696 of 9703 agree) — levels reported on the project datum
+using cached extraction extract-fb6a1202993c.json
 levels on the project datum: 90'-9" below the model's storey elevations
 rotate auto: number gridlines run at 38.13°, rotating 51.87° so they are vertical
 sheet 36x24 in, scale 20 ft per inch, 0.13889 ft/px; building extents 318 x 367 ft
@@ -14,12 +7,12 @@ shared→project elevation datum: +7.500 ft
 wrote ./1268_KALAE-revit-plans.pdf (42 pages)
 wrote ./1268_KALAE-revit.reshore.json
 
-     1  T.O.S.      9'-3"  typ 5"  edge 68,889 SF  openings 14  slab areas 6  beams 1  ON GRADE  [67 wall/column pockets filled]
-     2  T.O.S.     20'-9"  typ 7.5"  edge 60,654 SF  openings 8  slab areas 6  beams 25  [8 wall/column pockets filled]  [upturned / above slab (skipped): 1]
-     3  T.O.S.    29'-11"  typ 7.5"  edge 57,093 SF  openings 19  slab areas 4  beams 46  [11 wall/column pockets filled]
-     4  T.O.S.     39'-1"  typ 7.5"  edge 53,878 SF  openings 8  slab areas 2  beams 36  [5 wall/column pockets filled]  [depth from geometry: 1; width from geometry: 1]
+     1  T.O.S.      9'-3"  typ 5"  edge 68,889 SF  openings 14  slab areas 6  beams 1  ON GRADE  [67 wall/column pockets filled]  [sloped pieces: 1]
+     2  T.O.S.     20'-9"  typ 7.5"  edge 60,654 SF  openings 8  slab areas 6  beams 25  [8 wall/column pockets filled]  [upturned / above slab (skipped): 1]  [sloped pieces: 4]
+     3  T.O.S.    29'-11"  typ 7.5"  edge 57,093 SF  openings 19  slab areas 4  beams 46  [11 wall/column pockets filled]  [sloped pieces: 3]
+     4  T.O.S.     39'-1"  typ 7.5"  edge 53,878 SF  openings 8  slab areas 2  beams 36  [5 wall/column pockets filled]  [depth from geometry: 1; width from geometry: 1]  [sloped pieces: 2]
    4.5  T.O.S.     48'-3"  typ 10"  edge 54,184 SF  openings 3  slab areas 7  beams 53  [width from geometry: 6; upturned / above slab (skipped): 2]
-     5  T.O.S.     53'-1"  typ 8"  edge 14,732 SF  openings 5  slab areas 7  beams 16  [1 wall/column pockets filled]  (slab top -0'-2" vs Revit level 53'-3")
+     5  T.O.S.     53'-1"  typ 8"  edge 14,732 SF  openings 5  slab areas 8  beams 16  [1 wall/column pockets filled]  [sloped pieces: 1]  (slab top -0'-2" vs Revit level 53'-3")
      6  T.O.S.     68'-3"  typ 7.5"  edge 15,048 SF  openings 5  slab areas 2  beams 5
      7  T.O.S. 77'-11 1/2"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 4
      8  T.O.S.     87'-8"  typ 7.5"  edge 14,690 SF  openings 5  slab areas 0  beams 2
