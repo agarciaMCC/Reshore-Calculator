@@ -95,6 +95,8 @@ the system; this file holds the rules and is versioned with the code.
 | BLD-09 | A re-issued set is re-mapped sheet-by-sheet by title block, with a review before any page numbers change. A moved sheet's grid match carries over but is flagged. His levels are kept and what changed is shown. | Sep 17 |
 | BLD-10 | Sheet scale comes from the plan views, not from a detail's note. One-click Rescale available. | Sep 17 |
 | BLD-11 | A level may hold several sheets as named zones, one zone per sheet, with the grid running continuously across the split. Zones are names only for now. | Sep 10, Sep 17 |
+| BLD-15 | A sheet that states its floor once, in a strip under the drawing title ("T.O.S. 9'-3" · typical slab 5" · SLAB ON GRADE"), is read. It is a SEPARATE channel from the T/SLAB - B/SLAB callouts: it fills only what they left empty, never overrides them, and never feeds the plan-vs-section test. One figure for the whole sheet or none — a set calling out an absolute T.O.S. per bay is the callout channel's job. | Sep 22 |
+| BLD-16 | A title that names its level names it in FULL: "LEVEL MECH ROOF FLOOR PLAN" is MECH ROOF, not Roof. An explicit "LEVEL &lt;name&gt; … PLAN" beats the ROOF / PENTHOUSE / MEZZANINE shortcuts, which are for a sheet titled only "ROOF PLAN"; the designation stops at the words naming the kind of plan. | Sep 22 |
 
 ## LOD — Loads
 
@@ -198,7 +200,6 @@ the system; this file holds the rules and is versioned with the code.
 | RVT-01 | Revit supplies GEOMETRY ONLY. Loading marks are drawn in the calculator. | Sep 18 |
 | RVT-02 | FILL / PAD / CURB / PEDESTAL / Plinth / TOS SLOPE are never slab. Anything named BM or BEAM is a beam whatever its category (see BEM-07). | Sep 18 |
 | RVT-03 | Rotation to project north is a user option. | Sep 18 |
-| RVT-04 | The drawing set is a rendered plan sheet per level for now; vector-only mode later. | Sep 18 |
 | RVT-05 | Any gridline or bubble whose tag carries an apostrophe or a lowercase letter is not needed on the drawings, and bubbles sit outside the building extents. | Sep 18 |
 | RVT-06 | Elevations are reported on the PROJECT datum, found from the model's own Reference Level properties (Top / Bottom Reference Elevation) against the storey elevations. Kalae: 90'-9" below the storey values, so Level 1 reads 9'-3". Storey elevations are the fallback. | Sep 21 |
 | RVT-07 | A hole in the slab that a wall or column fills is not an opening. The pocket is filled back in: the load path runs through the wall or the column. | Sep 21 |
@@ -206,6 +207,7 @@ the system; this file holds the rules and is versioned with the code.
 | RVT-09 | Default (`--drawings field`): the job stands on McClone's own printed set. It carries no sheets of its own; its geometry travels in FEET in the frame the project grid is written in, under `modelZones`. `--drawings rendered` keeps the old behaviour. The rendered PDF is written either way, as a check on what the model thinks it has. | Sep 21 |
 | RVT-10 | Registration is the Match step: fitting one of his sheets to the model's project grid from that sheet's own bubbles IS the transform, and the same transform places the model's polygons on it. Model geometry governs; the drawing is the backdrop. Nothing is written until Apply. | Sep 21 |
 | RVT-11 | A polygon is placed on the sheet it lands on and cut at the page edge, so a floor split North / South gets each half on its own sheet. | Sep 21 |
+| RVT-12 | Feet and inches on a rendered sheet are written as a drawing writes them — 9'-3", 77'-11 1/2" — never 77'-11.5". The decimal form is in no drawing and the calculator's own dimension reader does not parse it. | Sep 22 |
 | BLD-12 | A sheet can serve more than one floor — a typical tower plan serves every floor above the podium. Where several floors hold a page, the floor being worked on is the one meant. | Sep 21 |
 | BLD-13 | The fit is seeded from the two crossings that agree with the most others, refitted, and seeds over 3" RMS are discarded. A key plan in the title block carries its own bubbles at its own scale, and a fit taken over every crossing lands between the two plans and stays there. | Sep 21 |
 
@@ -247,6 +249,7 @@ the system; this file holds the rules and is versioned with the code.
 | Orange selected-region highlight | RES-06 | Sep 8 |
 | "Start a combined chart / Start split schedules" asked cold on an empty Loads step | LOD-01 | Sep 21 |
 | Typical capacity editable on the Levels row, the level modal and the Areas typical row | LOD-08 | Sep 21 |
+| RVT-04: the job's drawing set is a rendered plan sheet per level | RVT-09 | Sep 21 |
 | The level modal (double-click a level / …) | UI-19 | Sep 21 |
 | The Results modal (Schedule button) and gotoStep | BLD-01 | Sep 21 |
 | Detect the floor edge / Auto detect as buttons the user must press first | UI-16, UI-17 | Sep 21 |

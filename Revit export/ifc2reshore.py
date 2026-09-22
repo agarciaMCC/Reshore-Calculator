@@ -209,11 +209,31 @@ def simplify_ring(coords, tol=0.02):
     except Exception:
         return coords
 
+def fmt_in(inch):
+    """inches as a drawing writes them: 5", 7 1/2", 11 3/4" — never 7.5"."""
+    sign = '-' if inch < 0 else ''; inch = abs(inch)
+    whole = int(inch); num = round((inch - whole) * 8)
+    if num == 8: whole += 1; num = 0
+    den = 8
+    while num and num % 2 == 0: num //= 2; den //= 2
+    if not num: return f'{sign}{whole}"'
+    return f'{sign}{whole} {num}/{den}"' if whole else f'{sign}{num}/{den}"'
+
 def fmt_ftin(ft):
+    """feet and inches as a drawing writes them: 9'-3", 77'-11 1/2".
+
+    RVT-12. This used to print the inches with %g, so a slab at 77'-11.5"
+    came out as 77'-11.5" — which no drawing says, and which the
+    calculator's own dimension reader (DIM_RE) does not parse, so the
+    rendered set's title strips read as nothing.
+    """
     sign = '-' if ft < 0 else ''; ft = abs(ft)
-    f_ = int(ft); i = round((ft - f_) * 12 * 4) / 4
+    f_ = int(ft); i = round((ft - f_) * 12 * 8) / 8
     if i >= 12: f_ += 1; i -= 12
-    inch = ('%g' % i)
+    whole = int(i); num = round((i - whole) * 8); den = 8
+    if num == 8: whole += 1; num = 0
+    while num and num % 2 == 0: num //= 2; den //= 2
+    inch = f'{whole} {num}/{den}' if num else str(whole)
     return f"{sign}{f_}'-{inch}\""
 
 def jsnum(v):
@@ -720,7 +740,7 @@ def render_pdf(pages, xf, sheet, scale, out_pdf, B, ex, args):
             sc = '1/%d" = 1\'-0"' % round(12/scale) if (12/scale).is_integer() else f'1" = {scale:g}\''
             ax.text(72, strip_y + 60, f"{args.name or ex['project']}", fontsize=22, weight='bold', va='top')
             ax.text(72, strip_y + 135, f"LEVEL {pg['short']} FLOOR PLAN", fontsize=30, weight='bold', va='top')
-            ax.text(72, strip_y + 225, f"T.O.S. {fmt_ftin(pg['elev'])}   ·   typical slab {pg['typ_thk']:g}\"   ·   scale {sc}"
+            ax.text(72, strip_y + 225, f"T.O.S. {fmt_ftin(pg['elev'])}   ·   typical slab {fmt_in(pg['typ_thk'])}   ·   scale {sc}"
                     + ("   ·   SLAB ON GRADE" if pg['on_grade'] else ''), fontsize=13, va='top')
             ax.text(72, strip_y + 280, f"Generated from {ex['file']} (Revit scope model) for the McClone Reshore Calculator — geometry only; loading marks are drawn in the calculator.",
                     fontsize=9, va='top', color='#444')

@@ -9455,6 +9455,52 @@ function modeOf(vals,tol){
   }
   return{value:best.v,n:best.n,total:vals.length};
 }
+// ── BLD-15: the strip under the drawing title ───────────────────────────
+// A rendered plan from the Revit exporter — and many a real title block —
+// states the floor's own data once, in a strip under the drawing title:
+//
+//   LEVEL 1 FLOOR PLAN
+//   T.O.S. 9'-3"  ·  typical slab 5"  ·  scale 1" = 20'  ·  SLAB ON GRADE
+//
+// That is not the T/SLAB - B/SLAB callout PAIR readSheetElevations hunts
+// for, so a set drawn this way came back named and blank: 41 floors, every
+// elevation null. Read here as a SEPARATE channel. It never feeds the
+// plan-vs-section test, which still keys on the scattered callouts alone,
+// so no page changes hands because of it — it only fills what the callout
+// channel left empty.
+function readSheetTitleStrip(items){
+  const norm=t=>String(t||'').replace(/[\u2033\u201d]/g,'"').replace(/[\u2032\u2019]/g,"'").trim();
+  // feet-and-inches, fractional OR decimal: 9'-3"  77'-11 1/2"  194'-7.5"
+  const FTIN=/(\d{1,3})'\s*-?\s*(\d{1,2}(?:\.\d+)?)?(?:\s+(\d+)\/(\d+))?"?/;
+  const inches=t=>{
+    const m=/^\s*(\d+(?:\.\d+)?)?(?:\s*(\d+)\/(\d+))?\s*"?\s*$/.exec(String(t||''));
+    if(!m||(!m[1]&&!m[2]))return null;
+    const v=(+m[1]||0)+(m[2]?(+m[2])/(+m[3]):0);
+    return v>0?v:null;
+  };
+  const abs=[];let thickIn=null,onGrade=false;
+  for(const it of items){
+    const s=norm(it.s);
+    // the per-area callouts on the same sheet are SIGNED offsets in inches
+    // ("T.O.S. -3""), which carry no feet mark — the feet mark is the test
+    const mt=/\bT\.?\s*O\.?\s*S\.?\s*[:.]?\s+(?![+\u2212-])([^\u00b7]{2,20})/i.exec(s);
+    if(mt){
+      const d=FTIN.exec(mt[1].trim());
+      if(d){
+        const inch=(+d[2]||0)+(d[3]?(+d[3])/(+d[4]):0);
+        if(inch<12)abs.push({f:(+d[1])+inch/12,x:it.x,y:it.y});
+      }
+    }
+    const mk=/\bTYPICAL\s+SLAB\s*[:.]?\s*([\d.\s\/]{1,10}"?)/i.exec(s);
+    if(mk){const v=inches(mk[1]);if(v!=null)thickIn=Math.round(v*8)/8}
+    if(/\bSLAB\s+ON\s+GRADE\b/i.test(s))onGrade=true;
+  }
+  // ONE figure for the whole sheet, or nothing. A set that calls out an
+  // absolute T.O.S. per bay is the callout channel's job and is left to it,
+  // rather than this channel picking one of them at random.
+  const mode=modeOf(abs.map(v=>v.f));
+  return{tosFt:(mode&&mode.n===abs.length)?mode.value:null,thickIn,onGrade,n:abs.length};
+}
 function readSheetElevations(items){
   const norm=t=>String(t||'').replace(/[″”]/g,'"').replace(/[′’]/g,"'").trim();
   const grab=re=>{
@@ -9527,6 +9573,20 @@ function readSheetElevations(items){
 }
 // The floor a sheet is a plan OF, from its own title.
 const PLAN_TITLE_RE=/\b(?:LEVEL|FLOOR|LVL)[\s\-]*([A-Z0-9][A-Z0-9.\-]{0,7})\b/i;
+// BLD-16: a title that NAMES its level names it in full. "LEVEL MECH ROOF
+// FLOOR PLAN" and "LEVEL ELEV MECH RM FLOOR PLAN" were read as "Roof" (the
+// ROOF shortcut fired first) and "ELEV" (the short capture stopped at the
+// first word), so on the Kalae set two floors collided on one name and the
+// 42nd sheet was dropped by the one-sheet-per-level rule. Take everything
+// between LEVEL and the kind of plan it is.
+// The designation is taken LAZILY and whatever follows it must be nothing
+// but words naming the kind of plan, so "LEVEL 5 SLAB ON GRADE PLAN" is
+// level 5 and "LEVEL MECH ROOF FLOOR PLAN" is MECH ROOF.
+// S.O.G is how his own sets write slab on grade ("LEVEL-1B S.O.G FLOOR
+// PLAN - SOUTH"), and it qualifies the plan, not the floor: 1B and 1B
+// S.O.G are the same level at the same elevation.
+const PLAN_KIND_WORDS='FLOOR|SOFFIT|SLAB|ON|GRADE|S\\.?O\\.?G\\.?|FRAMING|FOUNDATION|DIMENSION|LAYOUT|KEY|REFLECTED|CEILING|SHORING|RESHORE|POST|TENSION|P\\.?T\\.?|AND|&';
+const PLAN_TITLE_FULL_RE=new RegExp('\\b(?:LEVEL|LVL)[\\s\\-]+([A-Z0-9][A-Z0-9.\\-]*(?:\\s+[A-Z0-9][A-Z0-9.\\-]*){0,3}?)\\s+(?:(?:'+PLAN_KIND_WORDS+')\\s+)*PLAN\\b','i');
 function sheetPlanTitle(items){
   const cands=[];
   for(const it of items){
@@ -9569,7 +9629,24 @@ function levelNameFromTitle(title){
   const t=title.toUpperCase();
   const onGrade=/SLAB ON GRADE|FOUNDATION/.test(t);
   let name=null;
-  if(/\bROOF\b/.test(t))name='Roof';
+  // BLD-16: an explicit "LEVEL <name> ... PLAN" wins over the ROOF /
+  // PENTHOUSE / MEZZANINE shortcuts, which are for a sheet titled only
+  // "ROOF PLAN". A multi-word designation ("MECH ROOF") is kept whole.
+  const full=PLAN_TITLE_FULL_RE.exec(t);
+  if(full){
+    // and any qualifier that trailed into the capture is trimmed back off,
+    // so a word missing from the list above costs a tidier name, not a
+    // duplicate floor
+    let raw=full[1].trim().replace(/\s+/g,' ');
+    const kindOnly=new RegExp('\\s+(?:'+PLAN_KIND_WORDS+')$','i');
+    while(kindOnly.test(raw))raw=raw.replace(kindOnly,'');
+    // a designation that IS one of the friendly names keeps the friendly
+    // spelling, so "LEVEL ROOF FLOOR PLAN" and "ROOF PLAN" agree
+    const friendly={ROOF:'Roof',PENTHOUSE:'Penthouse',MEZZANINE:'Mezzanine'};
+    name=raw?(friendly[raw]||(/^\d+$/.test(raw)?String(parseInt(raw,10)):raw)):null;
+  }
+  if(name){}
+  else if(/\bROOF\b/.test(t))name='Roof';
   else if(/\bPENTHOUSE\b/.test(t))name='Penthouse';
   else if(/\bMEZZ/.test(t))name='Mezzanine';
   else{
@@ -9596,9 +9673,15 @@ async function proposeLevelsFromDrawings(){
     // a section or elevation sheet names many levels and settles on none
     const isPlan=!r.tos||(r.tos.n>=3&&r.dominant>=0.4);
     if(!isPlan)continue;
-    out.push({page:n,title,name:named.name,onGrade:named.onGrade,
-      elev:r.tos?r.tos.value:null,elevN:r.tos?r.tos.n:0,elevTotal:r.tos?r.tos.total:0,
-      thickIn:r.thickIn,thickN:r.thickN,
+    // BLD-15: the title strip fills what the callouts did not say. The
+    // callouts win wherever they spoke — they are drawn on the slab itself.
+    const strip=readSheetTitleStrip(items);
+    const sElev=r.tos?null:strip.tosFt;
+    const sThick=(r.thickIn!=null&&r.thickN>=3)?null:strip.thickIn;
+    out.push({page:n,title,name:named.name,onGrade:named.onGrade||strip.onGrade,
+      elev:r.tos?r.tos.value:sElev,elevN:r.tos?r.tos.n:(sElev!=null?1:0),elevTotal:r.tos?r.tos.total:(sElev!=null?1:0),
+      fromStrip:!r.tos&&sElev!=null,thickStrip:sThick!=null,
+      thickIn:sThick!=null?sThick:r.thickIn,thickN:r.thickN,
       clrFt:r.clr?r.clr.value:null,clrN:r.clr?r.clr.n:0,
       steps:r.steps});
   }
@@ -9646,7 +9729,10 @@ function applyLevelDrawingProposals(list,picks){
       created++;
     }
     if(p.elev!=null&&Math.abs((lv.elevation==null?1e9:lv.elevation)-p.elev)>1e-6){lv.elevation=Math.round(p.elev*1000)/1000;changed++}
-    if(p.thickIn!=null&&p.thickIn>0&&p.thickN>=3&&lv.slabThickness!==p.thickIn){lv.slabThickness=p.thickIn;changed++}
+    // BLD-15: three callouts agreeing, or the sheet saying so once in its
+    // title strip — a strip states the floor's typical, which is the figure
+    // this field wants
+    if(p.thickIn!=null&&p.thickIn>0&&(p.thickN>=3||p.thickStrip)&&lv.slabThickness!==p.thickIn){lv.slabThickness=p.thickIn;changed++}
     // a floor named on two plan sheets keeps both
     {const held=levelForPage(p.page);
      if(held<0||state.levels[held]===lv){
