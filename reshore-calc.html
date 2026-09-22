@@ -704,6 +704,14 @@ input[readonly],input.derived{background:var(--derived-bg);color:var(--text-seco
 .sched-region:has(.pat-chip.thru){border-left:3px solid var(--danger)}
 .ra-row.thru{background:rgba(207,10,44,.07)}
 .ra-thru{grid-column:1/4;font-size:11px;color:var(--danger);margin-top:2px}
+/* MDL-18: stiff shore on slab on grade — wood pad required. Amber, not red: a
+   field condition to install, not a doubt about the answer. */
+.ra-pad{grid-column:1/4;font-size:11px;color:var(--warn,#d99a1c);margin-top:2px}
+.ra-row.pad{border-left:3px solid var(--warn,#d99a1c)}
+.pat-chip.pad{box-shadow:0 0 0 1px var(--warn,#d99a1c) inset}
+.pc-pad{font-style:normal;font-size:10px;color:var(--warn,#d99a1c);margin-left:3px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.inst-note.pad,.rs-pad-n{color:var(--warn,#d99a1c)}
+.sched-pad-row td{padding-top:0;border-top:0}
 .ra-thru.ok{color:var(--text-secondary)}
 .ra-thru .ss-ok{margin-left:6px;vertical-align:middle}
 .rs-thru{color:var(--danger)}
@@ -1338,7 +1346,7 @@ select.sched-shore option,select.sel-styled option{background:var(--surface-rais
   <div class="modal" style="max-width:600px">
     <h2>Shore Catalog</h2>
     <table class="shore-table">
-      <thead><tr><th>Shore Type</th><th>Capacity Range</th><th>Min Height</th><th>Max Height</th><th class="actions"></th></tr></thead>
+      <thead><tr><th>Shore Type</th><th>Capacity Range</th><th>Min Height</th><th>Max Height</th><th title="Wood (timber) shores crush enough to let the slabs above deflect and share the load. Anything else is a stiff shore: standing on slab on grade it needs a wood pad under every base, and the results say so.">Wood</th><th class="actions"></th></tr></thead>
       <tbody id="shoreTableBody"></tbody>
     </table>
     <div class="prov-note">
@@ -1350,6 +1358,7 @@ select.sched-shore option,select.sel-styled option{background:var(--surface-rais
         <li>Listed heights <b>include the 10" drop head</b>, so they are compared directly against shore clear height.</li>
         <li>Ellis 4&times;4 shores use the <b>unbraced</b> allowable-load curve. Bracing at midpoint or third points permits more &mdash; not modelled.</li>
         <li>Shores must be plumb and bear on concrete. Mudsill conditions need Titan engineering.</li>
+        <li><b>Stiff shores on slab on grade</b> (anything not ticked Wood): a chain of steel or aluminum posts from the pour down to grade holds the slabs flat, so they cannot deflect and take their share and the bottom shores carry the full stack. Every such base gets a <b>wood pad</b> &mdash; two layers of &frac34;" plywood (1&frac12;" min), 12"&times;12" or larger &mdash; and the results flag every row where this applies.</li>
       </ul>
     </div>
     <div style="margin-top:12px;display:flex;gap:8px">
@@ -8318,9 +8327,18 @@ function renderShoreTable(){
       <td style="font-family:var(--font-mono);font-size:12px">${shoreCapRange(s)}</td>
       <td>${feetToStr(s.minH)}</td>
       <td>${feetToStr(s.maxH)}</td>
+      <td><input type="checkbox" data-timberidx="${i}"${isTimberShore(s)?' checked':''} title="${isTimberShore(s)?'Wood shore — crushes enough for the slabs to share load; no pad note on grade':'Stiff shore (steel / aluminum) — on slab on grade a wood pad is required under every base (MDL-18)'}"></td>
       <td class="actions"><button class="btn-icon" data-delidx="${i}" title="Remove">&times;</button></td>
     </tr>
   `).join('');
+  // MDL-18: the wood flag is what decides the pad note; settable per shore
+  body.querySelectorAll('input[data-timberidx]').forEach(cb=>{
+    cb.addEventListener('change',()=>{
+      history.record(cb.checked?'Mark shore as wood':'Mark shore as stiff');
+      state.shores[parseInt(cb.dataset.timberidx)].timber=cb.checked;
+      state.results=null;renderShoreTable();persist();
+    });
+  });
   body.querySelectorAll('button[data-delidx]').forEach(b=>{
     b.addEventListener('click',()=>{
       history.record('Remove shore');
@@ -11771,6 +11789,30 @@ function setThroughOk(key,on){
   if(on)throughOk()[key]=true;else delete throughOk()[key];
   persist();
 }
+// ── A STIFF SHORE STANDING ON SLAB ON GRADE (MDL-18) ──
+// Adolfo, Sep 22 2026: the load-sharing this calculator relies on — each slab
+// in the stack taking its share, the shore load shrinking on the way down —
+// only happens if the slabs can deflect against each other. Wood (Ellis)
+// shores give that compliance through end-grain crush and axial shortening.
+// A steel or aluminum post is stiff enough that a chain of them from the
+// pour down to slab on grade acts as one rigid column: the slabs are held
+// flat and take almost nothing, and the bottom shores carry close to the
+// full accumulated load straight to the SOG — far more than this schedule
+// shows. The field mitigation is a wood pad under each base to let it
+// crush. So: a non-timber shore whose base sits on grade carries a required
+// pad note on its row, on the install summary and on the printed sheet. It
+// is a field condition, not an OK to press away — the note stays.
+const PAD_SPEC='two layers of 3/4" plywood (1-1/2" min), 12"×12" or larger';
+function needsPad(st){return !!(st&&!st.open&&!st.grade&&st.resultant>0&&st.onGrade&&st.chosen&&!st.chosen.timber)}
+function beamNeedsPad(row){return !!(row&&!row.open&&!row.grade&&row.beamNet>0&&row.onGrade&&row.beamChosen&&!row.beamChosen.timber)}
+function padText(shoreName,onName){return `${shoreName} is a stiff shore standing on slab on grade${onName?` (${onName})`:''}: set every base on a wood pad — ${PAD_SPEC} — so the slabs above can deflect and share the load. Without the pad the slabs are held flat and the shores carry the full stack to grade.`}
+function padItems(L){
+  const s=L&&L.solve;if(!s||!s.spatial)return [];
+  const out=[];
+  s.regions.forEach((r,ri)=>r.steps.forEach(st=>{if(needsPad(st))out.push({r,ri,st,key:st.choiceKey})}));
+  (s.beams||[]).forEach((b,bi)=>(b.rows||[]).forEach(row=>{if(beamNeedsPad(row))out.push({b,bi,row,key:row.beamKey,beam:true})}));
+  return out;
+}
 function choiceKey(pourName,regionKey,levelIdx){return `${pourName}|${regionKey}|${levelIdx}`}
 function chosenOption(options,key){
   const id=shoreChoices()[key];
@@ -11845,6 +11887,7 @@ function cascadeAtPoint(stack,pourIdx,thickIn,dl,shores){
       ?shoreHeightUnder(lv,sup,sl.soffitIn!=null?sl.soffitIn:sl.thick,sl.offLow!=null?sl.offLow:sl.off,supSl.off||0):null;
     steps.push({levelIdx:j,level:lv,capacity:cap,remaining,resultant,
                 shoreHeightFt:hFt,supportLevel:sup,supportIdx:sj,
+                onGrade:!!(supSl&&supSl.grade),          // MDL-18: this shore's base sits on slab on grade
                 ...(sloped&&hMinFt!=null&&hFt!=null&&Math.abs(hFt-hMinFt)>=1/24?{shoreHeightMinFt:hMinFt,sloped:true}:{}),
                 spansOpen:sup?sj-j-1:0,
                 options:(needShores&&hFt!=null)?shoreOptionsFor(hFt,Math.max(resultant,0),shores):[]});
@@ -12084,6 +12127,7 @@ function beamProfileAt(stack,pourIdx,regSteps,shores){
     const hMinFt=(sup&&sloped)?shoreHeightUnder(lv,sup,sl.soffitIn!=null?sl.soffitIn:sl.thick,sl.offLow!=null?sl.offLow:sl.off,supSl.off||0):null;
     rows.push({levelIdx:j,level:lv,capacity:cap,slabRemaining:slabRem,sparePsf:Math.max(0,cap-slabRem),
                shoreHeightFt:hFt,supportLevel:sup,supportIdx:sj,spansOpen:sup?sj-j-1:0,
+               onGrade:!!(supSl&&supSl.grade),           // MDL-18
                ...(sloped&&hMinFt!=null&&hFt!=null&&Math.abs(hFt-hMinFt)>=1/24?{shoreHeightMinFt:hMinFt,sloped:true}:{}),
                options:hFt!=null?shoreOptionsFor(hFt,0,shores):[]});
     if(!sup)break;
@@ -13338,7 +13382,7 @@ function pourInstallPlan(L){
     let f=floors.get(key);
     if(!f){f={key,name:lv.name,zone:zoned?zoneNameOf(L,zp):'',zonePage:zoned?zp:null,zoneOrder:zoned?Math.max(0,zoneOrder.indexOf(zp)):0,
               level:lv,levelIdx:99,cells:new Map(),heights:new Set(),shores:new Set(),
-              rowCount:0,pending:0,noOptions:0,absorbedSF:0,openSF:0,gradeSF:0,gradePsf:0,beams:[]};
+              rowCount:0,pending:0,noOptions:0,absorbedSF:0,openSF:0,gradeSF:0,gradePsf:0,beams:[],padShores:new Set(),padSF:0,padOn:new Set()};
       floors.set(key,f)}
     return f};
   for(const r of s.regions){
@@ -13354,6 +13398,7 @@ function pourInstallPlan(L){
       const pat=st.chosen?st.chosen.pattern:null;
       if(st.chosen)f.shores.add(st.chosen.shore.name);
       else{f.pending++;if(st.noOptions)f.noOptions++}
+      if(needsPad(st)){f.padShores.add(st.chosen.shore.name);f.padSF+=r.areaSF;if(st.supportLevel)f.padOn.add(st.supportLevel.name)}   // MDL-18
       for(let i=0;i<r.cells.length;i+=2){
         const x=r.cells[i],y=r.cells[i+1],k=ck(x,y);
         const cur=f.cells.get(k);
@@ -13371,6 +13416,7 @@ function pourInstallPlan(L){
       f.levelIdx=Math.min(f.levelIdx,row.levelIdx==null?99:row.levelIdx);
       f.beams.push({b,bi,row});
       if(!row.beamChosen)f.pending++;
+      if(beamNeedsPad(row)){f.padShores.add(row.beamChosen.shore.name);if(row.supportLevel)f.padOn.add(row.supportLevel.name)}   // MDL-18
     }
   });
   const thr=seqExceptionPct();
@@ -13478,6 +13524,8 @@ function installFloorSpec(f){
   if(f.pending)notes.push(`<span class="inst-note warn">${f.pending} row${f.pending>1?'s':''} still need a shore${
     f.noOptions?` · ${f.noOptions} with nothing in the catalog tall enough`:''}.</span>`);
   if(f.mixed)notes.push(`<span class="inst-note warn">Two shore types chosen above this floor (${esc(f.shoreList.join(', '))}) — only one gets installed.</span>`);
+  // MDL-18: stiff shores standing on slab on grade
+  if(f.padShores&&f.padShores.size)notes.push(`<span class="inst-note pad" title="${esc(padText([...f.padShores].join(' / '),[...f.padOn].join(', ')))}">\u26a0 <b>Wood pad under every ${esc([...f.padShores].join(' / '))} base</b> — these stand on slab on grade${f.padOn.size?` (${esc([...f.padOn].join(', '))})`:''}; ${esc(PAD_SPEC)}, so the slabs above can deflect and share the load.</span>`);
   for(const bm of f.beams)notes.push(`Beam ${esc(String(bm.b.widthIn)+'×'+bm.b.depthIn)}: ${
     bm.row.beamChosen?esc(bm.row.beamChosen.shore.name):'<b>shore t.b.c.</b>'}${
     bm.row.beamPerCluster>1?` · ${bm.row.beamPerCluster} per cluster`:''}${
@@ -13686,7 +13734,8 @@ function floorChip(r,f,L,active){
     case 'pattern':{
       const thru=isThrough(q.st),okd=thru&&throughAccepted(q.st.choiceKey);
       const later=laterGoverns(L,r,q.st);
-      return `<span class="${cls}${thru&&!okd?' thru':''}${later?' later':''}" style="--pc:${patColor(L,f,q.pattern)}" title="Reshore under ${esc(f.name)}: ${esc(q.pattern)} · ${esc(q.shore)}${later?` · but the ${esc(levelTagName(later.pour))} placement needs ${esc(later.pattern)} here${later.whole?'':' over '+fmtArea(later.sf)} — that is what goes in`:''}${thru?` · ${esc(feetToStr(q.st.shoreHeightFt))} through ${esc(throughPassed(r,q.st).join(', ')||'an open floor')} to ${esc(q.st.supportLevel.name)}${okd?' (accepted)':' — check it'}`:''}">${who}<b>${esc(q.pattern)}</b>${later?`<i class="pc-later">\u2191${esc(later.pattern)} ${esc(levelTagName(later.pour))}</i>`:''}${thru?`<i class="pc-thru">\u2193${esc(q.st.supportLevel.name)}</i>`:''}</span>`;}
+      const pad=needsPad(q.st);                 // MDL-18
+      return `<span class="${cls}${thru&&!okd?' thru':''}${later?' later':''}${pad?' pad':''}" style="--pc:${patColor(L,f,q.pattern)}" title="Reshore under ${esc(f.name)}: ${esc(q.pattern)} · ${esc(q.shore)}${pad?` · steel shore on slab on grade — wood pad under every base (${esc(PAD_SPEC)})`:''}${later?` · but the ${esc(levelTagName(later.pour))} placement needs ${esc(later.pattern)} here${later.whole?'':' over '+fmtArea(later.sf)} — that is what goes in`:''}${thru?` · ${esc(feetToStr(q.st.shoreHeightFt))} through ${esc(throughPassed(r,q.st).join(', ')||'an open floor')} to ${esc(q.st.supportLevel.name)}${okd?' (accepted)':' — check it'}`:''}">${who}<b>${esc(q.pattern)}</b>${later?`<i class="pc-later">\u2191${esc(later.pattern)} ${esc(levelTagName(later.pour))}</i>`:''}${thru?`<i class="pc-thru">\u2193${esc(q.st.supportLevel.name)}</i>`:''}${pad?`<i class="pc-pad" title="wood pad under every base — ${esc(PAD_SPEC)}">pad</i>`:''}</span>`;}
     case 'pending':{
       const thru=isThrough(q.st),okd=thru&&throughAccepted(q.st.choiceKey);
       return `<span class="${cls} pend${thru&&!okd?' thru':''}" title="Reshore under ${esc(f.name)}: shore not chosen yet${thru?` · ${esc(feetToStr(q.st.shoreHeightFt))} through to ${esc(q.st.supportLevel.name)}`:''}">${who}pick a shore${thru?`<i class="pc-thru">\u2193${esc(q.st.supportLevel.name)}</i>`:''}</span>`;}
@@ -13863,7 +13912,8 @@ function renderInstallSummary(L,host){
         pend?` · <span class="lm-warn">${pend} shore pick${pend>1?'s':''} outstanding</span>`:''}${
         ns?` · <span class="lm-warn" title="Rows where no shore reaches, or there is no slab under the pour — each is marked in red on its region below and opens on the plan when clicked">${ns} row${ns>1?'s':''} with nothing to shore against</span>`:''}${
         (t=>t?` · <button type="button" class="rs-thru-n" id="rsThruNext" title="Shores that pass through an open floor to the slab below — each needs a look and an OK on its row">${t} through-shore${t>1?'s':''} to check</button>`:'')(throughItems(L).filter(x=>!x.accepted).length)}${
-        (t=>t?` · <button type="button" class="rs-later-n" id="rsLaterNext" title="Rows where a later pour needs the reshoring under the same floor tighter — the tighter pattern is what goes in">${t} row${t>1?'s':''} tightened by a later pour</button>`:'')(laterItems(L).length)}</span></div>
+        (t=>t?` · <button type="button" class="rs-later-n" id="rsLaterNext" title="Rows where a later pour needs the reshoring under the same floor tighter — the tighter pattern is what goes in">${t} row${t>1?'s':''} tightened by a later pour</button>`:'')(laterItems(L).length)}${
+        (t=>t?` · <span class="rs-pad-n" title="Steel or aluminum shores standing on slab on grade — a wood pad (${esc(PAD_SPEC)}) goes under every base so the slabs above can deflect and share the load. Marked on each row.">${t} row${t>1?'s need':' needs'} wood pads on grade</span>`:'')(padItems(L).length)}</span></div>
     ${nextHtml(L)}
     ${need.length?bulkBarHtml(L):''}
     <div class="inst-list">${rows||'<p class="rs-empty">Nothing to reshore for this placement.</p>'}</div>
@@ -14045,14 +14095,17 @@ function renderSchedule(){
                 :` <button type="button" class="btn btn-sm ss-ok" data-thru="${esc(st.choiceKey)}" data-thru-on="1" title="Accept that the reshore under ${esc(st.level.name)} runs ${esc(feetToStr(st.shoreHeightFt))} down to ${esc(st.supportLevel.name)} here">OK \u2014 shore through</button>`}</div>`:'';
       const shortEnd=slopeShortEndFail(st);
       const slopeHtml=shortEnd?`<div class="ra-thru">\u26a0 <b>${esc(shortEnd.name)} will not close at the low end</b> \u2014 the ramp runs down to ${esc(feetToStr(shortEnd.at))} here and that shore closes to ${esc(feetToStr(shortEnd.minH))}. Pick a shorter shore for the low end, or split the ramp.</div>`:'';
-      return`<div class="ra-row${ch?'':' pend'}${thru&&!thruOk?' thru':''}${shortEnd?' thru':''} sched-go" ${rowAttr}>${fl}
+      // MDL-18: a stiff shore standing on grade needs a wood pad under it
+      const pad=needsPad(st);
+      const padHtml=pad?`<div class="ra-pad">\u26a0 <b>Wood pad required under every ${esc(ch.shore.name)} base</b> \u2014 ${esc(padText(ch.shore.name,st.supportLevel&&st.supportLevel.name))}</div>`:'';
+      return`<div class="ra-row${ch?'':' pend'}${thru&&!thruOk?' thru':''}${shortEnd?' thru':''}${pad?' pad':''} sched-go" ${rowAttr}>${fl}
         <div class="ra-res" title="${st.capacity} PSF capacity taken off what arrives"><b>${st.resultant.toFixed(1)}</b> psf</div>
         <div class="ra-pick">
           <span class="rs-dim${thru?' rs-thru':''}${st.sloped?' rs-slope':''}" title="${st.supportLevel?`stands on ${esc(st.supportLevel.name)}${st.spansOpen?` through ${st.spansOpen} open floor${st.spansOpen>1?'s':''}`:''}`:'nothing below to stand on'}${st.sloped?` \u00b7 sloped: ${esc(feetToStr(st.shoreHeightMinFt))} at the low end, ${esc(feetToStr(st.shoreHeightFt))} at the high \u2014 the tallest governs`:''}">${
             esc(shoreHeightText(st))}${st.sloped?' <i class="rs-ramp" title="ramp \u2014 the shore height runs through this range">ramp</i>':''}${thru?' \u2193'+esc(st.supportLevel.name):''}</span>
           ${pick}
           ${ch?`<span class="rs-pat" title="${Math.round(ch.sfPerShore)} SF per shore">${esc(ch.pattern)}</span>`:''}
-        </div>${laterHtml}${thruHtml}${slopeHtml}</div>`;
+        </div>${laterHtml}${thruHtml}${slopeHtml}${padHtml}</div>`;
     }).join('');
     const rows=r.steps.map(st=>{
       const rowAttr=`data-ri="${ri}" data-lv="${defIdxOf(st.level)}" title="Show this region on ${esc(st.level.name)}'s sheet"`;
@@ -14079,7 +14132,7 @@ function renderSchedule(){
         <td>${st.capacity}</td>
         <td><b>${st.resultant.toFixed(1)}</b></td>
         <td title="${standsOn}${st.sloped?` · sloped: ${esc(feetToStr(st.shoreHeightMinFt))} at the low end — the tallest governs`:''}">${shoreHeightText(st)}${st.spansOpen?` <span class="lm-dim">↓${esc(st.supportLevel.name)}</span>`:''}</td>
-        <td>${ch?esc(ch.shore.name)+' · '+ch.capacityAtHeight.toLocaleString()+' lb'
+        <td>${ch?esc(ch.shore.name)+' · '+ch.capacityAtHeight.toLocaleString()+' lb'+(needsPad(st)?` <span class="lm-warn" title="${esc(padText(ch.shore.name,st.supportLevel&&st.supportLevel.name))}">+ wood pad</span>`:'')
           :(st.options.length?`<span class="lm-warn">not chosen — ${st.options.length} legal above</span>`
             :`<span class="lm-warn">${st.supportLevel?'no shore fits this height':'no floor below to stand on'}</span>`)}</td>
         <td class="sched-num">${ch?Math.round(ch.sfPerShore)+' SF':'—'}</td>
@@ -14379,7 +14432,8 @@ function beamBlock(b,bi,L,hl){
           :` <button type="button" class="btn btn-sm ss-ok" data-thru="${esc(r.beamKey)}" data-thru-on="1" title="Accept that these beam shores run through the open floor down to ${esc(r.supportLevel.name)}">OK</button>`}`:''}</td>
       <td>${r.options.length?`<select class="sched-shore" data-key="${esc(r.beamKey)}"><option value="">— choose (${r.options.length} legal) —</option>${opts}</select>`:`<span class="lm-warn">${r.supportLevel?'no shore fits this height':'no floor below to stand on'}</span>`}</td>
       <td><select class="sched-beam-n sel-styled" data-key="${esc(r.beamKey)}">${nOpts}</select></td>
-      <td class="sched-num"><b>${r.beamSpacingFt!=null?feetToStr(r.beamSpacingFt)+' o.c.':'—'}</b></td></tr>`;
+      <td class="sched-num"><b>${r.beamSpacingFt!=null?feetToStr(r.beamSpacingFt)+' o.c.':'—'}</b></td></tr>${
+      beamNeedsPad(r)?`<tr class="sched-pad-row sched-go" ${rowAttr}><td colspan="8"><div class="ra-pad">\u26a0 <b>Wood pad required under every ${esc(r.beamChosen.shore.name)} base</b> \u2014 ${esc(padText(r.beamChosen.shore.name,r.supportLevel&&r.supportLevel.name))}</div></td></tr>`:''}`;
   }).join('');
   const lit=hl&&hl.regionKey==='beam:'+b.beamId+'|'+b.regionKey&&hl.pour===L.pour.name;
   const ck=beamCardKey(L,b);
@@ -14391,7 +14445,8 @@ function beamBlock(b,bi,L,hl){
     if(row.grade)return `<span class="pat-chip quiet${act}">${who}SOG</span>`;
     if(!(row.beamNet>0))return `<span class="pat-chip quiet${act}" title="absorbed by the slab here">${who}absorbed</span>`;
     if(!row.beamChosen)return `<span class="pat-chip ${row.options&&row.options.length?'pend':'warn'}${act}">${who}${row.options&&row.options.length?'pick a shore':'no shore reaches'}</span>`;
-    return `<span class="pat-chip${act}" style="--pc:${PAT_GENERAL}" title="${esc(row.beamChosen.shore.name)}${row.beamPerCluster>1?' · '+row.beamPerCluster+' per cluster':''}">${who}<b>${row.beamSpacingFt!=null?esc(feetToStr(row.beamSpacingFt))+' o.c.':esc(row.beamChosen.shore.name)}</b></span>`;
+    const pad=beamNeedsPad(row);                // MDL-18
+    return `<span class="pat-chip${act}${pad?' pad':''}" style="--pc:${PAT_GENERAL}" title="${esc(row.beamChosen.shore.name)}${row.beamPerCluster>1?' · '+row.beamPerCluster+' per cluster':''}${pad?` · steel shore on slab on grade — wood pad under every base (${esc(PAD_SPEC)})`:''}">${who}<b>${row.beamSpacingFt!=null?esc(feetToStr(row.beamSpacingFt))+' o.c.':esc(row.beamChosen.shore.name)}</b>${pad?`<i class="pc-pad">pad</i>`:''}</span>`;
   }).join('');
   return `<div class="sched-region sched-beam${lit?' lit':''}${open?'':' folded'}" data-card="${esc(ck)}">
     <div class="sched-region-head sched-go" data-bi="${bi}" data-lv="${defIdxOf(L.pour)}" title="Show this beam on the pour level's sheet">
@@ -15042,7 +15097,7 @@ function printSchedule(){
         const hs=[...f.heights].sort((a,b)=>a-b);
         return `<tr><td>${esc(installFloorName(f))}</td>
           <td><b>${f.general!=null?esc(f.general):'<i>shore not chosen</i>'}</b></td>
-          <td>${f.shoreList.length?esc(f.shoreList.join(' / ')):'<i>not chosen</i>'}</td>
+          <td>${f.shoreList.length?esc(f.shoreList.join(' / ')):'<i>not chosen</i>'}${f.padShores&&f.padShores.size?`<br><b>WOOD PAD under every ${esc([...f.padShores].join(' / '))} base</b> — on slab on grade${f.padOn.size?` (${esc([...f.padOn].join(', '))})`:''}; ${esc(PAD_SPEC)}`:''}</td>
           <td>${hs.length?esc(hs.length===1?feetToStr(hs[0]):feetToStr(hs[0])+'–'+feetToStr(hs[hs.length-1])):'—'}</td>
           <td>${fmtArea(f.general!=null&&f.generalAppliedSF?f.generalAppliedSF:f.shoredSF)}</td>
           <td>${f.exceptions&&f.exceptions.length?f.exceptions.map(e=>`${esc(e.pattern)} over ${fmtArea(e.areaSF)}`).join('; '):'—'}${
@@ -15065,14 +15120,15 @@ function printSchedule(){
     const body=r.steps.filter(st=>!st.open&&!st.grade&&st.resultant>0).map(st=>`<tr>
       <td>${esc(st.level.name)}${st.spansOpen?` <small>(stands on ${esc(st.supportLevel.name)})</small>`:''}</td><td>${st.code?esc(st.code):'—'}</td><td>${st.capacity}</td><td>${st.resultant.toFixed(1)}</td>
       <td>${st.shoreHeightFt!=null?feetToStr(st.shoreHeightFt):'—'}</td>
-      <td>${st.chosen?esc(st.chosen.shore.name):'<i>not chosen</i>'}</td>
+      <td>${st.chosen?esc(st.chosen.shore.name):'<i>not chosen</i>'}${needsPad(st)?' <b>+ wood pad</b>':''}</td>
       <td>${st.chosen?st.chosen.capacityAtHeight.toLocaleString():'—'}</td>
       <td>${st.chosen?Math.round(st.chosen.sfPerShore):'—'}</td>
       <td><b>${st.chosen?st.chosen.pattern:'—'}</b></td></tr>`).join('');
     return `<h3><span class="sw" style="background:${regionColorCss(regionColorIdx(r,ri,L),1)}"></span>${esc(regionLabel(r,ri,L))} &mdash; ${fmtArea(r.areaSF)}, placement ${r.placementLoad.toFixed(1)} PSF</h3>
       <table><thead><tr><th>Reshore under</th><th>Mark</th><th>Cap PSF</th><th>Resultant PSF</th><th>Shore height</th>
         <th>Shore</th><th>Capacity lb</th><th>SF/shore</th><th>Pattern</th></tr></thead>
-        <tbody>${body||'<tr><td colspan="9">No reshoring required.</td></tr>'}${gradeStep?`<tr><td colspan="9"><i>${esc(gradeStep.level.name)} is slab on grade: the remaining ${gradeStep.remaining.toFixed(1)} PSF is taken by the soil; no shores below.</i></td></tr>`:''}${r.sliverSF?`<tr><td colspan="9"><i>Includes ${fmtArea(r.sliverSF)} of sliver regions under ${minRegionSF()} SF merged into this region.</i></td></tr>`:''}</tbody></table>
+        <tbody>${body||'<tr><td colspan="9">No reshoring required.</td></tr>'}${gradeStep?`<tr><td colspan="9"><i>${esc(gradeStep.level.name)} is slab on grade: the remaining ${gradeStep.remaining.toFixed(1)} PSF is taken by the soil; no shores below.</i>${
+          (p=>p.length?`<br><b>WOOD PAD REQUIRED</b> under every ${esc([...new Set(p.map(x=>x.chosen.shore.name))].join(' / '))} base standing on ${esc(gradeStep.level.name)} — ${esc(PAD_SPEC)}. A stiff shore on grade holds the slabs above flat; the pad lets them deflect and share the load.`:'')(r.steps.filter(needsPad))}</td></tr>`:''}${r.sliverSF?`<tr><td colspan="9"><i>Includes ${fmtArea(r.sliverSF)} of sliver regions under ${minRegionSF()} SF merged into this region.</i></td></tr>`:''}</tbody></table>
       <div class="dg-print">${loadPathSvg(r,L)}</div>`;
   }).join('')+(s.beams||[]).map((b,bi)=>{
     const br=b.rows.filter(r=>!r.open&&!r.grade).map(r=>`<tr><td>${esc(r.level.name)}</td><td>${Math.round(r.beamIn)}</td><td>${r.sparePsf>0?`${r.sparePsf.toFixed(1)} × ${r.effW} = ${Math.round(r.spare)}`:'0 (none spare)'}</td><td><b>${Math.round(r.beamNet)}</b></td>
@@ -15116,7 +15172,8 @@ function printSchedule(){
      Patches below ${minRegionSF()} SF are absorbed by the neighbour they share the most boundary with, and only where that neighbour reads the same way down the stack; a patch with a different load path keeps its own calculation however small. Identical installation instructions may be grouped on screen; that grouping is a view and never combines calculations. A slab on grade (whole floor or drawn area) absorbs whatever load reaches it; nothing is shored below it.
      Beam stems are shored on their own line: at each floor (capacity − slab load arriving) × the stated effective width is credited, the remainder shored along the beam.
      Shore capacities are HV Load Chart values, unlaced, main beams both sides of the drop head; no 20% one-sided reduction applied.
-     Timber shores limited to ${timberMaxH()} ft clear height. Verify against the structural drawings before installation.</p>
+     Timber shores limited to ${timberMaxH()} ft clear height.
+     A steel or aluminum shore standing on slab on grade must sit on a wood pad (${PAD_SPEC}): a stiff shore chain to grade holds the slabs flat, so they cannot deflect and take their share, and the bottom shores would otherwise carry the full stack. Rows needing pads are marked "+ wood pad". Verify against the structural drawings before installation.</p>
   </body></html>`);
   win.document.close();
   setTimeout(()=>{try{win.print()}catch(e){}},350);
@@ -21050,7 +21107,8 @@ function beamAnswerStrip(b){
   return `<div class="ra-strip">${b.rows.map(r=>{
     const text=r.open?(r.noSlab?'No slab — load passes through':'Opening — load passes through'):r.grade?'On grade — no shores below':r.beamNet<=0?'Absorbed — no beam shores':`${Math.round(r.beamNet)} PLF · ${r.shoreHeightFt!=null?feetToStr(r.shoreHeightFt):'no support height'} · ${r.beamChosen?r.beamChosen.shore.name+' · '+r.beamPerCluster+' per cluster · '+feetToStr(r.beamSpacingFt)+' o.c.':'Choose a shore in the table below'}`;
     const note=beamBelowNote(b,r);
-    return `<div class="ra-row"><div class="ra-fl">under ${esc(r.level.name)}</div><div class="ra-msg">${esc(text)}${note?' · '+note:''}</div></div>`;
+    const pad=beamNeedsPad(r)?`<div class="ra-pad">\u26a0 <b>Wood pad required under every ${esc(r.beamChosen.shore.name)} base</b> \u2014 ${esc(padText(r.beamChosen.shore.name,r.supportLevel&&r.supportLevel.name))}</div>`:'';   // MDL-18
+    return `<div class="ra-row${pad?' pad':''}"><div class="ra-fl">under ${esc(r.level.name)}</div><div class="ra-msg">${esc(text)}${note?' · '+note:''}</div>${pad}</div>`;
   }).join('')}</div>`;
 }
 function loadSourceTag(c){

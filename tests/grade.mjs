@@ -1,4 +1,4 @@
-// @rules MDL-02, MDL-03, MDL-04, MDL-16  (see DECISIONS.md)
+// @rules MDL-02, MDL-03, MDL-04, MDL-16, MDL-18  (see DECISIONS.md)
 // Slab-on-grade behaviour: whole-level flag, per-area kind, warnings,
 // schedule rows, persistence, and a Kalae regression check.
 import { createRequire } from 'node:module';
@@ -262,6 +262,96 @@ console.log('the floor edge carries the on-grade tick (MDL-16)');
   ok(G.reproposed === 0 && !G.stillClear, 'and once cleared by hand it is never proposed again on this job');
   ok(G.gapCleared.rows === 2, 'cleared, that floor IS asked for a capacity again: ' + JSON.stringify(G.gapCleared));
   ok(G.retick, 'and it can be ticked back on by hand');
+}
+
+// ── a stiff shore standing on slab on grade needs a wood pad ─────────────
+// Adolfo, Sep 22 2026: steel posts down to grade are "infinitesimally stiff",
+// the slabs cannot flex, so they never take their share — "a wooden pad must
+// be added to bottom of steel shores sitting on slab on grade." Any shore not
+// ticked Wood is stiff; the note appears on the row, chip, install summary
+// and print, for slab rows and beam rows alike; it never changes the numbers.
+console.log('a stiff shore on grade carries the wood-pad note (MDL-18)');
+{
+  await setup({ levels: [
+    { args: ['L3', 30, 7.5, 54] }, { args: ['L2', 20, 7.5, 54] }, { args: ['L1', 10, 7.5, 54] },
+    { args: ['SOG', 0, 5, 0], extra: { onGrade: true } },
+  ] });
+  const P = await page.evaluate(() => {
+    const out = {};
+    // padItems takes the pour entry (like throughItems); the numbers sit in .solve
+    let LV = solveAll({ step: 10 }).levels[0];
+    const L = LV.solve;
+    const r = L.regions[0];
+    const [underL2, underL1] = r.steps;
+    out.flags = r.steps.map(st => !!st.onGrade);
+    const ellis = underL1.options.find(o => /Ellis/.test(o.shore.name));
+    const post  = underL1.options.find(o => /Post/.test(o.shore.name));
+    const post2 = underL2.options.find(o => /Post/.test(o.shore.name));
+    out.hasBoth = !!(ellis && post && post2);
+    // nothing chosen yet: no note
+    out.noneYet = padItems(LV).length;
+    // an Ellis on grade: no note. A post on grade: note. A post on L1 (a
+    // suspended slab): no note.
+    shoreChoices()[underL2.choiceKey] = post2.shoreId;
+    shoreChoices()[underL1.choiceKey] = ellis.shoreId;
+    LV = solveAll({ step: 10 }).levels[0]; let L2 = LV.solve;
+    out.ellisOnGrade = padItems(LV).length;
+    out.ellisRes = L2.regions[0].steps[1].resultant;
+    shoreChoices()[underL1.choiceKey] = post.shoreId;
+    LV = solveAll({ step: 10 }).levels[0]; L2 = LV.solve;
+    out.postOnGrade = padItems(LV).map(x => x.st.level.name);
+    out.postRes = L2.regions[0].steps[1].resultant;
+    out.postOnL1 = needsPad(L2.regions[0].steps[0]);
+    // what the user sees
+    runSchedule();
+    const body = document.getElementById('schedBody');
+    out.rowNote = !!body.querySelector('.ra-row.pad .ra-pad');
+    out.rowText = (body.querySelector('.ra-pad') || {}).textContent || '';
+    out.chip = !!body.querySelector('.pat-chip.pad .pc-pad');
+    const sh = schedSummaryHost();
+    out.head = sh ? (sh.querySelector('.rs-h') || {}).textContent || '' : '';
+    const inst = sh && sh.querySelector('.inst-list');
+    out.summary = inst ? inst.textContent : '';
+    // the printed sheet
+    let html = '';
+    const w = { document: { write: s => { html += s; }, close() {} }, print() {} };
+    const orig = window.open; window.open = () => w;
+    try { printSchedule(); } finally { window.open = orig; }
+    out.print = html;
+    // the catalog flag decides: untick Wood on the Ellis and it is stiff too
+    shoreChoices()[underL1.choiceKey] = ellis.shoreId;
+    state.shores.find(s => s.id === ellis.shoreId).timber = false;
+    out.ellisMadeStiff = padItems(solveAll({ step: 10 }).levels[0]).length;
+    state.shores.find(s => s.id === ellis.shoreId).timber = true;
+    // beam rows: the stem standing on grade with a post
+    const stack = expandLevels(); stack.forEach(l => { l._capAt = levelDefaultCapacity(l); l._slabAt = slabAt(l, null); });
+    const res = cascadeAtPoint(stack, 0, 7.5, 30, state.shores);
+    const item = { beamId: 'b', regionKey: 'k', widthFt: 2, plf: 712.5, profile: beamProfileAt(stack, 0, res.steps, state.shores) };
+    const rowOnGrade = item.profile.find(x => x.onGrade);
+    out.beamFlag = rowOnGrade && rowOnGrade.level.name;
+    const bpost = rowOnGrade.options.find(o => /Post/.test(o.shore.name));
+    shoreChoices()[beamRowKey('L3', item, rowOnGrade.levelIdx)] = bpost.shoreId;
+    const ch = beamChain(item, 'L3');
+    out.beamPad = ch.rows.filter(beamNeedsPad).map(x => x.level.name);
+    return out;
+  });
+  ok(P.hasBoth, 'fixture has an Ellis and a Post legal under L1 and a Post under L2');
+  ok(JSON.stringify(P.flags) === '[false,true,false]', 'only the shore under L1 stands on grade: ' + JSON.stringify(P.flags));
+  ok(P.noneYet === 0, 'no pick, no note');
+  ok(P.ellisOnGrade === 0, 'an Ellis on grade needs no pad');
+  ok(JSON.stringify(P.postOnGrade) === '["L1"]', 'a Post on grade needs one, on the L1 row only: ' + JSON.stringify(P.postOnGrade));
+  ok(!P.postOnL1, 'a Post standing on a suspended slab (L1) does not');
+  eq(P.postRes, P.ellisRes, 'the note never changes the numbers');
+  ok(P.rowNote && /Wood pad required under every #\d Post base/.test(P.rowText), 'row note: ' + P.rowText.slice(0, 120));
+  ok(/two layers of 3\/4" plywood/.test(P.rowText), 'row note states the pad spec');
+  ok(P.chip, 'the chip is marked');
+  ok(/1 row needs wood pads on grade/.test(P.head), 'summary head counts it: ' + P.head.replace(/\s+/g, ' ').slice(0, 200));
+  ok(/Wood pad under every #\d Post base/.test(P.summary) && /slab on grade \(SOG\)/.test(P.summary), 'install summary says so under L1: ' + P.summary.replace(/\s+/g, ' ').slice(0, 300));
+  ok(/\+ wood pad/.test(P.print) && /WOOD PAD REQUIRED/.test(P.print) && /WOOD PAD under every/.test(P.print), 'print marks the row, the region note and the install table');
+  ok(/must sit on a wood pad/.test(P.print), 'print footer states the rule');
+  ok(P.ellisMadeStiff === 1, 'the catalog Wood tick is what decides: an Ellis unticked is stiff');
+  ok(P.beamFlag === 'L1', 'the beam row under L1 stands on grade: ' + P.beamFlag);
+  ok(JSON.stringify(P.beamPad) === '["L1"]', 'a Post chosen for the beam on grade needs a pad: ' + JSON.stringify(P.beamPad));
 }
 
 await browser.close();
