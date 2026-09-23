@@ -50,8 +50,8 @@ await page.evaluate(() => {
 });
 ok(await page.$$eval('#matchList button[data-automatch]', b => b.length) === 0, 'the per-floor Auto button is gone');
 ok(await page.$eval('#btnMatchAll', b => /every floor/i.test(b.textContent)), 'one button matches every floor');
-// matching runs itself on arrival; the button is the re-run, behind "by hand" (UI-18)
-ok(await page.$eval('#btnMatchAll', b => !!b.closest('details[data-byhand="match"]')), 'and it lives behind the by-hand disclosure');
+// matching runs itself on arrival; the button is the re-run, in the hand-tools row under the list (UI-31)
+ok(await page.$eval('#btnMatchAll', b => !!b.closest('[data-byhand="match"]') && b.offsetParent !== null), 'and it lives in the hand-tools row, in view');
 await page.evaluate(() => openByHand('match'));
 await page.click('#btnMatchAll');
 await page.waitForFunction(() => !!matchProposal, { timeout: 120000 });

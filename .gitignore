@@ -26,3 +26,4 @@ Revit export/extract-*.json
 __pycache__/
 shots/
 reshore-calc-ui-revamp.html
+reshore-calc-ui-pass2.html

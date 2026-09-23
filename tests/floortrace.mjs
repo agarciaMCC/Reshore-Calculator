@@ -54,7 +54,7 @@ const A = await page.evaluate(() => {
     detectAgainShown: vis(document.getElementById('btnAutoDetect')),
     allPassInHand: !!document.getElementById('btnAutoTrace').closest('#byhand-areas, details[data-byhand="areas"]'),
     allPassLabel: document.getElementById('btnAutoTrace').textContent,
-    handLabel: document.querySelector('#byhand-areas summary, details[data-byhand="areas"] summary').textContent,
+    handLabel: document.querySelector('#byhand-areas .bh-label').textContent,
     onLoads: !!document.getElementById('p-loads').querySelector('#btnAutoTrace, #autoTracePanel'),
     panelInAreas: document.getElementById('autoTracePanel').closest('.step-panel').dataset.step === 'areas',
   };

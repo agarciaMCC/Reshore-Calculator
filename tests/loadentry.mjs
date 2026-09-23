@@ -70,8 +70,8 @@ ok(/started blank/.test(await chartText()), 'the status says the chart started b
 ok(await page.evaluate(() => !!state.project.loadsStartedBlank), 'and the job remembers it');
 ok(await page.evaluate(() => !loadsReady()), 'a chart with no numbers does not open Results yet');
 eq((await page.evaluate(() => stepStatus('loads'))).text, "Enter the first mark's loads", 'the step says what it is waiting for');
-// the hand tools are folded away
-ok(await page.$eval('#byhand-loads', d => !d.open), 'import / re-read / switch are behind "by hand", closed');
+// the hand tools sit in plain view under the chart (UI-31, Sep 23 2026)
+ok(await page.$eval('#byhand-loads', d => d.tagName !== 'DETAILS' && d.offsetParent !== null), 'import / re-read / switch are in the hand-tools row, in view');
 ok(await page.$eval('#byhand-loads', d => /Import from Excel/.test(d.textContent) && /Blank template/.test(d.textContent) && /split LL \+ SDL/.test(d.textContent)), 'and they are all there');
 ok(await page.$eval('#lmNoteCombined', e => /SDL \+ 1.6\/1.3 × LL/.test(e.textContent)), 'saying how capacity comes out, so nothing is a black box');
 
@@ -83,7 +83,7 @@ eq(await page.evaluate(() => [llSchedule().length, sdlSchedule().length]).then(J
   'one live-load mark and one dead-load mark');
 ok(await page.$eval('#lmSplit', e => /Live load schedule/.test(e.innerText) && /Superimposed dead load/.test(e.innerText)),
   'both tables are drawn');
-ok(await page.$eval('#byhand-loads', d => d.open && /combined chart instead/.test(d.textContent)), 'the disclosure stays open and now offers the way back');
+ok(await page.$eval('#byhand-loads', d => d.offsetParent !== null && /combined chart instead/.test(d.textContent)), 'the row now offers the way back');
 await page.click('#lsCombined');
 eq(await shape(), 'combined', 'and back to combined');
 await page.evaluate(() => history.undo());

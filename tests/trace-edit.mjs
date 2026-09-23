@@ -47,6 +47,7 @@ ok(await page.$eval('#autoTracePanel', e => /drag its corners/.test(e.textConten
 console.log('B. fills are the editable shapes');
 let e1 = await page.evaluate(() => {
   const fl = autoTraceFillList(); const f = fl[0]; const n = f.polygon.length; const p = f.polygon[0];
+  state.activeZoneIdx = 0;   // UI-30: corners come off the selected shape only
   const s = canvasToScreen(p.x, p.y);
   const h = hitTest(s.x, s.y, { anyVertex: true });
   return { n, hit: h && h.kind, zi: h && h.zi, arrIsFills: zonesOfActive() === fl };

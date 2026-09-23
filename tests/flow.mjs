@@ -56,7 +56,7 @@ const A = await page.evaluate(() => {
       onRows: edgeSweep.rows.every(r => document.querySelector(`#edgeRows button[data-esuse="${r.levelIdx}:${r.page}"], #edgeRows button[data-esredo="${r.levelIdx}:${r.page}"]`) != null),
       noPanel: (() => { const p = document.getElementById('edgeSweepPanel'); return !p || p.style.display === 'none' })() } : null,
     primary: document.querySelector('#edgeRows .primary-act').textContent.replace(/\s+/g, ' ').trim(),
-    detectBtn: !!document.querySelector('#edgeRows details[data-byhand="edge"] #edgeDetectAll'), key: edgeAutoKey };
+    detectBtn: !!document.querySelector('#edgeRows [data-byhand="edge"] #edgeDetectAll'), key: edgeAutoKey };
 });
 console.log('   ' + JSON.stringify(A));
 ok(A.drawn >= 1 && A.confirmed === 0, 'confident outlines are drawn, none confirmed for him: ' + A.drawn + ' of ' + A.n);
@@ -65,46 +65,37 @@ ok(A.drawn + (A.review ? A.review.rows : 0) === A.n, 'every sheet is either draw
 ok(!A.review || (A.review.auto && A.review.picked === 0 && A.review.onRows && A.review.noPanel),
   'the doubtful ones stay on their own sheet\'s row, not in a second panel: ' + JSON.stringify(A.review));
 ok(/Confirm all \d+ drawn/.test(A.primary), 'the primary action is Confirm all N drawn: ' + A.primary);
-ok(A.detectBtn, 'Detect again is behind the disclosure');
+ok(A.detectBtn, 'Detect again sits in the hand-tools row (UI-31)');
 // once: leaving and coming back does not sweep again
 const A2 = await page.evaluate(async () => { const k = edgeAutoKey; setStep('sheets'); setStep('edge'); await new Promise(r => setTimeout(r, 300)); return { same: edgeAutoKey === k, running: !!(edgeSweep && edgeSweep.running) }; });
 ok(A2.same && !A2.running, 'coming back does not sweep again');
 
-console.log('B. one primary action per section; the hand tools fold away');
+console.log('B. one primary action per section; the hand tools in plain view under it (UI-15 as amended by UI-31, Sep 23 2026)');
 const B = await page.evaluate(() => {
   const p = document.getElementById('p-levels');
   const idx = id => [...p.children].indexOf(document.getElementById(id));
-  const d = sec => document.querySelector(`#byhand-${sec}, details[data-byhand="${sec}"]`);
+  const d = sec => document.querySelector(`#byhand-${sec}, [data-byhand="${sec}"]`);
+  const shown = el => !!el && el.tagName !== 'DETAILS' && !el.hidden && getComputedStyle(el).display !== 'none' || (!!el && el.closest('.sec-collapsed') != null && el.tagName !== 'DETAILS');
   return {
     levelsOrder: idx('levelsConfirm') < idx('levelList') && idx('levelList') < idx('byhand-levels'),
-    levelsHand: { closed: !d('levels').open, has: ['btnAddLevel', 'btnReadElev'].every(id => d('levels').contains(document.getElementById(id))), label: d('levels').querySelector('summary').textContent },
-    sheetsHand: { closed: !d('sheets').open, reread: !!d('sheets').querySelector('#stReread') },
-    edgeHand: { closed: !d('edge').open, detect: !!d('edge').querySelector('#edgeDetectAll') },
-    areasHand: { closed: !d('areas').open, has: ['btnDrawLoading', 'btnDrawSlab', 'btnCopyFrom', 'btnAutoDetect'].every(id => d('areas').contains(document.getElementById(id))) },
+    levelsHand: { shown: shown(d('levels')), has: ['btnAddLevel', 'btnReadElev'].every(id => d('levels').contains(document.getElementById(id))), label: d('levels').querySelector('.bh-label').textContent },
+    sheetsHand: { shown: shown(d('sheets')), reread: !!d('sheets').querySelector('#stReread') },
+    edgeHand: { shown: shown(d('edge')), detect: !!d('edge').querySelector('#edgeDetectAll') },
+    areasHand: { has: ['btnDrawLoading', 'btnDrawSlab', 'btnCopyFrom', 'btnAutoDetect'].every(id => d('areas').contains(document.getElementById(id))) },
     loadsHand: { has: ['lmRescan', 'lmImport', 'lmTemplate'].every(id => d('loads') && d('loads').contains(document.getElementById(id))), bulk: !!(d('loads') && d('loads').querySelector('.lm-bulk')) },
-    matchHand: (() => { setStep('match'); const m = d('match'); return { there: !!m, closed: m && !m.open, btn: !!(m && m.querySelector('#btnMatchAll')) } })(),
-    handTools: JSON.stringify(state.project.handTools || {}),
+    matchHand: (() => { setStep('match'); const m = d('match'); return { there: !!m, shown: shown(m), btn: !!(m && m.querySelector('#btnMatchAll')) } })(),
+    noDetails: !document.querySelector('details.by-hand, details[data-byhand]'),
   };
 });
 console.log('   ' + JSON.stringify(B));
 ok(B.levelsOrder, 'Levels: Confirm sits above the list, the hand tools below it');
-ok(B.levelsHand.closed && B.levelsHand.has && /by hand/.test(B.levelsHand.label), 'Add a level and Read again are behind "or do it by hand", closed: ' + JSON.stringify(B.levelsHand));
-ok(B.sheetsHand.closed && B.sheetsHand.reread, 'Sheets: the re-read is behind the disclosure');
-ok(B.edgeHand.closed && B.edgeHand.detect, 'Floor edge: Detect again is behind it');
-ok(B.matchHand.there && B.matchHand.closed && B.matchHand.btn, 'Match: the match-all button is behind it — matching runs itself: ' + JSON.stringify(B.matchHand));
-ok(B.areasHand.closed && B.areasHand.has, 'Areas: Draw, Copy and Detect again are behind it');
-ok(B.loadsHand.has && B.loadsHand.bulk, 'Loads: re-read, import, template and the bulk control are behind it');
-ok(B.handTools === '{}', 'nothing is remembered as opened yet: ' + B.handTools);
-const B2 = await page.evaluate(() => {
-  openByHand('edge');
-  const now = JSON.stringify(state.project.handTools);
-  renderEdgeSection();
-  const still = document.querySelector('details[data-byhand="edge"]').open;
-  const others = !document.getElementById('byhand-levels').open;
-  return { now, still, others, nonInput: NON_INPUT_PROJECT_KEYS.includes('handTools') };
-});
-ok(/"edge":true/.test(B2.now) && B2.still && B2.others, 'opening one is remembered on the job and survives a re-render, the others stay closed: ' + JSON.stringify(B2));
-ok(B2.nonInput, 'and it is bookkeeping, not a calculation input');
+ok(B.levelsHand.shown && B.levelsHand.has && /by hand/.test(B.levelsHand.label), 'Add a level and Read again sit in view under the list: ' + JSON.stringify(B.levelsHand));
+ok(B.sheetsHand.reread, 'Sheets: the re-read is in the row');
+ok(B.edgeHand.shown && B.edgeHand.detect, 'Floor edge: Detect again is in the row');
+ok(B.matchHand.there && B.matchHand.shown && B.matchHand.btn, 'Match: the match-all button is in the row — matching still runs itself: ' + JSON.stringify(B.matchHand));
+ok(B.areasHand.has, 'Areas: Draw, Copy and Detect again are in the row');
+ok(B.loadsHand.has && B.loadsHand.bulk, 'Loads: re-read, import, template and the bulk control are in the row');
+ok(B.noDetails, 'nothing on any step is folded behind a disclosure any more');
 
 console.log('C. Areas reads beams and openings inside the confirmed edges on arrival');
 // confirm every drawn edge, then arrive on Areas

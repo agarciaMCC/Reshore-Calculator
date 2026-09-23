@@ -177,6 +177,12 @@ button{color:inherit}
 .sec-head{display:flex;align-items:center;gap:9px;width:100%;margin:10px 0 8px;padding:0;
   background:none;border:0;cursor:pointer;text-align:left;font:inherit;color:var(--text)}
 .sec-head:hover .sh-t{color:var(--accent)}
+.sec-next{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0 6px;padding:10px 0 4px;border-top:1px solid var(--border)}
+.sec-next .sn-status{display:flex;align-items:center;gap:8px;min-width:0;font-size:var(--fs-sm);color:var(--text-tertiary)}
+.sec-next .sn-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sec-next .sn-btn{flex:none}
+.step-foot .sf-next-hint{font-size:var(--fs-sm);color:var(--text-tertiary);white-space:nowrap}
+.by-hand-body .btn-wide{width:auto;align-self:flex-start}
 .sh-n{flex:none;width:19px;height:19px;border-radius:50%;border:1.5px solid var(--border);
   display:flex;align-items:center;justify-content:center;font-size:var(--fs-sm);font-weight:600;
   font-family:var(--font-mono);color:var(--text-tertiary)}
@@ -956,14 +962,9 @@ select.sched-shore option,select.sel-styled option{background:var(--surface-rais
 .at-actions{display:flex;gap:6px;margin-top:6px}
 /* ONE PRIMARY ACTION PER STEP (Adolfo, Sep 21 2026): the reader does the work
    and one button confirms it; the hand tools fold away until wanted. */
-.by-hand{margin:8px 0 4px;border-top:1px dashed var(--border);padding-top:4px}
-.by-hand>summary{cursor:pointer;font-size:var(--fs-sm);color:var(--text-tertiary);list-style:none;padding:3px 0;user-select:none}
-.by-hand>summary::-webkit-details-marker{display:none}
-.by-hand>summary::before{content:'▸ ';font-size:var(--fs-sm)}
-.by-hand[open]>summary::before{content:'▾ '}
-.by-hand>summary:hover{color:var(--text-secondary)}
+.by-hand{margin:10px 0 4px;border-top:1px solid var(--border);padding-top:6px}
+.by-hand>.bh-label{font-size:var(--fs-sm);color:var(--text-tertiary);padding:0 0 4px;user-select:none}
 .by-hand-body{display:flex;flex-direction:column;gap:6px;padding:4px 0 2px}
-.by-hand-body .btn-wide{width:100%}
 .by-hand-body .lm-acts{margin:0}
 .primary-act{margin:6px 0}
 .lvl-cap-ro{font-size:var(--fs-sm);color:var(--text-secondary);white-space:nowrap;display:inline-flex;align-items:center;gap:4px;padding:0 4px;border:1px solid transparent;border-radius:4px;min-width:64px}
@@ -1722,6 +1723,102 @@ function feetToStr(ft){
   return `${neg?'-':''}${f}'-${inStr}"`;
 }
 function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v))}
+
+// ════════════════════════════════════════════════════════════
+//  FIELDS COMMIT IN PLACE (UI-29, Adolfo Sep 23 2026)
+//
+//  "Clicking into fields when one field is already selected requires a
+//  double click … tabbing between fields is very clunky … hitting tab from
+//  any field takes you back to the top left most field."
+//
+//  Every pane here is rebuilt from a template when something changes, and a
+//  field commits on `change` — which the browser fires while it is moving
+//  focus to the field you clicked or tabbed to. The rebuild threw away that
+//  field under the pointer, so the click landed on nothing and Tab lost its
+//  place. Two things fix it for every pane at once:
+//
+//  1. A render asked for while a real change event is in flight WAITS one
+//     tick, until the browser has finished moving focus.
+//  2. Every pane renderer remembers which field had focus (by id or its
+//     data-* attributes) and the caret, and puts focus back on the same
+//     field in the fresh DOM.
+//
+//  Tab then simply follows the DOM: across the row, then the next row. Tab
+//  never leaves the pane by itself; Escape cancels the edit and hands focus
+//  back to the plan (UI-01).
+// ════════════════════════════════════════════════════════════
+const FIELD_SEL='input,select,textarea,button,[tabindex]:not([tabindex="-1"])';
+function fieldKey(el){
+  if(!el||el===document.body||!el.matches||!el.matches(FIELD_SEL))return null;
+  if(el.id)return '#'+CSS.escape(el.id);
+  const ds=Object.keys(el.dataset).filter(k=>k!=='v').sort()
+    .map(k=>`[data-${k.replace(/[A-Z]/g,m=>'-'+m.toLowerCase())}="${CSS.escape(el.dataset[k])}"]`).join('');
+  if(!ds)return null;
+  // scope it to the nearest ancestor with an id so the same data-* pair on
+  // two panes cannot collide
+  const host=el.closest('[id]');
+  return (host?'#'+CSS.escape(host.id)+' ':'')+el.tagName.toLowerCase()+ds;
+}
+function focusSnapshot(){
+  const a=document.activeElement,k=fieldKey(a);
+  if(!k)return null;
+  const txt=a.tagName==='TEXTAREA'||(a.tagName==='INPUT'&&/^(text|search|tel|url|password)$/.test(a.type||'text'));
+  return{k,el:a,s:txt?a.selectionStart:null,e:txt?a.selectionEnd:null,d:txt?a.selectionDirection:null};
+}
+function focusRestore(snap){
+  if(!snap)return;
+  const a=document.activeElement;
+  if(a===snap.el&&a.isConnected)return;          // nothing moved it
+  if(a&&a!==document.body&&a.isConnected&&fieldKey(a)!==snap.k)return;   // focus went somewhere else on purpose
+  let el=null;try{el=document.querySelector(snap.k)}catch(_){}
+  if(!el||el.disabled||el.offsetParent===null)return;
+  focusRestore.busy=true;
+  try{
+    el.focus({preventScroll:true});
+    if(snap.s!=null&&el.setSelectionRange)el.setSelectionRange(snap.s,snap.e,snap.d||'none');
+  }catch(_){}
+  focusRestore.busy=false;
+}
+let fieldCommit=null;   // {q:Map} while a trusted change event is in flight
+document.addEventListener('change',e=>{
+  if(!e.isTrusted||fieldCommit)return;
+  const t=e.target;
+  // only a typed field commits while focus is on the move (change fires as
+  // it blurs); a checkbox, radio or select has focus already and fires on
+  // the click itself, so its handlers can render at once
+  if(!t||!t.matches||!(t.tagName==='TEXTAREA'||(t.tagName==='INPUT'&&!/^(checkbox|radio|file|button|submit|range|color)$/.test(t.type))))return;
+  fieldCommit={q:new Map()};
+  setTimeout(()=>{
+    const q=fieldCommit;fieldCommit=null;
+    if(!q||!q.q.size)return;
+    const snap=focusSnapshot();
+    for(const [fn,args] of q.q)fn.apply(null,args);
+    focusRestore(snap);
+  },0);
+},true);
+// Wrap a pane renderer: waits for a change in flight, keeps focus otherwise.
+function inPlace(fn){
+  const w=function(...a){
+    if(fieldCommit){fieldCommit.q.set(fn,a);return}
+    const snap=focusSnapshot();
+    const r=fn.apply(this,a);
+    focusRestore(snap);
+    return r;
+  };
+  w._inner=fn;
+  return w;
+}
+// Escape in a field: put the field back the way it was and return to the plan.
+function escapeField(){
+  const a=document.activeElement;
+  if(!a||a===document.body||!a.matches||!a.matches('input,select,textarea'))return false;
+  if(a.closest('.modal-overlay, #advPop'))return false;
+  if(a.tagName==='INPUT'&&a.type!=='checkbox'&&a.type!=='radio'&&a.type!=='file'){if(a.value!==a.defaultValue)a.value=a.defaultValue}
+  else if(a.tagName==='TEXTAREA'){if(a.value!==a.defaultValue)a.value=a.defaultValue}
+  a.blur();
+  try{if(typeof drawCvs!=='undefined'&&drawCvs)drawCvs.focus({preventScroll:true})}catch(_){}
+  return true;
+}
 function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
 function nearestOnSeg(p,a,b){
   const dx=b.x-a.x,dy=b.y-a.y,len2=dx*dx+dy*dy;
@@ -2610,7 +2707,7 @@ function levelStackWarnings(){
       if(!hasElev(s)||!hasElev(d)||!(d.floorToFloor>0))continue;
       const expect=Math.round((d.elevation-(d.rangeTo-n)*d.floorToFloor)*1e4)/1e4;
       if(Math.abs(expect-s.elevation)>0.02){
-        w.push(`${s.name} is broken out of ${rangeLabel(d)} but sits at EL ${s.elevation.toFixed(2)}, `
+        w.push(`${s.name} is broken out of ${rangeLabel(d)} but sits at EL ${ftInStr(s.elevation)}, `
           +`where the range would put it at EL ${expect.toFixed(2)}`);
       }
     }
@@ -4735,7 +4832,7 @@ function startBlankChart(){
   if(scheduleShape()!=='none')return false;
   state.project.loadsStartedBlank=true;
   startSchedule('combined');
-  toast('Nothing on the drawings reads as a load schedule, so the chart starts here — type the marks, or import a spreadsheet under “by hand”.',6500);
+  toast('Nothing on the drawings reads as a load schedule, so the chart starts here — type the marks, or import a spreadsheet with the buttons under the chart.',6500);
   return true;
 }
 // The way in when there is no schedule to read (kept for a job with no
@@ -5619,7 +5716,10 @@ function hitTest(sx,sy,opts){
     const tol=HIT_TOL*1.8;
     let best=null,bd=Infinity;
     const lvA=autoTraceEditing()?null:getActiveLevel();
+    // UI-30: corners come off the SELECTED shape only
+    const only=eraseScope();
     for(let zi=zones.length-1;zi>=0;zi--){
+      if(only!=null&&zi!==only)continue;
       if(keep0&&!keep0.has(zones[zi].id))continue;
       if(!zoneOnSheet(lvA,zones[zi]))continue;
       const poly=zones[zi].polygon;if(!poly)continue;
@@ -5778,6 +5878,7 @@ function beginDrag(){
   // Shift-drag rubs corners out along the pointer's path; add Alt and it is
   // a box instead. Both are one undo for the whole gesture.
   if(state.tool==='select'&&ptr.shift&&!state.align.active&&!areasLocked()){
+    if(eraseNeedsSelection()){ptr.mode='pan';applyCursor();return}
     ptr.mode=ptr.alt?'vbox':'erase';
     ptr.erased=0;ptr.recorded=false;ptr.boxHits=null;
     applyCursor();return;
@@ -5852,13 +5953,31 @@ const SNAP_WHAT={vertex:'a corner',endpoint:'the end of a line',intersection:'a 
   perpedge:'square onto an area edge'};
 
 // Every corner within reach of the segment the pointer just travelled.
+// REMOVING CORNERS TOUCHES THE SELECTED SHAPE ONLY (UI-30, Adolfo Sep 23
+// 2026: "removing vertices … should only remove from the actively selected
+// item. Right now the remove vertices applies to all shapes/areas"). With a
+// shape selected, Shift+click, the eraser sweep, the box and hover+Delete
+// see only its corners; with nothing selected they see nothing, and say so.
+function eraseScope(){
+  const sel=state.activeZoneIdx;
+  const arr=zonesOfActive()||[];
+  if(sel!=null&&arr[sel]&&arr[sel].polygon)return sel;
+  return -1;   // nothing selected: no shape is in scope
+}
+function eraseNeedsSelection(){
+  if(eraseScope()!==-1)return false;
+  if(!eraseNeedsSelection._t||Date.now()-eraseNeedsSelection._t>2500){eraseNeedsSelection._t=Date.now();toast('Select the shape first — corners come off the selected shape only.',2600)}
+  return true;
+}
 function cornersNearSegment(a,b,tol){
   const out=[];
   const lv=autoTraceEditing()?null:levelOnScreen();
   const arr=zonesOfActive()||[];
   const lvA=autoTraceEditing()?null:getActiveLevel();
   const keep=highlightTouchSet(getActiveLevel());
+  const only=eraseScope();
   for(let zi=0;zi<arr.length;zi++){
+    if(only!=null&&zi!==only)continue;
     if(keep&&!keep.has(arr[zi].id))continue;
     if(!zoneOnSheet(lvA,arr[zi]))continue;
     const poly=arr[zi].polygon;if(!poly)continue;
@@ -5876,7 +5995,9 @@ function cornersInBox(a,b){
   const arr=zonesOfActive()||[];
   const lvB=autoTraceEditing()?null:getActiveLevel();
   const keep=highlightTouchSet(getActiveLevel());
+  const only=eraseScope();
   for(let zi=0;zi<arr.length;zi++){
+    if(only!=null&&zi!==only)continue;
     if(keep&&!keep.has(arr[zi].id))continue;
     if(!zoneOnSheet(lvB,arr[zi]))continue;
     const poly=arr[zi].polygon;if(!poly)continue;
@@ -6127,6 +6248,7 @@ function handleClick(e,s){
 
   if(state.tool==='select'){
     if(areasLocked()){if(e.shiftKey||e.altKey)lockedToast();return}
+    if(e.shiftKey&&!e.altKey&&eraseNeedsSelection())return;
     const h=hitTest(s.x,s.y,{edges:e.altKey,anyVertex:e.shiftKey});
     if(h&&h.kind==='vertex'&&e.shiftKey){
       // Shift+click a corner: remove it
@@ -6205,6 +6327,7 @@ function removeSelectedVertex(){
 function removeHoveredCorner(){
   const h=state.ui.hover;
   if(state.tool!=='select'||!h||h.kind!=='vertex')return false;
+  if(eraseScope()!==h.zi){eraseNeedsSelection();return false}
   const z=(zonesOfActive()||[])[h.zi];
   if(!z||!z.polygon)return false;
   if(z.polygon.length<=3){toast('A polygon needs at least 3 corners — delete the whole area instead.',2600);return true}
@@ -6250,6 +6373,7 @@ function escapeOnce(e){
   // a blocking confirm is the top layer: Escape answers it before anything
   const njM=document.getElementById('newJobModal');
   if(njM&&njM.classList.contains('open')){njM.classList.remove('open');return 'modal'}
+  if(escapeField())return 'field';
   if(ptr.down&&(ptr.mode==='vertex'||ptr.mode==='zone')){
     // the drag recorded an undo entry when it began; take it back
     ptr.down=false;ptr.mode=null;ptr.hit=null;ptr.didDrag=false;
@@ -6559,15 +6683,7 @@ function bindPropFieldFlow(){
       requestAnimationFrame(()=>{try{drawCvs.focus({preventScroll:true})}catch(_){}});
     }
   });
-  // Tab past the last field returns to the plan as well
-  host.addEventListener('keydown',e=>{
-    if(e.key!=='Tab'||e.shiftKey)return;
-    const order=propFieldOrder();
-    if(order.length&&e.target===order[order.length-1]){
-      e.preventDefault();e.target.blur();
-      requestAnimationFrame(()=>{try{drawCvs.focus({preventScroll:true})}catch(_){}});
-    }
-  });
+  // Tab keeps walking the pane (UI-29); Escape is the way back to the plan
 }
 function finishPolygon(){
   const lv=getActiveLevel();
@@ -7180,7 +7296,7 @@ function renderLevelList(){
     if(typeof renderLevelsConfirm==='function')renderLevelsConfirm();
     return;
   }
-  el.innerHTML=`<div class="lvl-cols" title="Type straight into the rows. Elevations are top of slab; floor-to-floor and shore height are worked out from the floor below."><span data-col="name">Level</span><span data-col="elevation" title="Top of slab elevation, feet">T.O.S. ft</span><span data-col="slab" title="Slab thickness, inches">slab</span></div>`
+  el.innerHTML=`<div class="lvl-cols" title="Type straight into the rows. Elevations are top of slab; floor-to-floor and shore height are worked out from the floor below."><span data-col="name">Level</span><span data-col="elevation" title="Top of slab elevation, feet and inches">TOS Elev</span><span data-col="slab" title="Slab thickness, inches">slab</span></div>`
   +state.levels.map((l,i)=>{
     const below=state.levels[i+1];
     const f2f=floorToFloorBelow(i);
@@ -7192,7 +7308,7 @@ function renderLevelList(){
     // slab — are what the row is read for, so they are set in bold
     const bits=[];
     const kv=(k,v)=>`${esc(k)} <b>${esc(v)}</b>`;
-    if(rng)bits.push(kv('top EL',hasElev(l)?l.elevation.toFixed(2):'?'));
+    if(rng)bits.push(kv('top EL',hasElev(l)?ftInStr(l.elevation):'?'));
     if(f2f!=null&&!isNaN(f2f))bits.push(kv('F2F',feetToStr(f2f)));
     const hr=rng?((l.floorToFloor>0&&l.slabThickness)?l.floorToFloor-l.slabThickness/12:null):h;
     if(hr!=null&&!isNaN(hr))bits.push(kv('shore',feetToStr(hr)));
@@ -7202,7 +7318,7 @@ function renderLevelList(){
     // BLD-14: the Building step describes geometry only — the typical capacity is the Loads step's business and is not shown here
     const meta=bits.join(' <span class="lvl-sep">·</span> ');
     const tipParts=[l.name];
-    if(hasElev(l))tipParts.push('T.O.S. elevation '+l.elevation.toFixed(2)+' ft');
+    if(hasElev(l))tipParts.push('T.O.S. elevation '+ftInStr(l.elevation));
     tipParts.push('slab '+inchStr(l.slabThickness));
     if(f2f!=null&&!isNaN(f2f))tipParts.push('floor-to-floor '+feetToStr(f2f));
     if(sog)tipParts.push('slab on grade: soil-supported, absorbs whatever load reaches it; nothing is shored below it and no floor may sit under it');
@@ -7221,13 +7337,13 @@ function renderLevelList(){
       <div class="lvl-main">
         ${rng?`<span class="lvl-name" title="Double-click to edit the range">${esc(rangeLabel(l))}</span>`
              :`<input class="lvl-edit lvl-name-in" data-li="${i}" data-f="name" value="${esc(l.name||'')}" placeholder="Level name" title="Level name">`}${rng?`<span class="lvl-badge" title="${rangeFloorCount(l)} identical floors">&times;${rangeFloorCount(l)}</span>`:''}${l.alignment?`<span class="aligned-dot"${levelFullyMatched(l)?'':' style="opacity:.4"'} title="${esc((levelFullyMatched(l)?'':`sheet${levelSheetsUnmatched(l).length>1?'s':''} ${levelSheetsUnmatched(l).join(', ')} still to match · `)+(l.alignment.ftPerInch!=null?alignQualityText(l.alignment):'Matched'))}"></span>`:''}
-        <label class="lvl-edit-wrap" title="Elevation, top of slab (ft)">EL <input class="lvl-edit" data-li="${i}" data-f="elevation" value="${hasElev(l)?l.elevation.toFixed(2):''}" placeholder="ft"></label>
+        <label class="lvl-edit-wrap" title="Top of slab elevation, feet and inches (25'-4 3/8&quot;, 25-4 3/8 or 25.36 all read)">EL <input class="lvl-edit" data-li="${i}" data-f="elevation" value="${hasElev(l)?esc(ftInStr(l.elevation)):''}" placeholder="ft-in"></label>
         <label class="lvl-edit-wrap" title="Slab thickness (in)"><input class="lvl-edit" data-li="${i}" data-f="slab" value="${l.slabThickness!=null?l.slabThickness:''}" placeholder="in">"</label>
         ${sog?`<span class="lvl-badge lvl-sog-badge" title="Slab on grade — the lowest floor; it absorbs all remaining load">SOG</span>`:''}
-        ${rng?'':`<button class="lvl-sog${sog?' on':''}" data-soglevel="${i}" title="${sog?'Marked as slab on grade. Click to make it a suspended floor again.':'Mark as slab on grade — the lowest floor; it absorbs all remaining load and nothing is shored below it'}">&#9640;</button>`}
-        <button class="lvl-more${rng||state.ui.rangeOpen===i?' on':''}" data-morelevel="${i}" title="${rng?'Edit the typical range':'Make this a typical range (one definition for a run of identical floors)'}">&#8943;</button>
-        <button class="align-btn" data-alignlevel="${i}" title="Match this floor" style="display:none">Match</button>
-        <button class="del-btn" data-dellevel="${i}" title="Delete ${esc(rng?rangeLabel(l):l.name)}">&times;</button>
+        ${rng?'':`<button class="lvl-sog${sog?' on':''}" data-soglevel="${i}" tabindex="-1" title="${sog?'Marked as slab on grade. Click to make it a suspended floor again.':'Mark as slab on grade — the lowest floor; it absorbs all remaining load and nothing is shored below it'}">&#9640;</button>`}
+        <button class="lvl-more${rng||state.ui.rangeOpen===i?' on':''}" data-morelevel="${i}" tabindex="-1" title="${rng?'Edit the typical range':'Make this a typical range (one definition for a run of identical floors)'}">&#8943;</button>
+        <button class="align-btn" data-alignlevel="${i}" tabindex="-1" title="Match this floor" style="display:none">Match</button>
+        <button class="del-btn" data-dellevel="${i}" tabindex="-1" title="Delete ${esc(rng?rangeLabel(l):l.name)}">&times;</button>
       </div>
       <div class="meta lvl-meta" title="${esc(tip)}">${meta}</div>
       ${(rng||state.ui.rangeOpen===i)?`<div class="lvl-range" title="One definition standing for a run of identical floors. Elevation above is the TOP floor's T.O.S.; the floors below it are spaced by the floor-to-floor.">
@@ -7236,7 +7352,7 @@ function renderLevelList(){
         <span>to</span>
         <input class="lvl-edit" data-li="${i}" data-f="rangeTo" value="${l.rangeTo!=null?l.rangeTo:''}" placeholder="to" title="Highest floor number in the run">
         <span>· F2F</span>
-        <input class="lvl-edit" data-li="${i}" data-f="f2f" value="${l.floorToFloor!=null?l.floorToFloor:''}" placeholder="ft" title="Floor-to-floor within the run (ft)">
+        <input class="lvl-edit" data-li="${i}" data-f="f2f" value="${l.floorToFloor!=null?esc(ftInStr(l.floorToFloor)):''}" placeholder="ft-in" title="Floor-to-floor within the run, feet and inches">
         <span class="lm-dim">${rng?`${rangeFloorCount(l)} floors, ${esc(rangeLabel(l))}`:'blank = a single floor'}</span>
       </div>`:''}
     </div>`;
@@ -7920,7 +8036,7 @@ function renderAreasPrimary(){
   el.innerHTML=!conf
     ?`<span class="lm-dim">Beams, openings and thickened slabs are read off each sheet once its floor edge is confirmed (Building step).</span>`
     :(read<conf?`<span class="lm-dim">${read} of ${conf} sheets read for beams and openings — the rest are read when you arrive here.</span>`
-              :`<span class="lm-dim">Every confirmed sheet has been read for beams and openings — what you accepted is in the list below; <b>Detect again…</b> under “by hand” reads a sheet once more.</span>`);
+              :`<span class="lm-dim">Every confirmed sheet has been read for beams and openings — what you accepted is in the list below; <b>Detect again…</b> below reads a sheet once more.</span>`);
 }
 function renderZoneList(){
   if(typeof renderAreasPrimary==='function')renderAreasPrimary();
@@ -7934,7 +8050,7 @@ function renderZoneList(){
   const dsp=document.getElementById('drawSlabPop');if(dsp&&!isSlabLayer())dsp.classList.remove('open');
   const atb=document.getElementById('btnAutoTrace');if(atb)atb.style.display=isSlabLayer()?'none':'';
   const adb=document.getElementById('btnAutoDetect');if(adb)adb.style.display=isSlabLayer()?'':'none';   // slab-only, not on the Loading tab (ARE-12)
-  {const bh=document.getElementById('byhand-areas');const sm=bh&&bh.querySelector('summary');if(sm&&bh.dataset.slabLabel)sm.textContent=isSlabLayer()?bh.dataset.slabLabel:bh.dataset.loadLabel}
+  {const bh=document.getElementById('byhand-areas');const sm=bh&&bh.querySelector('.bh-label');if(sm&&bh.dataset.slabLabel)sm.textContent=isSlabLayer()?bh.dataset.slabLabel:bh.dataset.loadLabel}
   const edb=document.getElementById('btnDetectEdge');if(edb)edb.style.display=isSlabLayer()?'':'none';
   const eda=document.getElementById('btnDetectEdgeAll');if(eda)eda.style.display=isSlabLayer()?'':'none';
   const bmb=document.getElementById('btnDetectBeams');if(bmb)bmb.style.display=isSlabLayer()?'':'none';
@@ -7971,7 +8087,7 @@ function renderZoneList(){
   if(!lv||arr.length===0){
     el.innerHTML=typicalRow()+`<p class="sb-empty">${!lv?'Select a level'
       :(isSlabLayer()
-        ?`Default ${inchStr(lv.slabThickness)} at EL ${hasElev(lv)?lv.elevation.toFixed(2):'?'} everywhere — draw only where the floor differs.`
+        ?`Default ${inchStr(lv.slabThickness)} at EL ${hasElev(lv)?ftInStr(lv.elevation):'?'} everywhere — draw only where the floor differs.`
         :(levelDefined(lv)
           ?'Nothing drawn, and nothing needed — the typical capacity above covers this floor. Draw an area only where it differs.'
           :'No loading areas on this floor yet.'))}</p>`;
@@ -8055,6 +8171,40 @@ function renderZoneList(){
   });
 }
 
+// The T.O.S. offset of a slab area / beam / on-grade area and the elevation
+// it comes to, side by side; type either (UI-28). A beam left blank inherits
+// the slab area it sits in, so its elevation shows as the level's placeholder.
+function offsetBaselineFt(z,lv){
+  if(!hasElev(lv))return null;
+  if(isBeam(z)&&(z.offsetIn==null||z.offsetIn==='')&&z.polygon&&z.polygon.length){
+    // what the beam rides on: the slab area (not an edge, not a beam) on the
+    // same sheet under the beam's centre, else the level baseline
+    let cx=0,cy=0;for(const q of z.polygon){cx+=q.x;cy+=q.y}cx/=z.polygon.length;cy/=z.polygon.length;
+    const all=zonesOf(lv,'slab')||[];
+    for(let i=all.length-1;i>=0;i--){
+      const o=all[i];
+      if(o===z||isBeam(o)||isEdgeZone(o)||!o.polygon||o.polygon.length<3)continue;
+      if(zonePage(lv,o)!==zonePage(lv,z))continue;
+      if(pointInPoly({x:cx,y:cy},o.polygon))return lv.elevation+slabOffsetOf(o)/12;
+    }
+  }
+  return lv.elevation;
+}
+function offsetFieldsHtml(z,lv){
+  const beam=isBeam(z);
+  const off=beam?(z.offsetIn==null||z.offsetIn===''?null:+z.offsetIn):slabOffsetOf(z);
+  const base=offsetBaselineFt(z,lv);
+  const elv=base==null?null:base+(off||0)/12;
+  const elTitle=hasElev(lv)?"Top of this "+(beam?'beam':'area')+" as an elevation — type it and the offset works itself out (25'-4 3/8&quot;, 25-4 3/8 or 25.36 all read)":'Give the level a T.O.S. elevation on the Levels list to type this as an elevation';
+  return `<div class="prop-field">
+          <span class="prop-label">T.O.S. offset (in)</span>
+          <input class="prop-input" id="propOff" type="number" value="${off==null||(off===0&&!beam)?'':off}" placeholder="${beam?'inherit':'0'}" step="0.125" title="${beam?'Blank = follow the slab area this beam sits in (or the level baseline). ':''}Plus = higher than the level baseline, minus = step down">
+        </div>
+        <div class="prop-field">
+          <span class="prop-label">T.O.S. elev</span>
+          <input class="prop-input" id="propOffEl" type="text" value="${elv!=null&&(off!=null&&(beam||off!==0))?esc(ftInStr(elv)):''}" placeholder="${elv!=null?esc(ftInStr(elv)):'level has no elevation'}"${hasElev(lv)?'':' readonly tabindex="-1"'} title="${elTitle}">
+        </div>`;
+}
 function renderProperties(){
   const el=document.getElementById('propsContent');
   bindPropFieldFlow();
@@ -8125,10 +8275,7 @@ function renderProperties(){
           <span class="prop-label">Thickness (in)</span>
           <input class="prop-input" id="propThick" type="number" value="${z.thicknessIn==null?'':z.thicknessIn}" placeholder="${esc(lv.slabThickness)}" step="0.25">
         </div>
-        <div class="prop-field">
-          <span class="prop-label">T.O.S. offset (in)</span>
-          <input class="prop-input" id="propOff" type="number" value="${slabOffsetOf(z)||''}" placeholder="0" step="0.25" title="Plus = higher than the level baseline, minus = step down">
-        </div>
+        ${offsetFieldsHtml(z,lv)}
         <p class="sb-empty full" style="text-align:left;margin:4px 0 0">Within this area the slab bears on soil: whatever load reaches it from above is absorbed and nothing is shored below it. Outside the area this floor is suspended and load passes on as usual. If this pour lands on grade here, that part needs no reshoring.</p>`
         :beam?`
         <div class="prop-field">
@@ -8139,10 +8286,7 @@ function renderProperties(){
           <span class="prop-label">Total depth, T.O.S. to soffit (in)</span>
           <input class="prop-input" id="propBd" type="number" value="${z.depthIn==null?'':z.depthIn}" placeholder="${esc(String((lv.slabThickness||7.5)+12))}" step="0.5" min="1">
         </div>
-        <div class="prop-field">
-          <span class="prop-label">T.O.S. offset (in)</span>
-          <input class="prop-input" id="propOff" type="number" value="${z.offsetIn==null||z.offsetIn===''?'':z.offsetIn}" placeholder="inherit" step="0.25" title="Blank = follow the slab area this beam sits in (or the level baseline). Plus = higher, minus = step down. Depth is still measured from the beam's own T.O.S.">
-        </div>
+        ${offsetFieldsHtml(z,lv)}
         <div class="prop-field">
           <span class="prop-label">Stem below slab</span>
           <input class="prop-input derived" type="text" readonly tabindex="-1" value="${z.depthIn?inchStr(Math.max(0,z.depthIn-(lv.slabThickness||0))):'\u2014'}">
@@ -8157,20 +8301,14 @@ function renderProperties(){
           <span class="prop-label">Thickness (in)</span>
           <input class="prop-input" id="propThick" type="number" value="${z.thicknessIn==null?'':z.thicknessIn}" placeholder="${esc(lv.slabThickness)}" step="0.25">
         </div>
-        <div class="prop-field">
-          <span class="prop-label">T.O.S. offset (in)</span>
-          <input class="prop-input" id="propOff" type="number" value="${slabOffsetOf(z)||''}" placeholder="0" step="0.25" title="Plus = higher than the level baseline, minus = step down">
-        </div>
+        ${offsetFieldsHtml(z,lv)}
         <div class="prop-field">
           <span class="prop-label">Placement load</span>
           <input class="prop-input derived" type="text" readonly tabindex="-1" value="${Math.round(placementLoad(slabThicknessOf(lv,z),projectDL())*100)/100} PSF">
         </div>
-        <div class="prop-field">
-          <span class="prop-label">Local T.O.S.</span>
-          <input class="prop-input derived" type="text" readonly tabindex="-1" value="${hasElev(lv)?'EL '+(lv.elevation+slabOffsetOf(z)/12).toFixed(2):'\u2014'}">
-        </div>`}
+`}
       </div>
-      ${(open||beam||grade||edge)?'':`<p class="sb-empty" style="text-align:left;margin-top:8px">Level baseline is ${inchStr(lv.slabThickness)}${hasElev(lv)?' at EL '+lv.elevation.toFixed(2):''}. Blank thickness follows it; offset is + up / \u2212 down.</p>`}`;
+      ${(open||beam||grade||edge)?'':`<p class="sb-empty" style="text-align:left;margin-top:8px">Level baseline is ${inchStr(lv.slabThickness)}${hasElev(lv)?' at EL '+ftInStr(lv.elevation):''}. Blank thickness follows it; offset is + up / \u2212 down.</p>`}`;
     el.querySelectorAll('.swatch[data-color]').forEach(b=>b.addEventListener('click',()=>{
       const c=b.dataset.color||null;
       if((z.color||null)===c)return;
@@ -8218,17 +8356,34 @@ function renderProperties(){
       z.thicknessIn=v;state.results=null;
       renderSidebar();renderCanvas();persist();
     });
+    // THE OFFSET AND THE ELEVATION WORK OFF EACH OTHER (UI-28, Adolfo Sep 23
+    // 2026: "allow the user to type in the elevation or the offset and they
+    // work off of each other … it's easier to type in the elevation of the
+    // offset area sometimes instead of doing the math in inches"). Either
+    // field sets z.offsetIn; the other is shown from it.
+    const setOff=(v,what)=>{
+      const cur=isBeam(z)?(z.offsetIn==null||z.offsetIn===''?null:+z.offsetIn):slabOffsetOf(z);
+      if(v===cur||(v!=null&&cur!=null&&Math.abs(v-cur)<1e-9)){renderProperties();return}
+      history.record(isBeam(z)?'Set beam offset':'Set slab offset');
+      z.offsetIn=v;state.results=null;
+      renderSidebar();renderCanvas();persist();
+    };
     const of=document.getElementById('propOff');
     if(of)of.addEventListener('change',e=>{
       const t=e.target.value.trim();
       // beams: blank = inherit (null); slab areas: blank = 0
       const v=t===''?(isBeam(z)?null:0):parseFloat(t);
       if(v!=null&&isNaN(v)){toast('Offset must be a number of inches (\u2212 for a step down).');renderProperties();return}
-      const cur=isBeam(z)?(z.offsetIn==null||z.offsetIn===''?null:+z.offsetIn):slabOffsetOf(z);
-      if(v===cur){renderProperties();return}
-      history.record(isBeam(z)?'Set beam offset':'Set slab offset');
-      z.offsetIn=v;state.results=null;
-      renderSidebar();renderCanvas();persist();
+      setOff(v);
+    });
+    const oe=document.getElementById('propOffEl');
+    if(oe)oe.addEventListener('change',e=>{
+      const t=e.target.value.trim();
+      if(t===''){setOff(isBeam(z)?null:0);return}
+      const ft=parseFeet(t);
+      if(ft==null||!hasElev(lv)){toast(hasElev(lv)?"Enter the elevation in feet and inches, e.g. 112'-6\" or 112-6":'Give '+(lv.name||'this level')+' a T.O.S. elevation on the Levels list first');renderProperties();return}
+      // to the eighth of an inch, the way the offset field itself rounds
+      setOff(Math.round((ft-lv.elevation)*12*8)/8);
     });
     return;
   }
@@ -16176,15 +16331,13 @@ function renderStepFoot(){
   else if(!act)now=`${pillHtml('ok','Done')}<span class="sf-txt">${esc(t.gate.text||'Ready to continue')}</span>`;
   else if(act.st.locked)now=`${pillHtml('lock',stepTitle(act.sec))}<span class="sf-txt">${esc(act.st.text)}</span>`;
   else now=`${pillHtml('need',stepTitle(act.sec))}<span class="sf-txt"><b>Now:</b> ${esc(act.st.text)}</span>`;
-  // the right half is the one way forward: to the section that wants
-  // something, or on to the next step once nothing here does
-  let btn;
-  if(ready)btn=`<button class="btn btn-sm btn-primary" id="stepNext">Next: ${esc(t.title)} \u2192</button>`;
-  else if(act&&!act.here&&!act.st.locked)btn=`<button class="btn btn-sm btn-primary" id="stepGo" data-sec="${esc(act.sec)}">Go to ${esc(stepTitle(act.sec))} \u2193</button>`;
-  else btn=`<button class="btn btn-sm btn-primary" id="stepNext" disabled title="${esc(act?act.st.text:'Finish this step to continue')}">Next: ${esc(t.title)} \u2192</button>`;
-  el.innerHTML=`<span class="sf-now">${now}</span>${btn}`;
-  const b=document.getElementById('stepNext');
-  if(b&&ready)b.addEventListener('click',()=>{t.kind==='section'?setStep(t.id):gotoGroup(t.id)});
+  // UI-32: the foot bar is a status line. The way forward is the Next row at
+  // the end of every section; a section that wants something is one click
+  // away on the pill here.
+  let where='';
+  if(act&&!act.here&&!act.st.locked)where=`<button class="btn btn-sm sf-go" id="stepGo" data-sec="${esc(act.sec)}" title="Open ${esc(stepTitle(act.sec))}">Open ${esc(stepTitle(act.sec))} \u2193</button>`;
+  else if(ready)where=`<span class="sf-next-hint">Next: ${esc(t.title)} — at the end of ${esc(stepTitle(curStep))}</span>`;
+  el.innerHTML=`<span class="sf-now">${now}</span>${where}`;
   const go=document.getElementById('stepGo');
   if(go)go.addEventListener('click',()=>setStep(go.dataset.sec));
 }
@@ -16361,6 +16514,41 @@ function renderGroupChrome(){
     panel.classList.toggle('sec-collapsed',!open);
     panel.classList.toggle('sec-focus',s===curStep);
   }
+  renderSectionNexts();
+}
+// ── THE WAY FORWARD LIVES AT THE END OF EACH SECTION (UI-32) ──
+// Adolfo, Sep 23 2026: "Going to the next step should live within each step
+// at the end and should be obvious to the user. Right now it lives at the
+// bottom right edge of the pane … confusing for the user since floor edge
+// does not have a next step to move onto match floors." Every section ends
+// with one row: its own standing and ONE button — "Next: <section>" inside
+// a stacked step, "Next: <step>" from its last section — enabled the moment
+// the section (or, for a step, the whole step) is done. The foot bar keeps
+// the status line only (UI-26 amended).
+function sectionNext(s){
+  const g=groupOf(s);
+  const i=g.sections.indexOf(s);
+  if(i>=0&&i<g.sections.length-1)return{kind:'section',id:g.sections[i+1],title:stepTitle(g.sections[i+1]),gate:stepStatus(s)};
+  const gi=GROUPS.findIndex(x=>x.id===g.id);
+  if(gi>=0&&gi<GROUPS.length-1)return{kind:'group',id:GROUPS[gi+1].id,title:GROUPS[gi+1].title,gate:g.mode==='tabs'?stepStatus(s):groupStatus(g)};
+  return null;
+}
+function renderSectionNexts(){
+  for(const s of SECTION_IDS){
+    const panel=document.querySelector(`.step-panel[data-step="${s}"]`);
+    if(!panel)continue;
+    let foot=panel.querySelector(':scope > .sec-next');
+    const t=sectionNext(s);
+    if(!t){if(foot)foot.remove();continue}
+    if(!foot){foot=document.createElement('div');foot.className='sec-next'}
+    if(panel.lastElementChild!==foot)panel.appendChild(foot);
+    const st=stepStatus(s),ready=!!t.gate.done;
+    const why=ready?(st.text||''):(t.gate.text||st.text||'Finish this section to continue');
+    foot.innerHTML=`<span class="sn-status">${st.locked?pillHtml('lock',stepTitle(s)):pillHtml(ready?'ok':'need',ready?'Done':'To do')}<span class="sn-txt">${esc(why)}</span></span>`
+      +`<button class="btn btn-sm btn-primary sn-btn" data-nextkind="${t.kind}" data-nextid="${esc(t.id)}"${ready?'':' disabled'} title="${esc(ready?'Continue to '+t.title:why)}">Next: ${esc(t.title)} \u2192</button>`;
+    const b=foot.querySelector('.sn-btn');
+    if(b&&!b._bound){b._bound=true;b.addEventListener('click',()=>{const k=b.dataset.nextkind,id=b.dataset.nextid;if(k==='section'){secOverride.clear();setStep(id)}else gotoGroup(id)})}
+  }
 }
 
 function renderStepper(){
@@ -16394,25 +16582,29 @@ function renderStepper(){
   renderStepFoot();
 }
 
-// ── ONE PRIMARY ACTION PER STEP; THE HAND TOOLS BEHIND "or do it by hand" ──
-// Adolfo, Sep 21 2026: every section has a reader that does the work and one
-// confirm button; adding by hand, re-reading and drawing are the fallback and
-// fold away until wanted. Once opened, a section's tools stay open for the job.
+// ── ONE PRIMARY ACTION PER STEP; THE HAND TOOLS IN PLAIN VIEW UNDER IT ──
+// Sep 21 2026 (UI-15) folded the re-readers and hand tools behind an "or do
+// it by hand" disclosure. Sep 23 2026 (UI-31) took the disclosure away:
+// "expandable menus for extra user options hide a lot of useful tools for
+// the user. I believe it's best not to have these hidden behind collapsible
+// menus." The tools now sit in a plain secondary row under the primary
+// action, always visible, with the same label as a caption. The API is
+// unchanged so every caller (and openByHand in the tests) still works;
+// handTools() is kept only so old jobs load.
 function handTools(){const p=state.project;if(!p.handTools)p.handTools={};return p.handTools}
 function byHandBox(sec,label){
   let d=document.getElementById('byhand-'+sec);
   if(!d){
-    d=document.createElement('details');d.id='byhand-'+sec;d.className='by-hand';d.dataset.byhand=sec;
-    const sm=document.createElement('summary');sm.textContent=label||'or do it by hand';d.appendChild(sm);
+    d=document.createElement('div');d.id='byhand-'+sec;d.className='by-hand';d.dataset.byhand=sec;
+    const sm=document.createElement('div');sm.className='bh-label';sm.textContent=label||'or do it by hand';d.appendChild(sm);
     const b=document.createElement('div');b.className='by-hand-body';d.appendChild(b);
-    d.addEventListener('toggle',()=>{if(!!handTools()[sec]!==d.open){handTools()[sec]=d.open;persist()}});
   }
-  if(d.open!==!!handTools()[sec])d.open=!!handTools()[sec];
+  d.open=true;
   return d;
 }
-function byHandHtml(sec,inner,label){return `<details class="by-hand" data-byhand="${esc(sec)}"${handTools()[sec]?' open':''}><summary>${esc(label||'or do it by hand')}</summary><div class="by-hand-body">${inner}</div></details>`}
-function bindByHand(host){(host||document).querySelectorAll('details[data-byhand]').forEach(d=>{if(d._bh)return;d._bh=true;d.addEventListener('toggle',()=>{if(!!handTools()[d.dataset.byhand]!==d.open){handTools()[d.dataset.byhand]=d.open;persist()}})})}
-function openByHand(sec){handTools()[sec]=true;document.querySelectorAll(`#byhand-${sec}, details[data-byhand="${sec}"]`).forEach(d=>{d.open=true})}
+function byHandHtml(sec,inner,label){return `<div class="by-hand" data-byhand="${esc(sec)}" id="byhand-${esc(sec)}"><div class="bh-label">${esc(label||'or do it by hand')}</div><div class="by-hand-body">${inner}</div></div>`}
+function bindByHand(host){(host||document).querySelectorAll('[data-byhand]').forEach(d=>{d.open=true})}
+function openByHand(sec){/* UI-31: nothing is folded any more */}
 // The per-section Next rows retired Sep 21 2026 (UI-26): the one Next bar at the foot of the pane is the way forward.
 
 // ── THE FLOOR EDGE READS ITSELF ──
@@ -16914,7 +17106,6 @@ function renderMatchPanel(){
       if(matchRead)return `<div class="primary-act"><button class="btn btn-sm btn-wide" id="matchProgress" disabled>Reading sheet ${matchRead.i} of ${matchRead.n} for its grid bubbles…</button></div>`;
       const rows=matchSheetRows();const toConf=rows.filter(r=>r.matched&&!r.confirmed).length;
       return `<div class="primary-act">${toConf?`<button class="btn btn-sm btn-wide btn-go" id="btnConfirmMatches" title="Confirm every matched sheet without looking at each grid">Confirm all ${toConf} matched</button>`:''}</div>`})()}
-    ${byHandHtml('match',`<button class="btn btn-sm btn-wide" id="btnMatchAll" title="Read the grid bubbles on every assigned sheet again, fit each one, and show the lot for review">${unmatched?'Match every floor from its grid bubbles':'Re-read every sheet’s grid bubbles'}</button><span class="lm-dim">Each row has <b>Match by hand</b> (click two grid crossings), <b>Show grid</b>, <b>Redo</b> and <b>Clear</b>.</span>`,'or match again / by hand')}
     ${planScaleCardHtml()}${rebuildBannerHtml()}${gridScaleBannerHtml()}${matchProposalHtml()}`
     // A floor drawn across several sheets gets a row per sheet: each is matched
     // on its own bubbles, and the project grid puts them in the same frame.
@@ -16948,7 +17139,9 @@ function renderMatchPanel(){
         ${a?`<button class="btn btn-sm" data-matchclear="${i}"${pg} title="Drop this sheet's match. The areas drawn on it stay exactly where they are — they are held in sheet pixels — and can be placed in feet again as soon as it is matched. Ctrl+Z restores the fit.">Clear</button>`:''}
       </div>`;
       }).join('');
-    }).join('');
+    }).join('')
+    // UI-31: the re-read sits under the list, in view
+    +`${byHandHtml('match',`<button class="btn btn-sm btn-wide" id="btnMatchAll" title="Read the grid bubbles on every assigned sheet again, fit each one, and show the lot for review">${unmatched?'Match every floor from its grid bubbles':'Re-read every sheet’s grid bubbles'}</button><span class="lm-dim">Each row has <b>Match by hand</b> (click two grid crossings), <b>Show grid</b>, <b>Redo</b> and <b>Clear</b>.</span>`,'or match again / by hand')}`;
   // ── CLICK A SHEET TO SEE ITS GRID ──
   // Adolfo, Sep 17 2026: "In match floors, we need to be able to click the
   // sheets to review the grid matches." The fit was only ever drawn as a
@@ -17127,7 +17320,7 @@ function mountFlow(){
   // Draw: one button per layer. Clicking it arms the polygon tool, so there
   // is no trip to the toolbar; on the Slab layer it first asks which kind.
   const dlBtn=document.createElement('button');
-  dlBtn.className='btn btn-sm btn-wide btn-primary';dlBtn.id='btnDrawLoading';
+  dlBtn.className='btn btn-sm btn-wide';dlBtn.id='btnDrawLoading';
   dlBtn.textContent='Draw loading area';
   dlBtn.title='Click the corners of the area on the plan. Double-click or Enter finishes it. Or press F and click inside an already-outlined area to fill it.';
   dlBtn.addEventListener('click',()=>{setTool('polygon');drawFocusPlan()});
@@ -17135,7 +17328,7 @@ function mountFlow(){
 
   const dsWrap=document.createElement('div');dsWrap.className='draw-menu';dsWrap.id='drawSlabWrap';
   const dsBtn=document.createElement('button');
-  dsBtn.className='btn btn-sm btn-wide btn-primary';dsBtn.id='btnDrawSlab';
+  dsBtn.className='btn btn-sm btn-wide';dsBtn.id='btnDrawSlab';
   dsBtn.textContent='Draw new slab area';
   dsBtn.title='Pick what the shape is, then click its corners on the plan';
   const dsPop=document.createElement('div');dsPop.className='draw-pop';dsPop.id='drawSlabPop';
@@ -17400,20 +17593,51 @@ function readCsvRows(text){
 }
 
 // "112'-6\"", "112' 6\"", "112.5", "1345.25 in"? -> feet
+// FEET AND INCHES, THE WAY THE PLANS READ (UI-28, Adolfo Sep 23 2026): an
+// elevation or a height is typed the way it is printed on the plan view,
+// in any of the spellings people use — 25-4 3/8 · 25'-4 3/8" · 25'-4 3/8 ·
+// 25-4 3/8" · 25'4" · 25' · 25 · 25.36 · 304.5" · -4-6 — and the unicode
+// fractions the app itself prints (25'-4⅜"). Stored as decimal feet.
+const _UFR={'⅛':1/8,'¼':1/4,'⅜':3/8,'½':1/2,'⅝':5/8,'¾':3/4,'⅞':7/8};
+function _ftInNorm(v){
+  return String(v).trim()
+    .replace(/[′’‘`]/g,"'").replace(/[″”“]/g,'"')
+    .replace(/[−–—]/g,'-')
+    .replace(/[⅛¼⅜½⅝¾⅞]/g,m=>' '+(_UFR[m]*8)+'/8')
+    .replace(/\s+/g,' ').trim();
+}
 function parseFeet(v){
   if(v==null)return null;
   if(typeof v==='number')return v;
-  let s=String(v).trim().replace(/[′’]/g,"'").replace(/[″”]/g,'"');
+  let s=_ftInNorm(v);
   if(!s)return null;
-  const fi=s.match(/^(-?\d+(?:\.\d+)?)\s*'\s*-?\s*(\d+(?:\.\d+)?)?\s*(?:(\d)\/(\d))?\s*"?$/);
-  if(fi){
-    let ft=parseFloat(fi[1]);const inch=fi[2]?parseFloat(fi[2]):0;
-    const frac=fi[3]?parseInt(fi[3],10)/parseInt(fi[4],10):0;
-    return ft+(ft<0?-1:1)*(inch+frac)/12;
+  let sign=1;
+  if(s[0]==='-'){sign=-1;s=s.slice(1).trim()}else if(s[0]==='+'){s=s.slice(1).trim()}
+  if(!s)return null;
+  const fr=(a,b)=>a?parseInt(a,10)/parseInt(b,10):0;
+  // 25'-4 3/8" · 25' 4" · 25'-4 · 25' 3/8" · 25'
+  let m=s.match(/^(\d+(?:\.\d+)?)\s*'\s*-?\s*(?:(\d+(?:\.\d+)?)(?=\s|"|$)\s*)?(?:(\d+)\s*\/\s*(\d+))?\s*"?$/);
+  // 25-4 3/8 · 25-4 3/8" · 25-4   (the dash form, no foot mark)
+  if(!m)m=s.match(/^(\d+)\s*-\s*(\d+(?:\.\d+)?)(?=\s|"|$)\s*(?:(\d+)\s*\/\s*(\d+))?\s*"?$/);
+  // 25 4 3/8   (three tokens: feet, inches, fraction)
+  if(!m)m=s.match(/^(\d+)\s+(\d+)\s+(\d+)\s*\/\s*(\d+)\s*"?$/);
+  if(m)return sign*(parseFloat(m[1])+((m[2]?parseFloat(m[2]):0)+fr(m[3],m[4]))/12);
+  // inches only: 304.5" · 4 1/2" · 3/8"
+  m=s.match(/^(?:(\d+(?:\.\d+)?)(?=\s|"|\/|$))?\s*(?:(\d+)\s*\/\s*(\d+))?\s*"$/);
+  if(m&&(m[1]!=null||m[2]!=null)){
+    // "3/8"" is a fraction of an inch; "4 1/2"" is four and a half inches
+    if(m[1]!=null&&m[2]!=null&&/^\d+\s*\/\s*\d+\s*"$/.test(s))return sign*fr(m[2],m[3])/12;
+    return sign*((m[1]?parseFloat(m[1]):0)+fr(m[2],m[3]))/12;
   }
+  // decimal feet, with or without a unit
+  m=s.match(/^(\d+(?:\.\d+)?)\s*(?:'|ft)?$/);
+  if(m)return sign*parseFloat(m[1]);
   const n=parseFloat(s.replace(/[^\d.\-]/g,''));
-  return isNaN(n)?null:n;
+  return isNaN(n)?null:sign*n;
 }
+// Round-trip partner of parseFeet: 25.3646 -> 25'-4⅜". Used wherever an
+// elevation or height is SHOWN in a field the user can type into.
+function ftInStr(ft){return feetToStr(ft)}
 function parseInches(v){
   if(v==null)return null;
   if(typeof v==='number')return v;
@@ -17932,6 +18156,7 @@ function bindInlineLevelEdits(){
     // typing in a row makes it the active level, without re-rendering the
     // list underneath the caret
     inp.addEventListener('focus',()=>{
+      if(focusRestore.busy)return;          // focus put back after a re-render is not a choice of level
       const i=+inp.dataset.li;
       if(state.activeLevelIdx===i)return;
       state.activeLevelIdx=i;state.activeZoneIdx=null;state.drawing.points=[];
@@ -17949,7 +18174,7 @@ function bindInlineLevelEdits(){
       // say) must not create an undo entry
       if(f==='elevation'){
         const v=raw===''?null:parseFeet(raw);
-        if(raw!==''&&v==null){toast("Enter an elevation in feet, e.g. 112.5 or 112'-6\"");renderLevelList();return}
+        if(raw!==''&&v==null){toast("Enter an elevation in feet and inches, e.g. 112'-6\" or 112-6");renderLevelList();return}
         if((v==null&&l.elevation==null)||(v!=null&&l.elevation!=null&&Math.abs(v-l.elevation)<1e-9)){renderLevelList();return}
         history.record('Edit elevation');l.elevation=v;
       }else if(f==='slab'){
@@ -17979,7 +18204,7 @@ function bindInlineLevelEdits(){
         if(l.rangeFrom!=null&&l.rangeTo!=null&&!(l.floorToFloor>0))toast('A typical range needs a floor-to-floor height — enter it beside the range.',3600);
       }else if(f==='f2f'){
         const v=raw===''?null:parseFeet(raw);
-        if(raw!==''&&(v==null||v<=0)){toast('Enter the floor-to-floor in feet');renderLevelList();return}
+        if(raw!==''&&(v==null||v<=0)){toast('Enter the floor-to-floor in feet and inches, e.g. 10\'-6"');renderLevelList();return}
         if((l.floorToFloor==null?null:l.floorToFloor)===v){renderLevelList();return}
         history.record('Edit floor-to-floor');l.floorToFloor=v;
       }
@@ -23009,6 +23234,10 @@ function init(){
   state.tool=null;
   setTool('select');
   renderNow();
+}
+// UI-29: every pane renderer keeps the focused field across a rebuild
+for(const n of ['renderLevelList','renderTypicalBlock','renderSheetTable','renderEdgeSection','renderMatchPanel','renderZoneList','renderProperties','renderSplitTables','renderLoadStart','renderDrawingsPanel','renderLevelsConfirm','renderPageBar','renderSchedule','renderSequence','renderStepPanel','renderLoadActions','renderLoadMapTable','renderLoadImportPanel','renderGridList','renderRemapPanel','renderEdgePanel','renderBeamPanel','renderAutoTracePanel','renderStepper','renderShoreTable','renderCascade','renderInstallSummary']){
+  if(typeof window[n]==='function')window[n]=inPlace(window[n]);
 }
 init();
 </script>

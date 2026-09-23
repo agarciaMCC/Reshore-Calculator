@@ -186,10 +186,10 @@ the system; this file holds the rules and is versioned with the code.
 | ID | Rule | Decided |
 |---|---|---|
 | UI-01 | Escape backs out of any command, everywhere. | Sep |
-| UI-02 | Shift+click removes a vertex. Right-click undoes the last point placed while drawing. | Sep, Sep 17 |
-| UI-03 | Corner removal by Shift+drag eraser sweep, Shift+Alt+drag box, and hover+Delete, plus a Simplify slider with a live corner count that must not flatten curves. | Sep 9 |
+| UI-02 | Shift+click removes a vertex — of the SELECTED shape only (UI-30). Right-click undoes the last point placed while drawing. | Sep, Sep 17, Sep 23 |
+| UI-03 | Corner removal by Shift+drag eraser sweep, Shift+Alt+drag box, and hover+Delete — all on the SELECTED shape only (UI-30) — plus a Simplify slider with a live corner count that must not flatten curves. | Sep 9, Sep 23 |
 | UI-04 | Ortho is Shift-held only, no sticky mode, with a dashed blue tracking line and a perpendicular lock on drawing lines AND on other vertices' alignment — on Shift and as a toolbar toggle. | Sep 8 |
-| UI-05 | Closing a polygon focuses the properties panel, Enter/Tab advancing fields. | Sep |
+| UI-05 | Closing a polygon focuses the properties panel, Enter/Tab advancing fields. Tab never leaves the pane by itself; Escape is the way back to the plan (UI-29). | Sep, Sep 23 |
 | UI-06 | Moving an area: select first, then drag. Snap on the corner nearest the grab, a toast naming what moved and how far, Shift mid-drag to keep the move square. | Sep 9 |
 | UI-07 | The menu is Settings (not Advanced) and closes only on Escape or a click outside. Solver settings carry plain explanations. | Sep 8 |
 | UI-08 | Step descriptions live behind a ? help icon. | Sep 8 |
@@ -198,7 +198,7 @@ the system; this file holds the rules and is versioned with the code.
 | UI-11 | The ghost of the floor below combines the North and South floor edges into ONE complete floor, alongside a stacking-check panel. | Sep 17 |
 | UI-12 | The stacking warning auto-clears where an on-grade area is drawn there, with an OK button on the row remembered on the job until the overshoot grows. | Sep 17 |
 | UI-13 | On the Levels list, headers sit over the field they reference, and the F2F and shore-height line is bold and easy to read. | Sep 17 |
-| UI-15 | Every section has ONE primary action at the top (Confirm levels · All N flagged look right · Confirm all N drawn · Confirm all N matched · Confirm all N marks · Add the proposed shapes). Re-readers and hand tools fold behind an "or do it by hand" disclosure that stays closed until opened and, once opened, stays open for the job. | Sep 21 |
+| UI-15 | Every section has ONE primary action at the top (Confirm levels · All N flagged look right · Confirm all N drawn · Confirm all N matched · Confirm all N marks · Add the proposed shapes). Re-readers and hand tools sit in ONE captioned row under the primary action, always in view — never folded behind a disclosure (UI-31). | Sep 21, Sep 23 |
 | UI-16 | The Floor edge section reads itself on arrival: every plan sheet is swept, confident outlines are drawn for Confirm / Adjust, doubtful ones stay on their own sheet's row to look at and pick from (UI-22). Once per set of sheets; the button is the re-run. | Sep 21 |
 | UI-17 | The Areas step reads itself on arrival: sheets with a confirmed edge and nothing yet read off them are scanned for beams and openings and the proposal opens (none ticked, BEM-08). Remembered on the job per sheet, so an old job is not rescanned. | Sep 21 |
 | UI-18 | Results, Sequence and the rail report the same "still to choose" count: rows across every placement with a shore to pick; rows with nothing tall enough are listed, not counted. | Sep 21 |
@@ -209,8 +209,13 @@ the system; this file holds the rules and is versioned with the code.
 | UI-23 | A pass that reads every sheet says where it is in its own step's primary slot — "Reading sheet 3 of 6 for its grid bubbles…" — never only on a button folded away inside "or do it by hand". Applies to the arrival match pass and the floor-edge sweep. | Sep 21 |
 | UI-24 | ONE TYPE SCALE: four sizes (18 / 14 / 12.5 / 11 px as `--fs-xl/lg/md/sm`) and nothing else. Importance is carried by weight, colour and position, never a fifth size. Every state is a PILL in one vocabulary — amber "needs you", green "done", grey "read, unconfirmed", dashed "cannot start yet" — on section heads, rail rows, tabs and cards. | Sep 21 |
 | UI-25 | THE RAIL IS A CHECKLIST: the four steps, and under the current step every section with its own state and one-line status, each clickable. A step with sections is summed up as "n of m done"; a one-section step says its own status. | Sep 21 |
-| UI-26 | ONE NEXT BAR, same place on every step: the left names what this step still wants ("Now: 5 sheets still to place") with the section it lives in; the right is the one way forward — "Go to <section>" while a section other than the one in focus wants something, "Next: <step>" once nothing here does. | Sep 21 |
+| UI-26 | ONE STATUS BAR at the foot, same place on every step: it names what this step still wants ("Now: 5 sheets still to place") with the section it lives in, and offers "Open <section>" while a section other than the one in focus wants something. It carries NO Next button: the way forward is the Next row at the end of each section (UI-32). | Sep 21, Sep 23 |
 | UI-27 | ONE SECTION OPEN AT A TIME. Within a stacked step the section in focus is open and every other section folds to its one-line head with its state pill, finished or not. Clicking a folded head opens it alone and makes it the section in focus; clicking the open head folds it; moving to another section opens that one. | Sep 21 |
+| UI-28 | FEET AND INCHES, the way the plan view reads them. Every elevation and height a user types or reads — T.O.S. elevation, typical-floor floor-to-floor, the F2F / shore-height readouts, the T.O.S. elevation of an offset area — is feet and inches, accepted in every spelling (25-4 3/8 · 25'-4 3/8" · 25'-4 3/8 · 25-4 3/8" · 25.36 · 304.5" · -4-6, and the ⅛-fractions the app prints) and shown to the eighth of an inch. Stored as decimal feet. Slab thickness, beam width and depth stay in inches. A slab area, beam or on-grade area carries its T.O.S. offset (in) AND the elevation it comes to, side by side: type either and the other follows from the level's T.O.S.; a beam left blank shows the elevation of the slab area it rides on. | Sep 23 |
+| UI-29 | FIELDS COMMIT IN PLACE. One click lands in the field that was clicked, even while another field holds an edit; Tab walks the pane in reading order — across the row, then the next row — and never jumps back to the top or out to the plan; Shift+Tab walks back; Escape drops the edit in progress and hands focus to the plan. A pane re-rendered while a field has focus puts focus back on the same field with the caret where it was; a render asked for while a typed field is committing waits until focus has settled. Icon buttons in a row (×, …, on-grade) are not Tab stops. | Sep 23 |
+| UI-30 | REMOVING CORNERS TOUCHES THE SELECTED SHAPE ONLY. Shift+click, the eraser sweep, the box and hover+Delete see the corners of the selected shape and nothing else; with no shape selected they remove nothing and say to select one first. | Sep 23 |
+| UI-31 | NOTHING FOLDED. No hand tool, re-reader, importer or switch on any step sits behind a disclosure; each section's tools are a plain captioned row under its primary action. (Replaces the "or do it by hand" details of UI-15.) | Sep 23 |
+| UI-32 | THE WAY FORWARD IS AT THE END OF EACH SECTION. Every section ends with one row: its standing (Done / To do and the one-line status) and ONE button — "Next: <section>" inside a stacked step, "Next: <step>" from a step's last section or tab — enabled the moment the section (for a step's last section, the step) is done, disabled with the reason until then. The foot bar keeps the status line only (UI-26). | Sep 23 |
 | UI-14 | PDF fidelity: device-pixel-ratio-correct canvases, no PNG round trip, the visible patch re-rendered at on-screen magnification, auto-trace and floor-edge raster at 144 DPI. | Sep 9 |
 
 ## BRD — Brand
@@ -267,6 +272,10 @@ the system; this file holds the rules and is versioned with the code.
 
 | Was | Replaced by | When |
 |---|---|---|
+| Shift+click / sweep / box / Delete removing corners of any shape on the sheet | UI-30 | Sep 23 |
+| Re-readers and hand tools behind an "or do it by hand" `<details>` disclosure, remembered per section (UI-15 as first written) | UI-31 | Sep 23 |
+| The Next / Go to button on the foot bar; Tab past the last property field returning to the plan | UI-32, UI-29 | Sep 23 |
+| Elevations typed and shown as decimal feet (112.50) | UI-28 | Sep 23 |
 | Region names as grid bays plus carrying mark (1-6 / A-D B2) | RGN-07 | Sep 17 |
 | Whole-level slab-on-grade needs no sheet match | MDL-02 | Sep 15 |
 | Areas list grouped by sheet zone name, sheet on screen first | ARE-03 | Sep 17 |

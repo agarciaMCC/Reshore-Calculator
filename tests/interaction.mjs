@@ -242,6 +242,9 @@ ok(await page.evaluate(() => state.levels[0].slabZones[2].thicknessIn === 9 && d
 await page.keyboard.type('-4');
 await page.keyboard.press('Enter');
 await page.waitForTimeout(80);
+ok(await page.evaluate(() => state.levels[0].slabZones[2].offsetIn === -4 && document.activeElement.id === 'propOffEl'), 'offset commits and moves to its paired elevation (UI-28): ' + await page.evaluate(() => document.activeElement.id));
+await page.keyboard.press('Enter');
+await page.waitForTimeout(80);
 ok(await page.evaluate(() => state.levels[0].slabZones[2].offsetIn === -4 && document.activeElement.id === 'drawCanvas'), 'last field commits and returns to the plan: ' + await page.evaluate(() => document.activeElement.id));
 await page.evaluate(() => { state.ui.slabKind = 'beam'; state.drawing.points = [{ x: 600, y: 500 }, { x: 660, y: 500 }, { x: 660, y: 520 }, { x: 600, y: 520 }]; finishPolygon(); });
 await page.waitForTimeout(80);
@@ -253,12 +256,16 @@ ok(await page.evaluate(() => document.activeElement.id === 'propLabel'), 'openin
 await page.evaluate(() => { setLayer('loading'); setTool('polygon'); state.drawing.points = [{ x: 800, y: 500 }, { x: 860, y: 500 }, { x: 860, y: 560 }, { x: 800, y: 560 }]; finishPolygon(); });
 await page.waitForTimeout(80);
 ok(await page.evaluate(() => ['propCap', 'propMark', 'propLL'].includes(document.activeElement.id)), 'loading area: mark/capacity focused: ' + await page.evaluate(() => document.activeElement.id));
-// Tab past the last field returns to the plan
+// UI-29 (Sep 23 2026): Tab keeps walking the pane; Escape cancels the edit and returns to the plan
 await page.evaluate(() => { setLayer('slab'); state.activeZoneIdx = 0; renderProperties(); });
 await page.focus('#propOff');
 await page.keyboard.press('Tab');
 await page.waitForTimeout(60);
-ok(await page.evaluate(() => document.activeElement.id === 'drawCanvas'), 'Tab past last field → canvas: ' + await page.evaluate(() => document.activeElement.id));
+ok(await page.evaluate(() => document.activeElement.id === 'propOffEl'), 'Tab from the offset goes to the next field, the elevation: ' + await page.evaluate(() => document.activeElement.id));
+await page.keyboard.type('999');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(60);
+ok(await page.evaluate(() => document.activeElement.id === 'drawCanvas' && state.levels[0].slabZones[0].offsetIn !== (999 - state.levels[0].elevation) * 12), 'Escape drops the edit and returns to the plan: ' + await page.evaluate(() => document.activeElement.id));
 
 console.log('7. Mark column');
 await setup();

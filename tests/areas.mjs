@@ -33,11 +33,10 @@ ok(!await page.$eval('#areasHelp',e=>e.hidden),'clicking ? shows it');
 ok(await page.$eval('#areasHelp',e=>/smaller area cuts out/.test(e.textContent)&&!/higher capacity governs/.test(e.textContent)),'help text updated for the cutout rule');
 await page.keyboard.press('Escape');
 ok(await page.$eval('#areasHelp',e=>e.hidden),'Escape closes it');
-// loading layer buttons — behind "or draw / copy by hand" (UI-18), closed until opened
-ok(await page.$eval('#byhand-areas',d=>!d.open&&d.contains(document.getElementById('btnDrawLoading'))&&d.contains(document.getElementById('btnCopyFrom'))&&d.contains(document.getElementById('btnAutoDetect'))),'Draw, Copy and Detect again fold away behind the disclosure');
+// loading layer buttons — in the hand-tools row under the primary action, always in view (UI-31, Sep 23 2026)
+ok(await page.$eval('#byhand-areas',d=>d.tagName!=='DETAILS'&&d.offsetParent!==null&&d.contains(document.getElementById('btnDrawLoading'))&&d.contains(document.getElementById('btnCopyFrom'))&&d.contains(document.getElementById('btnAutoDetect'))),'Draw, Copy and Detect again sit in the hand-tools row, not folded away');
 ok(await page.$eval('#beamPanel',e=>[...e.parentNode.children].indexOf(e)<[...e.parentNode.children].indexOf(document.getElementById('zoneList'))),'the proposal panel sits above the list');
-await page.evaluate(()=>openByHand('areas'));
-ok(await page.evaluate(()=>!!state.project.handTools.areas),'opening it is remembered on the job');
+ok(await page.$eval('#btnDrawLoading',e=>e.offsetParent!==null),'and they are visible without opening anything');
 ok(await page.$eval('#btnDrawLoading',e=>e.offsetParent!==null&&e.textContent==='Draw loading area'),'Draw loading area shown on the loading layer');
 ok(await page.$eval('#drawSlabWrap',e=>e.style.display==='none'),'the slab draw button is hidden');
 ok(await page.$eval('#btnCopyFrom',e=>/Copy loading areas/.test(e.textContent)),'copy button names the layer');
@@ -45,8 +44,8 @@ ok(await page.$eval('#btnCopyFrom',e=>/Copy loading areas/.test(e.textContent)),
 // own load map as the primary card up top, the all-floors pass behind "or do
 // it by hand" beside Draw and Copy; nothing about it on Loads.
 ok(await page.evaluate(()=>{const a=document.getElementById('btnDrawLoading'),b=document.getElementById('btnAutoTrace');
-  return !!a&&!!b&&b.closest('.step-panel').dataset.step==='areas'&&!!b.closest('details[data-byhand="areas"], #byhand-areas')
-    &&!document.getElementById('p-loads').querySelector('#btnAutoTrace')}),'the all-floors trace lives behind by-hand on the Loading tab, nothing on Loads');
+  return !!a&&!!b&&b.closest('.step-panel').dataset.step==='areas'&&!!b.closest('[data-byhand="areas"], #byhand-areas')
+    &&!document.getElementById('p-loads').querySelector('#btnAutoTrace')}),'the all-floors trace lives in the hand-tools row on the Loading tab, nothing on Loads');
 await page.click('#btnDrawLoading');
 ok(await page.evaluate(()=>state.tool==='polygon'),'clicking it arms the polygon tool');
 await page.keyboard.press('Escape');

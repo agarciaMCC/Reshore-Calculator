@@ -134,15 +134,20 @@ ok(await page.$eval('#propRemoveCorner', b => !b.disabled), 'enabled once a corn
 await page.evaluate(() => document.getElementById('propRemoveCorner').click());
 ok(await page.evaluate(() => getActiveZone().polygon.length) === nBefore - 1, 'button removes the corner');
 await page.evaluate(() => history.undo());
-// Shift+click on an UNselected shape's corner
+// UI-30 (Sep 23 2026): Shift+click on an UNselected shape's corner does nothing —
+// corners come off the SELECTED shape only
 const sc = await page.evaluate(() => {
   const lv = getActiveLevel(); state.activeZoneIdx = null; renderProperties();
   const z = lv.zones[1]; const n = z.polygon.length; const p = z.polygon[2];
   const s = canvasToScreen(p.x, p.y);
   handleClick({ button: 0, clientX: s.x, clientY: s.y, shiftKey: true, altKey: false }, s);
-  return { before: n, after: z.polygon.length };
+  const unsel = z.polygon.length;
+  state.activeZoneIdx = 1; renderProperties();
+  handleClick({ button: 0, clientX: s.x, clientY: s.y, shiftKey: true, altKey: false }, s);
+  return { before: n, unsel, after: z.polygon.length };
 });
-ok(sc.after === sc.before - 1, 'Shift+click removes a corner on an unselected shape: ' + JSON.stringify(sc));
+ok(sc.unsel === sc.before, 'Shift+click leaves an unselected shape alone: ' + JSON.stringify(sc));
+ok(sc.after === sc.before - 1, 'and removes the corner once the shape is selected: ' + JSON.stringify(sc));
 
 // ── F. the floor edge is a LINE, not a fill ────────────────────────────
 // Adolfo, Sep 16 2026: "the floor edge appears to have some sort of invisible
@@ -170,7 +175,7 @@ const F = await page.evaluate(() => {
     corner: id(at(100, 100)),          // on one of its corners
     near:   id(at(700, 104)),          // a few px off the line — still on it
     off:    id(at(700, 160)),          // well clear of the line
-    vtx:    at(1400, 1200, { anyVertex: true }),
+    vtx:    (state.activeZoneIdx = arr.length - 1, at(1400, 1200, { anyVertex: true })),   // selected first (UI-30)
   };
 });
 ok(F.blank === null, 'a click inside the outline with nothing drawn there picks NOTHING: ' + F.blank);

@@ -95,33 +95,52 @@ console.log('C. the rail lists the sections of the current step (UI-25)');
   await page.evaluate(() => setStep('levels'));
 }
 
-// ── D. the Next bar names the action ────────────────────────────────────
-console.log('D. one Next bar, naming what is wanted (UI-26)');
+// ── D. the way forward is at the end of each section; the foot bar is status ──
+console.log('D. Next lives at the end of every section (UI-32); the foot bar names what is wanted (UI-26)');
 {
   const r = await page.evaluate(() => {
     const f = document.getElementById('stepFoot');
     const now = f.querySelector('.sf-now'), txt = now && now.querySelector('.sf-txt');
     const pill = now && now.querySelector('.pill');
-    const btn = f.querySelector('#stepNext, #stepGo');
-    return { hidden: f.hidden, pill: pill && pill.textContent.trim(), txt: txt && txt.textContent.trim(), btn: btn && btn.textContent.trim(), disabled: btn && btn.disabled, id: btn && btn.id };
+    const panel = document.querySelector('.step-panel[data-step="levels"]');
+    const foot = panel && panel.querySelector(':scope > .sec-next');
+    const btn = foot && foot.querySelector('.sn-btn');
+    return { hidden: f.hidden, pill: pill && pill.textContent.trim(), txt: txt && txt.textContent.trim(),
+      footNext: !!f.querySelector('#stepNext, .btn-primary'),
+      last: panel && panel.lastElementChild === foot, btn: btn && btn.textContent.trim(), disabled: btn && btn.disabled };
   });
   ok(!r.hidden && r.pill === 'Levels', 'the bar names the section that wants something: ' + r.pill);
   ok(/^Now:/.test(r.txt) && /confirm/i.test(r.txt), 'and what it wants, as an action: ' + r.txt);
-  ok(r.id === 'stepNext' && r.disabled, 'Next waits while the section in focus is the one wanting: ' + r.btn);
-  // once the levels are confirmed, the bar sends you to the next section wanting something
+  ok(!r.footNext, 'the foot bar carries no Next button of its own');
+  ok(r.last && /^Next: Sheets/.test(r.btn || ''), 'the Levels section ends with its own Next: ' + r.btn);
+  ok(r.disabled, 'which waits while the section is not done');
+  // once the levels are confirmed, that Next comes alive and the bar points at the next section wanting something
   await page.evaluate(() => { confirmLevels(); });
   await page.waitForTimeout(300);
   const r2 = await page.evaluate(() => {
     const f = document.getElementById('stepFoot');
-    const btn = f.querySelector('#stepNext, #stepGo');
+    const go = f.querySelector('#stepGo');
     const want = ['sheets', 'edge', 'match'].find(s => !stepStatus(s).done);
-    return { want, wantTitle: stepTitle(want), pill: f.querySelector('.sf-now .pill').textContent.trim(), btn: btn.textContent.trim(), id: btn.id, disabled: btn.disabled };
+    const btn = document.querySelector('.step-panel[data-step="levels"] > .sec-next .sn-btn');
+    return { want, wantTitle: stepTitle(want), pill: f.querySelector('.sf-now .pill').textContent.trim(), go: go && go.textContent.trim(), btn: btn.textContent.trim(), disabled: btn.disabled };
   });
-  ok(r2.id === 'stepGo' && r2.btn === 'Go to ' + r2.wantTitle + ' ↓' && !r2.disabled, 'with Levels done, the one button goes to the next section wanting something: ' + r2.btn);
-  ok(r2.pill === r2.wantTitle, 'and the bar says so: ' + r2.pill);
-  await page.click('#stepGo');
+  ok(!r2.disabled && r2.btn === 'Next: Sheets →', 'with Levels done its Next is live: ' + r2.btn);
+  ok(r2.pill === r2.wantTitle && r2.go === 'Open ' + r2.wantTitle + ' ↓', 'and the bar says which section wants something, with a way there: ' + r2.pill + ' / ' + r2.go);
+  // confirming moved on to Sheets by itself; back on Levels, its Next does the same
+  await page.evaluate(() => setStep('levels'));
   await page.waitForTimeout(200);
-  ok(await page.evaluate(w => curStep === w, r2.want), 'pressing it lands there');
+  await page.click('.step-panel[data-step="levels"] > .sec-next .sn-btn');
+  await page.waitForTimeout(200);
+  ok(await page.evaluate(() => curStep === 'sheets'), 'pressing Next opens Sheets');
+  const r3 = await page.evaluate(() => {
+    const out = {};
+    for (const s of ['drawings', 'levels', 'sheets', 'edge', 'match']) {
+      const b = document.querySelector(`.step-panel[data-step="${s}"] > .sec-next .sn-btn`);
+      out[s] = b ? b.textContent.trim() : null;
+    }
+    return out;
+  });
+  ok(r3.drawings === 'Next: Levels →' && r3.sheets === 'Next: Floor edge →' && r3.edge === 'Next: Match floors →' && r3.match === 'Next: Loads →', 'every Building section names the one after it, and the last names the next step: ' + JSON.stringify(r3));
 }
 
 // ── E. one primary button per section, plus the bar ─────────────────────
@@ -130,7 +149,7 @@ console.log('E. red is spent once per section');
   const r = await page.evaluate(() => {
     const out = {};
     for (const p of document.querySelectorAll('.step-panel.active:not(.sec-collapsed)')) {
-      const vis = [...p.querySelectorAll('.btn-primary')].filter(b => b.offsetParent !== null && !b.closest('details:not([open])'));
+      const vis = [...p.querySelectorAll('.btn-primary')].filter(b => b.offsetParent !== null && !b.closest('.sec-next'));
       out[p.dataset.step] = vis.length;
     }
     return out;
