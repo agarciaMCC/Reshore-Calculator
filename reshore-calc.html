@@ -234,6 +234,12 @@ button{color:inherit}
 .mp-head .lm-dim{margin-left:auto;font-weight:400}
 .mp-row{display:grid;grid-template-columns:22px 1fr auto;gap:7px;align-items:start;padding:5px 6px;margin-bottom:4px;
   border:1px solid var(--border);border-left:3px solid var(--border);border-radius:5px;background:var(--surface)}
+.mp-row.gs-banner{grid-template-columns:1fr auto}
+.mp-card{display:grid;grid-template-columns:1fr auto;gap:7px;align-items:start;padding:5px 6px;margin-bottom:4px;
+  border:1px solid var(--border);border-left:3px solid var(--border);border-radius:5px;background:var(--surface)}
+.mp-card.v-good{border-left-color:var(--safe)}.mp-card.v-check{border-left-color:var(--warn)}.mp-card.v-poor{border-left-color:var(--danger)}
+.ps-card select{font:inherit;font-size:12px;margin-left:4px}
+.ps-ok{color:var(--safe);font-weight:600}
 .mp-row.v-good{border-left-color:var(--safe)}
 .mp-row.v-check{border-left-color:var(--warn)}
 .mp-row.v-poor,.mp-row.v-none{border-left-color:var(--danger)}
@@ -3988,7 +3994,12 @@ function parseLoadMapTables(items){
 
     const findH=re=>{const h=band.filter(i=>re.test(i.s)).sort((a,b)=>a.x-b.x);return h.length?h[0]:null};
     const cols=[{k:'mark',x:mk.x}];
-    const desc=findH(/^DESCRIPTION$/i)||findH(/^TYPE$/i)||findH(/^AREA$/i);
+    // LOD-12: the description column is the NEAREST such header right of
+    // MARK. Horizon House heads it TYPE (SDL) or USE (LL), and its SDL table
+    // also has a "SPECIAL LOAD DESCRIPTION" column far to the right — taking
+    // DESCRIPTION first put the mark column's edge through the TYPE text.
+    const desc=band.filter(i=>/^(DESCRIPTION|TYPE|USE|AREA|OCCUPANCY|OCCUPANCY\s*\/\s*USE)$/i.test(i.s)&&i.x>mk.x+20&&Math.abs(i.y-mk.y)<HDR_TOL*2)
+      .sort((p,q)=>p.x-q.x)[0]||findH(/^DESCRIPTION$/i)||findH(/^TYPE$/i)||findH(/^AREA$/i);
     if(desc)cols.push({k:'desc',x:desc.x});
     if(kind==='combined'){
       const sdlH=findH(/^SDL$/i)||findH(/^(ADDED\s*)?DEAD\s*LOAD$/i),llH=findH(/^LL$/i)||findH(/^LIVE\s*LOAD$/i);
@@ -4005,7 +4016,13 @@ function parseLoadMapTables(items){
       const hv=band.filter(i=>!/SCHEDULE/i.test(i.s)
         &&(/\bPSF\b/i.test(i.s)||/^LOAD,?$/i.test(i.s)||/R\s*=\s*REDUCIBLE/i.test(i.s)))
         .sort((a,b)=>a.x-b.x);
-      if(hv.length)vx=hv[0].x;
+      // right of the description (a "LOAD (PSF)" header can sit anywhere in
+      // a multi-column SDL table); a TOTAL column wins where there is one
+      const hvR=hv.filter(i=>!desc||i.x>desc.x+10);
+      const tot=band.find(i=>/^TOTAL\b/i.test(i.s)&&(!desc||i.x>desc.x+10));
+      if(tot){const under=hvR.filter(i=>i.y>tot.y&&Math.abs(i.x-tot.x)<80).sort((p,q)=>Math.abs(p.x-tot.x)-Math.abs(q.x-tot.x))[0];vx=under?under.x:tot.x}
+      else if(hvR.length)vx=hvR[0].x;
+      else if(hv.length)vx=hv[0].x;
       if(vx==null){
         const descX=desc?desc.x:mk.x+80;
         const nums=items.filter(i=>i.x>descX+20&&i.x<rightEdge
@@ -4028,7 +4045,10 @@ function parseLoadMapTables(items){
                           :(c.x+cols[i+1].x)/2
     }));
     const left=bounds[0].lo,right=bounds[bounds.length-1].hi;
-    const body=items.filter(i=>i.x>=left&&i.x<right&&i.y>mk.y+12&&i.y<mk.y+1400);
+    // a second table stacked under this one starts at its own MARK header
+    const nextBelow=marks.filter(m=>m!==mk&&m.y>mk.y+HDR_TOL&&Math.abs(m.x-mk.x)<120).sort((p,q)=>p.y-q.y)[0];
+    const bottom=nextBelow?Math.min(mk.y+1400,nextBelow.y-160):mk.y+1400;
+    const body=items.filter(i=>i.x>=left&&i.x<right&&i.y>mk.y+12&&i.y<bottom);
 
     const byRow=new Map();
     for(const i of body){
@@ -4076,7 +4096,18 @@ function parseLoadMapTables(items){
         const m=t.match(/-?\d+(\.\d+)?/);
         return m?parseFloat(m[0]):null;
       };
-      const markTxt=join('mark');
+      let markTxt=join('mark');
+      // a centred description can start left of the mark/description split:
+      // the mark is the cell's leftmost token, the rest is description
+      if(!MARK_RE.test(markTxt)&&cells.mark){
+        const ms=cells.mark.slice().sort((p,q)=>p.x-q.x);
+        if(MARK_RE.test(ms[0].s.trim())){
+          markTxt=ms[0].s.trim();
+          if(cells.desc||bounds.some(b=>b.k==='desc'))(cells.desc=cells.desc||[]).push(...ms.slice(1));
+          else cells.desc=ms.slice(1);
+          cells.mark=[ms[0]];
+        }
+      }
       if(!MARK_RE.test(markTxt))continue;
       const reducible=/\(\s*R\s*\)/i.test(rowText);
       if(kind==='combined'){
@@ -4087,8 +4118,10 @@ function parseLoadMapTables(items){
       }else{
         const v=num('value');
         if(v==null)continue;
+        // "50 (R) + 15 PARTITION": the extra stays visible as a comment
+        const extra=join('value').replace(/^\s*-?[\d,]+(\.\d+)?\s*(\(\s*R\s*\))?\s*/i,'').trim();
         rows.push({mark:markTxt.toUpperCase(),desc:join('desc'),load:v,
-                   comments:join('comments'),reducibleMarked:reducible,y:k,box});
+                   comments:join('comments')||(/[A-Z]{3,}/i.test(extra)?extra:''),reducibleMarked:reducible,y:k,box});
       }
     }
     if(rows.length)tables.push({kind,x:mk.x,y:mk.y,rows});
@@ -5291,6 +5324,10 @@ function findSnap(sx,sy,exclude){
 // ── geometry lifecycle ──────────────────────────────────────
 function resetGeometry(){
   for(const k of Object.keys(geomCache))delete geomCache[k];
+  if(typeof gridLineCache!=='undefined')for(const k of Object.keys(gridLineCache))delete gridLineCache[k];
+  if(typeof leaderSegCache!=='undefined')for(const k of Object.keys(leaderSegCache))delete leaderSegCache[k];
+  if(typeof sheetNoteCache!=='undefined')for(const k of Object.keys(sheetNoteCache))delete sheetNoteCache[k];
+  if(typeof pageScaleChoice!=='undefined')for(const k of Object.keys(pageScaleChoice))delete pageScaleChoice[k];
   if(typeof resetPageTextCache==='function')resetPageTextCache();
   updateSnapGeomInfo();
 }
@@ -8535,6 +8572,23 @@ function deserializeDoc(data){
       return s;
     });
   }
+  // BLD-19: a job saved before the plan scale existed takes it from the
+  // matches its user already confirmed, when they agree
+  if(!state.project.planScale){
+    const fs=[];
+    for(const l of state.levels||[]){
+      const all=[l.alignment,...((l.sheets||[]).map(s=>s&&s.alignment))];
+      for(const a of all)if(a&&a.transform&&a.confirmed&&a.ftPerInch>0)fs.push(a.ftPerInch);
+    }
+    if(fs.length){
+      fs.sort((a,b)=>a-b);const med=fs[fs.length>>1];
+      if(fs.every(f=>Math.abs(f-med)/med<0.01)){
+        const snap=(typeof PLAN_SCALES!=='undefined'?PLAN_SCALES:[]).find(([,v])=>Math.abs(v-med)/v<0.005);
+        const f=snap?snap[1]:med;
+        state.project.planScale={ftPerInch:f,text:planScaleText(f),confirmed:true,from:'matches'};
+      }
+    }
+  }
   const pn=document.getElementById('projectName');
   if(pn)pn.value=state.project.name||'New Project';
 }
@@ -8846,7 +8900,9 @@ function startAlignment(levelIdx,page){
     // scale they typed in themselves
     if(!state.align.active||state.align.levelIdx!==levelIdx)return;
     state.align.scaleNotes=sheetScaleNotes(items);
+    noteSheetScale(state.pdf.current,items);
     if(state.align.scaleTyped)return updateAlignStatus();
+    if(lockedFtPerInch(state.pdf.current)){state.align.sheetScale=lockedFtPerInch(state.pdf.current);state.align.locked=true;return updateAlignStatus()}
     state.align.sheetScale=parseSheetScale(items);   // provisional; refined at the first pick
     // No note on the sheet? The dimension chain between its grid bubbles
     // states the scale too, and one known crossing plus a scale is enough to
@@ -8917,27 +8973,42 @@ function bubbleAxisPositions(bubbles,bands,axis,minLabels){
   const at=new Map();                      // text position -> circle centre
   for(const b of bubbles)at.set(Math.round(b.tx)+','+Math.round(b.ty),b);
   const byLabel=new Map();
-  for(const band of bands){
+  // BLD-20: a key plan's bands are short — Horizon House B6 carries "1 1.1 11"
+  // and "1 8" in its key plan beside a plan band of sixteen, and the key
+  // plan's "11" (a column the B6 plan does not even reach) was taken as the
+  // plan's. A band under a third the length of the longest on its axis only
+  // speaks for labels the grid already knows; the locked-scale fit then
+  // drops it if it is wrong.
+  const sizes=bands.map(b=>new Set(b.items.map(i=>i.s.trim())).size);
+  const longest=Math.max(0,...sizes);
+  const inLong=new Set();
+  bands.forEach((b,i)=>{if(!(longest>=9&&sizes[i]<longest/3)&&sizes[i]>=minLabels)for(const it of b.items)inLong.add(it.s.trim())});
+  for(let bi=0;bi<bands.length;bi++){
+    const band=bands[bi];
     const distinct=new Set(band.items.map(i=>i.s.trim()));
     if(distinct.size<minLabels)continue;
+    const short=longest>=9&&distinct.size<longest/3;
     for(const it of band.items){
+      if(short&&(gridPos(axis,it.s.trim())==null||inLong.has(it.s.trim())))continue;
       const b=at.get(Math.round(it.x)+','+Math.round(it.y));
       if(!b)continue;
       const L=b.label;
       if(!byLabel.has(L))byLabel.set(L,[]);
-      byLabel.get(L).push(b[key]);
+      byLabel.get(L).push({v:b[key],b});
     }
   }
   const out=[];
-  for(const [label,vals] of byLabel){
-    vals.sort((a,b)=>a-b);
+  for(const [label,list] of byLabel){
+    list.sort((a,b)=>a.v-b.v);
+    const vals=list.map(e=>e.v);
     let best=null;
     for(let i=0;i<vals.length;i++){
       let j=i;while(j+1<vals.length&&vals[j+1]-vals[i]<=6)j++;
       if(!best||j-i>best.n)best={i,j,n:j-i};
     }
     const grp=vals.slice(best.i,best.j+1);
-    out.push({label,pos:grp[Math.floor(grp.length/2)],n:grp.length,rejected:vals.length-grp.length});
+    out.push({label,pos:grp[Math.floor(grp.length/2)],n:grp.length,rejected:vals.length-grp.length,
+      centres:list.slice(best.i,best.j+1).map(e=>({x:e.b.x,y:e.b.y}))});
   }
   return out.sort((a,b)=>a.pos-b.pos);
 }
@@ -9047,6 +9118,7 @@ function inPlanBox(main,it){
   return true;
 }
 async function autoMatchPointsMain(items,pageNum){
+  try{await pageStrokes(pageNum)}catch(e){}
   return autoMatchPoints(items,pageNum,await mainPlanBox(items,pageNum));
 }
 function autoMatchPoints(items,pageNum,main){
@@ -9065,10 +9137,34 @@ function autoMatchPoints(items,pageNum,main){
   if(xs.length<2)xs=axisFilter(bubbleAxisPositions(bubbles,bands.cols,'x',2),'x').filter(v=>gridPos('x',v.label)!=null);
   if(ys.length<2)ys=axisFilter(bubbleAxisPositions(bubbles,bands.rows,'y',2),'y').filter(v=>gridPos('y',v.label)!=null);
   if(xs.length<2||ys.length<2)return{err:`only ${xs.length} column and ${ys.length} row grid bubble${ys.length===1?'':'s'} could be read on this sheet — match this floor by hand`};
-  const px=spreadPick(xs,5),py=spreadPick(ys,4);
+  // BLD-21: each bubble names its line; the line's own geometry places it
+  let nSnap=0,nKink=0;
+  const snapAll=(list,axis)=>list.map(v=>{
+    // a bubble moved clear of its neighbour on an elbowed leader (Horizon
+    // House 2.7, 2'-3" off 2.6): follow the leader to where the line starts
+    for(const c of (v.centres||[])){
+      const k=followBubbleLeader(pageNum,c.x,c.y,axis);
+      if(k!=null&&Math.abs(k-v.pos)>3){
+        const r=snapGridLine(pageNum,axis,k,5);
+        nKink++;if(r.snapped)nSnap++;
+        return{...v,bubblePos:v.pos,pos:r.snapped?r.pos:k,kinked:true};
+      }
+    }
+    // otherwise the circle's centre stands: it is on the line, and across the
+    // Kalae sheets it agrees with itself to 0.02" — a search for the drafted
+    // line near it did worse there (hatch and faces a pixel off)
+    return{...v,bubblePos:v.pos}});
+  xs=snapAll(xs,'x');ys=snapAll(ys,'y');
+  // with a grid to fit to, only crossings it knows can place the sheet — pick
+  // the spread from those (Horizon House B6 knows A of its rows and the
+  // spread had picked D.5, F.8, H.1 the grid had not seen yet)
+  const kx=gridIsEmpty()?xs:xs.filter(v=>gridPos('x',v.label)!=null),ky=gridIsEmpty()?ys:ys.filter(v=>gridPos('y',v.label)!=null);
+  const uni=(a,b)=>{const m=new Map();for(const v of [...a,...b])m.set(v.label,v);return [...m.values()].sort((p,q)=>p.pos-q.pos)};
+  const px=kx.length>=2&&kx.length<xs.length?uni(spreadPick(kx,5),spreadPick(xs,5)):spreadPick(xs,5);
+  const py=ky.length>=2&&ky.length<ys.length?uni(spreadPick(ky,4),spreadPick(ys,4)):spreadPick(ys,4);
   const pts=[];
   for(const a of px)for(const b of py)pts.push({px:a.pos,py:b.pos,gx:a.label,gy:b.label});
-  return{pts,nx:xs.length,ny:ys.length,xs,ys,bands};
+  return{pts,nx:xs.length,ny:ys.length,xs,ys,bands,nSnap,nKink};
 }
 // Fit, drop what does not agree, fit again. Returns the kept points and the
 // fit, or an error.
@@ -9080,13 +9176,14 @@ function autoMatchPoints(items,pageNum,main){
 // outliers spoiled. So the fit is SEEDED from the two crossings that agree with
 // the most others, and only then refined. A sheet whose crossings already agree
 // is left exactly as it was. (Adolfo, Sep 21 2026.)
-function seedFromBestPair(pts,pairsOf){
+function seedFromBestPair(pts,pairsOf,fitFn){
+  fitFn=fitFn||fitAlignment;
   if(pts.length<4)return pts.slice();
   const src=pts.length>60?pts.filter((_,i)=>i%Math.ceil(pts.length/60)===0):pts;
   const seen=new Set(),cands=[];
   for(let i=0;i<src.length;i++)for(let j=i+1;j<src.length;j++){
     let f;
-    try{f=fitAlignment(pairsOf([src[i],src[j]]))}catch(e){continue}
+    try{f=fitFn(pairsOf([src[i],src[j]]))}catch(e){continue}
     if(!f||!f.transform)continue;
     const inl=[];
     for(const q of pts){
@@ -9107,23 +9204,40 @@ function seedFromBestPair(pts,pairsOf){
   let best=null,bn=-1,br=Infinity;
   for(const l of cands){
     let f;
-    try{f=fitAlignment(pairsOf(l))}catch(e){continue}
+    try{f=fitFn(pairsOf(l))}catch(e){continue}
     if(!f)continue;
     const rms=f.rmsFt||0;
     if(rms>0.25)continue;
     if(l.length>bn||(l.length===bn&&rms<br)){best=l;bn=l.length;br=rms}
   }
-  return (best&&best.length>=4&&best.length<pts.length)?best:pts.slice();
+  if(!(best&&best.length>=4&&best.length<pts.length))return pts.slice();
+  // crossings with a label the grid does not know yet cannot be judged by the
+  // grid — they are how new lines JOIN it. Keep them, where the half the grid
+  // does know agrees with the seed.
+  let bf=null;try{bf=fitFn(pairsOf(best))}catch(e){}
+  if(!bf||!bf.transform)return best;
+  const inB=new Set(best);
+  const extra=pts.filter(q=>{
+    if(inB.has(q))return false;
+    const gx=gridPos('x',q.gx),gy=gridPos('y',q.gy);
+    if(gx!=null&&gy!=null)return false;
+    const b=pixelToBuilding(q.px,q.py,bf.transform);
+    if(gx!=null&&Math.abs(b.bx-gx)>1.5)return false;
+    if(gy!=null&&Math.abs(b.by-gy)>1.5)return false;
+    return true;
+  });
+  return best.concat(extra);
 }
-function autoMatchFit(pts,mkPairs){
+function autoMatchFit(pts,mkPairs,fitFn){
   const pairsOf=mkPairs||alignPairs;   // the whole-set pass supplies its own
-  let keep=seedFromBestPair(pts,pairsOf);
-  let fit=fitAlignment(pairsOf(keep));
+  fitFn=fitFn||fitAlignment;
+  let keep=seedFromBestPair(pts,pairsOf,fitFn);
+  let fit=fitFn(pairsOf(keep));
   if(!fit)return{err:'these grid labels are not on the project grid yet — match one floor by hand first'};
   for(let pass=0;pass<3;pass++){
     const pairs=pairsOf(keep);
     if(pairs.length<4)break;
-    fit=fitAlignment(pairs);
+    fit=fitFn(pairs);
     if(!fit)break;
     const lim=Math.max(3*(fit.rmsFt||0),0.5);
     const good=[],bad=[];
@@ -9136,8 +9250,30 @@ function autoMatchFit(pts,mkPairs){
     if(!bad.length||good.length<4)break;
     keep=good;
   }
-  fit=fitAlignment(pairsOf(keep));
-  return fit?{fit,keep,dropped:pts.length-keep.length}:{err:'the bubbles on this sheet do not fit the project grid'};
+  fit=fitFn(pairsOf(keep));
+  // which bubbles were left out, and how far off they read — a label every
+  // one of whose crossings was dropped is a bubble that is not this plan's
+  let off=[];
+  if(fit){
+    const kept=new Set(keep);
+    const byAx={x:new Map(),y:new Map()};
+    for(const p of pts){
+      const b=pixelToBuilding(p.px,p.py,fit.transform);
+      const gx=gridPos('x',p.gx),gy=gridPos('y',p.gy);
+      for(const [ax,lab,g,v] of [['x',p.gx,gx,b.bx],['y',p.gy,gy,b.by]]){
+        if(g==null)continue;
+        const e=byAx[ax].get(lab)||{label:lab,axis:ax,kept:0,d:[]};
+        if(kept.has(p))e.kept++;else e.d.push(v-g);
+        byAx[ax].set(lab,e);
+      }
+    }
+    for(const ax of ['x','y'])for(const e of byAx[ax].values()){
+      if(e.kept||!e.d.length)continue;
+      const d=e.d.sort((a,b)=>a-b)[e.d.length>>1];
+      if(Math.abs(d)>0.25)off.push({label:e.label,axis:ax,ft:Math.round(d*10)/10});
+    }
+  }
+  return fit?{fit,keep,dropped:pts.length-keep.length,off}:{err:'the bubbles on this sheet do not fit the project grid'};
 }
 // THE SCALE THAT DEFINES THE GRID. The plan's own scale note is the
 // authority; the dimension chain between the grid bubbles checks it. The
@@ -9175,13 +9311,15 @@ async function autoMatchLevel(levelIdx,wantPage){
   for(let i=0;i<80&&geomStatus(page)==='loading';i++)await new Promise(r=>setTimeout(r,100));
   const items=await pageTextCached(page);
   if(!state.align.active||state.align.levelIdx!==levelIdx)return;   // user moved on
-  state.align.sheetScale=parseSheetScale(items)||state.align.sheetScale;
+  noteSheetScale(page,items);
+  state.align.sheetScale=lockedFtPerInch(page)||parseSheetScale(items)||state.align.sheetScale;
   const prop=await autoMatchPointsMain(items,page);
   if(prop.err){toast(prop.err+' — click the crossings instead.',5200);updateAlignStatus();return}
   // cold start: no project grid yet, so the spacing has to come from the
   // sheet. The dimension chain beats the scale note when it is readable.
   let scaleNote=null;
-  if(gridIsEmpty()){
+  if(lockedFtPerInch(page)){state.align.sheetScale=lockedFtPerInch(page);scaleNote=`the job scale ${planScaleText(state.align.sheetScale)}`}
+  else if(gridIsEmpty()){
     const pick=pickPlanScale(items,prop);
     if(pick){
       state.align.sheetScale=pick.ftPerInch;
@@ -9192,7 +9330,7 @@ async function autoMatchLevel(levelIdx,wantPage){
     }
   }
   state.align.points=prop.pts;
-  const res=autoMatchFit(prop.pts);
+  const res=autoMatchFit(prop.pts,null,fitForPage(page));
   if(res.err){state.align.points=[];toast(res.err,5200);updateAlignStatus();return}
   state.align.points=res.keep;
   state.align.auto={nx:prop.nx,ny:prop.ny,dropped:res.dropped,fit:res.fit};
@@ -9329,6 +9467,8 @@ function setMatchRead(v){
 }
 async function proposeMatchAll(){
   if(!state.pdf.pages){toast('Load the drawings first.',2600);return null}
+  // BLD-19: the job scale first — read, held provisionally until confirmed
+  try{await ensureJobPlanScale()}catch(e){}
   const snapshot=JSON.parse(JSON.stringify(state.project.grid||{x:[],y:[]}));
   const rows=matchTargets();
   quietGeom=true;
@@ -9338,20 +9478,37 @@ async function proposeMatchAll(){
     for(let i=0;i<80&&geomStatus(row.page)==='loading';i++)await new Promise(r=>setTimeout(r,100));
     const items=await pageTextCached(row.page);
     const prop=await autoMatchPointsMain(items,row.page);
-    row.note=planScale(items)||null;
+    row.note=noteSheetScale(row.page,items)||null;
     if(prop.err){row.err=prop.err;row.coldStart=gridIsEmpty();return}
     let ftPerPx=null;
+    const lock=lockedFtPerPx(row.page);
+    // BLD-19: a sheet whose own plan note argues with the job scale asks once
+    {const j=jobPlanScale();
+     if(j&&row.note&&!looksLikeDetailScale(row.note)&&!sheetScaleOverride(row.page)
+       &&Math.abs(row.note-j.ftPerInch)/j.ftPerInch>0.03)row.scaleAsk=row.note;}
     if(gridIsEmpty()){
-      // nothing to fit to: this sheet has to state its own scale
-      const pick=pickPlanScale(items,prop);
-      if(pick){ftPerPx=pick.ftPerInch/PX_PER_INCH;row.scaleFrom=pick.from;row.scaleCheck=pick.check||null}
-      else{row.err='no project grid yet, and no scale this sheet states — match one floor by hand first';row.coldStart=true;return}
+      if(lock){ftPerPx=lock;const j=jobPlanScale();row.scaleFrom=sheetScaleOverride(row.page)?'this sheet\'s own scale':`the job scale${j&&j.how?' — '+j.how:(j&&j.from==='matches'?' — the confirmed matches':'')}`}
+      else{
+        // nothing to fit to: this sheet has to state its own scale
+        const pick=pickPlanScale(items,prop);
+        if(pick){ftPerPx=pick.ftPerInch/PX_PER_INCH;row.scaleFrom=pick.from;row.scaleCheck=pick.check||null}
+        else{row.err='no project grid yet, and no scale this sheet states — match one floor by hand first';row.coldStart=true;return}
+      }
       row.definesGrid=true;
       row.sheetScaleFtPerInch=ftPerPx*PX_PER_INCH;
     }else row.sheetScaleFtPerInch=row.note;
-    const res=autoMatchFit(prop.pts,pts=>matchPairsFrom(pts,ftPerPx));
+    let res=autoMatchFit(prop.pts,pts=>matchPairsFrom(pts,ftPerPx),fitForPage(row.page));
+    // the sheet's own note against the job scale: keep what the bubbles agree with
+    if(row.scaleAsk&&!gridIsEmpty()){
+      const mk=pts=>matchPairsFrom(pts,ftPerPx);
+      const atJob=autoMatchFit(prop.pts,mk,pairs=>fitLockedScale(pairs,jobPlanScale().ftPerInch/PX_PER_INCH));
+      const atNote=autoMatchFit(prop.pts,mk,pairs=>fitLockedScale(pairs,row.scaleAsk/PX_PER_INCH));
+      const score=r=>r&&r.fit?(r.keep.length-(r.fit.rmsFt||0)*4):-1e9;
+      if(atNote.fit&&score(atNote)>score(atJob)+0.5){res=atNote;pageScaleChoice[row.page]=row.scaleAsk}
+      else{res=atJob.fit?atJob:res;delete pageScaleChoice[row.page];row.scaleAsk=null;row.sheetScaleFtPerInch=jobPlanScale().ftPerInch}      // the note was misread; the job scale fits
+    }
     if(res.err){row.err=res.err;row.coldStart=gridIsEmpty();return}
-    row.fit=res.fit;row.keep=res.keep;row.dropped=res.dropped;row.nx=prop.nx;row.ny=prop.ny;
+    row.fit=res.fit;row.keep=res.keep;row.dropped=res.dropped;row.nx=prop.nx;row.ny=prop.ny;row.off=res.off||[];row.nSnap=prop.nSnap||0;
     row.drift=row.oldT?fitDriftFt(row.oldT,res.fit.transform,res.keep):null;
     // carry the grid forward so the next sheet has something to fit to
     addGridLabelsFrom(res.keep,res.fit.transform);
@@ -9721,6 +9878,11 @@ async function proposeLevelsFromDrawings(){
   for(let n=1;n<=state.pdf.pages;n++){
     let items;
     try{items=await pageTextCached(n)}catch(e){continue}
+    // BLD-18: a load-map sheet names every floor it maps ("LEVEL B7", "LEVEL
+    // 22-28") but is not a plan of any of them. On Horizon House the three
+    // load-map sheets became levels B7, 22-28 and 33 and B7 was bound to its
+    // load map. The sheet reader already knows what these sheets are.
+    {const k=classifySheet(n,items).kind;if(k==='loadmap'||k==='schedule')continue}
     const title=sheetPlanTitle(items);
     const named=levelNameFromTitle(title);
     if(!named)continue;
@@ -11041,7 +11203,7 @@ function alignPairs(pts){
             .map(p=>({px:p.px,py:p.py,bx:gridPos('x',p.gx),by:gridPos('y',p.gy),gx:p.gx,gy:p.gy}));
 }
 function sheetScaleFtPerPx(){
-  const fpi=state.align.sheetScale||state.project.assumedScale||null;
+  const fpi=(state.align&&state.align.scaleTyped?state.align.sheetScale:null)||lockedFtPerInch(state.pdf.current)||state.align.sheetScale||state.project.assumedScale||null;
   return fpi?fpi/PX_PER_INCH:null;
 }
 
@@ -11051,7 +11213,10 @@ async function showAlignPopup(clientX,clientY){
   const items=state.pdf.doc?await pageTextCached(state.pdf.current):[];
   // the scale that applies is the note nearest the plan being clicked
   if(state.align.points.length===0){
-    const s=parseSheetScale(items,p.px,p.py);
+    const lockS=lockedFtPerInch(state.pdf.current);
+    // BLD-19: the job scale holds — the nearest note below the click was a
+    // 1/4" detail on Horizon House B6, and the grid came out 2x
+    const s=lockS||parseSheetScale(items,p.px,p.py);
     if(s)state.align.sheetScale=s;
     const notes=state.align.scaleNotes||[];
     const distinct=[...new Set(notes.map(n=>n.ftPerInch))];
@@ -11063,7 +11228,7 @@ async function showAlignPopup(clientX,clientY){
       // the scale matters on the first floor (it defines the grid) and
       // wherever one known crossing is doing the placing — show the row
       // whenever it is in doubt or missing
-      row.style.display=((gridIsEmpty()&&distinct.length!==1)||!sheetScaleFtPerPx())?'':'none';
+      row.style.display=lockS?'none':(((gridIsEmpty()&&distinct.length!==1)||!sheetScaleFtPerPx())?'':'none');
       inp.value=s?(+s.toFixed(3)):'';
       const lbl=document.getElementById('alignScaleLbl');
       if(lbl)lbl.textContent=distinct.length>1?`${distinct.length} scales on this sheet — nearest is:`:(s?'Sheet scale: 1" =':'No scale note — enter 1" =');
@@ -11159,13 +11324,27 @@ async function harvestGridFromSheet(page,transform){
     if(!seen.has(k))seen.set(k,{axis,label:lab,vals:[]});
     seen.get(k).vals.push(pos);
   };
-  for(const b of bands.cols)for(const it of b.items){
+  // BLD-20: short bands are a key plan's (or a stray run of figures) — the
+  // B1 key plan sits inside the plan's own extents on Horizon House and gave
+  // the grid a "1.1" at 243 ft
+  const centreAt=new Map();
+  try{for(const c of bubbleCentres(items,page))centreAt.set(Math.round(c.tx)+','+Math.round(c.ty),c)}catch(e){}
+  const longOnly=list=>{const sz=list.map(b=>new Set(b.items.map(i=>i.s.trim())).size),L=Math.max(0,...sz);return list.filter((b,i)=>!(L>=9&&sz[i]<L/3))};
+  for(const b of longOnly(bands.cols))for(const it of b.items){
     if(!inMain(it))continue;
-    const bp=pixelToBuilding(it.x+6,it.y,transform);if(bp)take('x',it,bp.bx);
+    // BLD-21: the drafted line under the bubble, where one can be found —
+    // along an elbowed leader first
+    const bc=centreAt.get(Math.round(it.x)+','+Math.round(it.y));
+    const kx=bc?followBubbleLeader(page,bc.x,bc.y,'x'):null;
+    const sx=kx!=null?{snapped:true,pos:kx}:(bc?{snapped:true,pos:bc.x}:{snapped:false});
+    const bp=pixelToBuilding(sx.snapped?sx.pos:it.x+6,it.y,transform);if(bp)take('x',it,bp.bx);
   }
-  for(const b of bands.rows)for(const it of b.items){
+  for(const b of longOnly(bands.rows))for(const it of b.items){
     if(!inMain(it))continue;
-    const bp=pixelToBuilding(it.x,it.y-6,transform);if(bp)take('y',it,bp.by);
+    const bc=centreAt.get(Math.round(it.x)+','+Math.round(it.y));
+    const ky=bc?followBubbleLeader(page,bc.x,bc.y,'y'):null;
+    const sy=ky!=null?{snapped:true,pos:ky}:(bc?{snapped:true,pos:bc.y}:{snapped:false});
+    const bp=pixelToBuilding(it.x,sy.snapped?sy.pos:it.y-6,transform);if(bp)take('y',it,bp.by);
   }
   if(!state.project.grid)state.project.grid={x:[],y:[]};
   const g=state.project.grid;
@@ -11420,6 +11599,255 @@ function fitAffineLS(pairs){
 // point is enough for the translation. Every other crossing clicked then
 // JOINS the grid at the position this fit gives it (`finishAlignment`
 // already records the labels), which is how the new bays get onto the grid.
+// ════════════════════════════════════════════════════════════
+//  THE JOB'S PLAN SCALE IS THE AUTHORITY  (BLD-19, Adolfo, Sep 23 2026)
+//
+//  "Would it make sense for the user to verify scale of the plan view and
+//  then the calculator uses that as its 'gospel' for the gridline matching?
+//  … If you can read the gridlines and bubbles, you should be able to match
+//  exactly."
+//
+//  On Horizon House the fits were free to choose their own scale, so a key
+//  plan's bubbles pulled B6 to 1" = 7.55' and B7 fitted four crossings at the
+//  same wrong scale; the hand match that followed read a 1/4" detail note
+//  and the grid came out 2x. With the scale fixed, a match only has to find
+//  where the sheet sits (and a rotation, which a square plan snaps to 0):
+//  a bubble that does not belong to the plan cannot bend the fit, it just
+//  shows up as the one that is off.
+//
+//  The scale is read once for the job — the plan note on every plan sheet,
+//  checked by the dimension chain — confirmed once, and used by every match,
+//  automatic or by hand. A sheet whose own plan note says otherwise asks once.
+// ════════════════════════════════════════════════════════════
+function jobPlanScale(){const s=state.project.planScale;return s&&s.ftPerInch>0?s:null}
+function sheetScaleOverride(page){const o=state.project.sheetScales;return(o&&page!=null&&o[page]>0)?o[page]:null}
+// the plan note each sheet states, as read (a set can mix plan scales: Kalae's
+// podium is 3/32" and its tower plan 1/8")
+const sheetNoteCache={};
+function noteSheetScale(page,items){
+  if(page==null)return null;
+  if(!(page in sheetNoteCache)){let n=null;try{n=planScale(items)}catch(e){}sheetNoteCache[page]=n||null}
+  return sheetNoteCache[page];
+}
+function lockedFtPerInch(page){
+  // a load map is drawn at its own scale (Horizon House: six maps a sheet), and
+  // so is a load-map plan being matched by hand
+  if(state.align&&state.align.active&&state.align.planTarget)return null;
+  if(page!=null&&typeof sheetRead!=='undefined'&&sheetRead&&sheetRead.get(page)&&sheetRead.get(page).kind==='loadmap')return null;
+  const o=sheetScaleOverride(page);if(o)return o;
+  const j=jobPlanScale();if(!j)return null;
+  // a sheet whose own plan note is a different PLAN scale may be drawn at
+  // it (Kalae's tower plan) — or the note was misread (Kalae sheet 5 reads a
+  // 1/8" note beside its 3/32" plan). The match tries both and keeps the one
+  // the bubbles agree with; that choice is what this sheet is locked to.
+  if(page!=null&&pageScaleChoice[page])return pageScaleChoice[page];
+  return j.ftPerInch;
+}
+const pageScaleChoice={};
+function lockedFtPerPx(page){const f=lockedFtPerInch(page);return f?f/PX_PER_INCH:null}
+// architectural and engineering scales, as 1" = N feet
+const PLAN_SCALES=[['1/32" = 1\'-0"',32],['3/64" = 1\'-0"',64/3],['1/16" = 1\'-0"',16],['3/32" = 1\'-0"',32/3],['1/8" = 1\'-0"',8],['3/16" = 1\'-0"',16/3],['1/4" = 1\'-0"',4],
+  ['1" = 10\'',10],['1" = 20\'',20],['1" = 30\'',30],['1" = 40\'',40],['1" = 50\'',50]];
+function planScaleText(fpi){
+  const hit=PLAN_SCALES.find(([,v])=>Math.abs(v-fpi)/v<0.005);
+  return hit?hit[0]:`1" = ${(+fpi).toFixed(fpi%1?2:0)}'`;
+}
+// Read every bound plan sheet's plan note, and the dimension chain as a check.
+async function readJobPlanScale(){
+  const pages=[...new Set(matchTargets().filter(r=>r.page!=null).map(r=>r.page))];
+  const votes=new Map(),per=[];
+  for(const pg of pages){
+    let items;try{items=await pageTextCached(pg)}catch(e){continue}
+    let prop=null;try{await ensurePageGeometry(pg);prop=await autoMatchPointsMain(items,pg)}catch(e){}
+    const pick=pickPlanScale(items,prop&&!prop.err?prop:null);
+    if(!pick)continue;
+    const note=planScaleNote(items);
+    const k=Math.round(pick.ftPerInch*1000)/1000;
+    per.push({page:pg,ftPerInch:pick.ftPerInch,chain:pick.chain||null,text:note?note.text:planScaleText(pick.ftPerInch),from:pick.from});
+    votes.set(k,(votes.get(k)||0)+1);
+  }
+  if(!per.length)return null;
+  const best=[...votes.entries()].sort((a,b)=>b[1]-a[1])[0];
+  const fpi=best[0];
+  const agree=per.filter(p=>Math.abs(p.ftPerInch-fpi)/fpi<0.01);
+  const chained=per.filter(p=>p.chain);
+  const chainOk=chained.filter(p=>Math.abs(p.chain-fpi)/fpi<=0.03).length;
+  return{ftPerInch:fpi,text:planScaleText(fpi),votes:agree.length,of:per.length,chainOk,chainN:chained.length,how:agree[0]&&agree[0].from,
+    pages:agree.map(p=>p.page),others:per.filter(p=>Math.abs(p.ftPerInch-fpi)/fpi>=0.01).map(p=>({page:p.page,ftPerInch:p.ftPerInch}))};
+}
+async function ensureJobPlanScale(){
+  if(jobPlanScale())return jobPlanScale();
+  const r=await readJobPlanScale();
+  if(!r)return null;
+  state.project.planScale={ftPerInch:r.ftPerInch,text:r.text,confirmed:false,votes:r.votes,of:r.of,chainOk:r.chainOk,chainN:r.chainN,how:r.how||null};
+  persist();
+  return state.project.planScale;
+}
+function setJobPlanScale(fpi,confirmed){
+  if(!(fpi>0))return;
+  const was=jobPlanScale();
+  history.record('Plan scale');
+  const same=was&&Math.abs(was.ftPerInch-fpi)/fpi<0.001;
+  state.project.planScale=same?{...was,confirmed:!!confirmed}:{ftPerInch:fpi,text:planScaleText(fpi),confirmed:!!confirmed,typed:true};
+  if(!same){matchProposal=null;matchAutoKey=null;state.ui.matchPreview=null}
+  persist();renderMatchPanel();refreshFlow();
+}
+// sheets matched at another scale than the one now locked, or whose grid
+// labels disagree with the project grid by more than a foot on two or more
+// lines: the grid cannot be trusted as it stands (Horizon House: columns 1-7
+// sat 41.9 ft from where B1-B5 put them)
+function gridNeedsRebuild(){
+  const lk=jobPlanScale();
+  const rows=matchSheetRows().filter(r=>r.matched);
+  if(!rows.length)return null;
+  const offScale=lk?rows.filter(r=>{const f=lockedFtPerInch(r.page);return f&&r.alignment.ftPerInch&&Math.abs(r.alignment.ftPerInch-f)/f>0.02}):[];
+  const drifting=rows.filter(r=>r.alignment.gridDrift&&r.alignment.gridDrift.n>=2&&Math.abs(r.alignment.gridDrift.worst.ft)>1);
+  if(!offScale.length&&!drifting.length)return null;
+  return{offScale,drifting,worst:drifting.reduce((m,r)=>Math.max(m,Math.abs(r.alignment.gridDrift.worst.ft)),0)};
+}
+// Start the grid again: every sheet's match and the project grid go, and
+// every sheet is read again at the locked scale. The areas stay put — they are
+// held in sheet pixels.
+async function rebuildGridAndRematch(){
+  history.record('Rebuild grid');
+  for(const lv of state.levels){lv.alignment=null;for(const sh of (lv.sheets||[]))if(sh)sh.alignment=null}
+  state.project.grid={x:[],y:[]};
+  gridScaleCheck=null;matchProposal=null;matchAutoKey=null;state.ui.matchPreview=null;state.ui.gridReview=null;
+  state.results=null;
+  persist();renderMatchPanel();refreshFlow();renderCanvas();
+  return await proposeMatchAll();
+}
+// A fit with the scale held: rotation and translation only, rotation snapped to
+// square when it is within a quarter of a degree (plans are drawn square).
+const SQUARE_TOL_DEG=0.25;
+const LOCK_STRETCH=0.005;
+function fitLockedScale(pairs,ftPerPx){
+  const n=pairs?pairs.length:0;
+  if(!n||!(ftPerPx>0))return null;
+  if(n===1){const f=fitFromAnchor(pairs[0],ftPerPx);return f?{...f,model:'locked'}:null}
+  const sim=fitSimilarity(pairs,false);
+  let th=sim?Math.atan2(sim.transform[2],sim.transform[0]):0;
+  if(Math.abs(th*180/Math.PI)<SQUARE_TOL_DEG)th=0;
+  // a plotted sheet is rarely exactly its nominal scale (Kalae's test set
+  // plots at 1" = 9.999'): the fit may take up to half a percent of stretch —
+  // enough for a plotter, never enough for a key plan or a wrong note
+  let sc=ftPerPx;
+  if(sim&&n>=3&&Math.abs(sim.scale/ftPerPx-1)<=LOCK_STRETCH)sc=sim.scale;
+  const co=Math.cos(th)*sc,si=Math.sin(th)*sc;
+  const T=[co,-si,si,co,0,0];
+  let tx=0,ty=0;
+  for(const p of pairs){tx+=p.bx-(T[0]*p.px+T[1]*p.py);ty+=p.by-(T[2]*p.px+T[3]*p.py)}
+  T[4]=tx/n;T[5]=ty/n;
+  let sq=0,worst=0;
+  for(const p of pairs){
+    const d=Math.hypot(T[0]*p.px+T[1]*p.py+T[4]-p.bx,T[2]*p.px+T[3]*p.py+T[5]-p.by);
+    sq+=d*d;worst=Math.max(worst,d);
+  }
+  return{transform:T,mirror:false,scale:sc,ftPerInch:sc*PX_PER_INCH,rotationDeg:th*180/Math.PI,
+    rmsFt:Math.sqrt(sq/n),worstFt:worst,points:n,model:'locked',lockFtPerInch:ftPerPx*PX_PER_INCH};
+}
+// the fit every floor match uses: locked where the job has a scale
+function fitForPage(page){
+  const s=lockedFtPerPx(page);
+  return s?(pairs=>fitLockedScale(pairs,s)):fitAlignment;
+}
+// ── THE GRIDLINE ITSELF, NOT THE BUBBLE'S TEXT ──
+// A bubble tells us WHICH line; the line in the vector geometry says exactly
+// where it is. A gridline is dash-dot: many short collinear segments. Walls
+// run long and solid beside it, so the pick is by dash count, not length.
+const gridLineCache={};
+function gridLineIndex(page){
+  if(gridLineCache[page])return gridLineCache[page];
+  const st=strokeCache[page];
+  if(!st)return null;
+  const v=new Map(),h=new Map();
+  // per bin: how many dashes, and how far along the sheet they run — a
+  // gridline runs the length of the plan, a leader or a glyph does not
+  const add=(m,k,a,b)=>{const e=m.get(k);if(e){e.n++;e.lo=Math.min(e.lo,a,b);e.hi=Math.max(e.hi,a,b)}else m.set(k,{n:1,lo:Math.min(a,b),hi:Math.max(a,b)})};
+  for(const arr of [st.thin,st.heavy]){
+    for(let i=0;i+3<arr.length;i+=4){
+      const x1=arr[i],y1=arr[i+1],x2=arr[i+2],y2=arr[i+3];
+      const dx=Math.abs(x2-x1),dy=Math.abs(y2-y1);
+      if(dx<=0.3&&dy>=3)add(v,Math.round((x1+x2)*2)/4,y1,y2);
+      else if(dy<=0.3&&dx>=3)add(h,Math.round((y1+y2)*2)/4,x1,x2);
+    }
+  }
+  return(gridLineCache[page]={v,h});
+}
+// Walk the leader out of a grid bubble: the solid segment leaving the circle,
+// then whatever joins its far end, up to a few elbows. Returns where it ends
+// along the axis coordinate (x for a column bubble), or null.
+const leaderSegCache={};
+function leaderSegs(page){
+  if(leaderSegCache[page])return leaderSegCache[page];
+  const st=strokeCache[page];if(!st)return null;
+  const segs=[],hash=new Map(),C=8;
+  const key=(x,y)=>Math.floor(x/C)+','+Math.floor(y/C);
+  for(const arr of [st.thin,st.heavy])for(let i=0;i+3<arr.length;i+=4){
+    const s={x1:arr[i],y1:arr[i+1],x2:arr[i+2],y2:arr[i+3]};
+    if(Math.hypot(s.x2-s.x1,s.y2-s.y1)<2)continue;
+    const k=segs.push(s)-1;
+    for(const [x,y] of [[s.x1,s.y1],[s.x2,s.y2]]){const kk=key(x,y);if(!hash.has(kk))hash.set(kk,[]);hash.get(kk).push(k)}
+  }
+  return(leaderSegCache[page]={segs,hash,key,C});
+}
+function followBubbleLeader(page,cx,cy,axis){
+  const L=leaderSegs(page);if(!L)return null;
+  const near=(x,y,r)=>{const out=[];const x0=Math.floor((x-r)/L.C),x1=Math.floor((x+r)/L.C),y0=Math.floor((y-r)/L.C),y1=Math.floor((y+r)/L.C);
+    for(let i=x0;i<=x1;i++)for(let j=y0;j<=y1;j++){const a=L.hash.get(i+','+j);if(a)for(const k of a)out.push(k)}return[...new Set(out)]};
+  // the first leg: a segment with one end on the circle (15-40 px out) and the
+  // other end further away, pointing along the line's direction
+  let best=null;
+  for(const k of near(cx,cy,44)){
+    const s=L.segs[k];
+    for(const [ax,ay,bx,by] of [[s.x1,s.y1,s.x2,s.y2],[s.x2,s.y2,s.x1,s.y1]]){
+      const da=Math.hypot(ax-cx,ay-cy),db=Math.hypot(bx-cx,by-cy);
+      if(da<12||da>40||db<=da+4)continue;
+      const along=axis==='x'?Math.abs(by-ay):Math.abs(bx-ax),len=Math.hypot(bx-ax,by-ay);
+      if(along<len*0.9)continue;                     // leaves the circle square to the gridline
+      if(!best||da<best.da)best={k,ex:bx,ey:by,da};
+    }
+  }
+  if(!best)return null;
+  // then exactly an elbow: one diagonal leg (15-75 degrees) whose far end is
+  // where a dash-dot gridline starts. Anything else — a dimension line met at
+  // its tick, a straight run — is not an elbowed bubble.
+  const px=best.ex,py=best.ey;
+  let diag=null;
+  for(const k of near(px,py,1.5)){
+    if(k===best.k)continue;const s=L.segs[k];
+    let fx,fy;
+    if(Math.hypot(s.x1-px,s.y1-py)<=1.5){fx=s.x2;fy=s.y2}else if(Math.hypot(s.x2-px,s.y2-py)<=1.5){fx=s.x1;fy=s.y1}else continue;
+    if(Math.hypot(fx-cx,fy-cy)<=Math.hypot(px-cx,py-cy)+2)continue;
+    const ang=Math.atan2(Math.abs(fy-py),Math.abs(fx-px))*180/Math.PI;   // 90 = vertical
+    if(ang<15||ang>75)continue;
+    if(!diag||Math.hypot(fx-px,fy-py)>diag.len)diag={fx,fy,len:Math.hypot(fx-px,fy-py)};
+  }
+  if(!diag)return null;
+  const end=axis==='x'?diag.fx:diag.fy,ctr=axis==='x'?cx:cy;
+  // a real elbow moves the bubble a good part of its own width, and leaves
+  // no gridline running through the circle itself
+  if(Math.abs(end-ctr)<8)return null;
+  if(snapGridLine(page,axis,ctr,1.5).snapped)return null;
+  const r=snapGridLine(page,axis,end,3);
+  return r.snapped?r.pos:null;
+}
+function snapGridLine(page,axis,pos,R){
+  const idx=gridLineIndex(page);
+  if(!idx)return{pos,snapped:false};
+  const m=axis==='x'?idx.v:idx.h;R=R||10;
+  const near=[];
+  for(const [k,e] of m)if(Math.abs(k-pos)<=R)near.push({k,n:e.n,lo:e.lo,hi:e.hi});
+  if(!near.length)return{pos,snapped:false};
+  near.sort((a,b)=>a.k-b.k);
+  // group keys within half a pixel: one drafted line
+  const groups=[];
+  for(const e of near){const g=groups[groups.length-1];if(g&&e.k-g.last<=0.5){g.n+=e.n;g.sum+=e.k*e.n;g.last=e.k;g.lo=Math.min(g.lo,e.lo);g.hi=Math.max(g.hi,e.hi)}else groups.push({n:e.n,sum:e.k*e.n,last:e.k,lo:e.lo,hi:e.hi})}
+  const lines=groups.filter(g=>g.n>=8&&g.hi-g.lo>=400).map(g=>({pos:g.sum/g.n,n:g.n}));
+  if(!lines.length)return{pos,snapped:false};
+  lines.sort((a,b)=>b.n-a.n||Math.abs(a.pos-pos)-Math.abs(b.pos-pos));
+  return{pos:lines[0].pos,snapped:true,moved:lines[0].pos-pos};
+}
 function fitFromAnchor(pair,ftPerPx){
   if(!pair||!(ftPerPx>0))return null;
   const T=[ftPerPx,0,0,ftPerPx,0,0];
@@ -11432,8 +11860,9 @@ function fitFromAnchor(pair,ftPerPx){
 // any, otherwise one known crossing and the sheet's scale.
 function alignFitNow(pts){
   const pairs=alignPairs(pts||[]);
+  const lockS=(state.align&&state.align.scaleTyped)?null:lockedFtPerPx(state.pdf.current);
   if(pairs.length>=2){
-    const fit=fitAlignment(pairs);
+    const fit=lockS?fitLockedScale(pairs,lockS):fitAlignment(pairs);
     if(fit)return{fit,mode:'points',pairs};
   }
   if(pairs.length===1){
@@ -15487,7 +15916,13 @@ function stepStatus(id){
       if(!rows.length)return{done:false,text:'No sheets to match yet'};
       if(matched)ensureGridScaleCheck();
       if(gridScaleCheck&&gridScaleCheck.ready&&gridScaleCheck.k)return{done:false,text:`the grid is ${gridScaleCheck.k.toFixed(gridScaleCheck.k%1?2:0)}× off the plans' scale — rescale it`};
-      if(conf>=rows.length)return{done:true,text:`${conf} sheet${conf>1?'s':''} matched and confirmed`};
+      if(gridNeedsRebuild())return{done:false,text:'the project grid does not hold together — rebuild it'};
+      if(conf>=rows.length){
+        const j=jobPlanScale();
+        if(!j)return{done:false,text:'set the plan scale'};
+        if(!j.confirmed)return{done:false,text:`confirm the plan scale (${j.text||planScaleText(j.ftPerInch)})`};
+        return{done:true,text:`${conf} sheet${conf>1?'s':''} matched and confirmed`};
+      }
       return{done:false,text:`${matched} of ${rows.length} matched · ${conf} confirmed`};
     }
     case 'areas':{
@@ -15795,9 +16230,12 @@ function renderDrawingsPanel(){
 function matchProposalHtml(){
   const P=matchProposal;
   if(!P)return '';
+  const askedPage=new Set();
   const rows=P.rows.map((r,i)=>{
     const f=r.fit;
     const sel=state.ui.matchPreview&&state.ui.matchPreview.idx===i;
+    // one sheet serving many floors asks about its scale once, on its first row
+    const ask=r.scaleAsk&&!askedPage.has(r.page);if(ask)askedPage.add(r.page);
     // the residual is in the verdict line under this, so it is not repeated here
     const stat=f?`${r.keep.length} crossings of ${r.nx}×${r.ny} bubbles · 1" = ${f.ftPerInch.toFixed(2)}'`
       +(Math.abs(f.rotationDeg)>=0.01?` · ${f.rotationDeg.toFixed(2)}°`:'')
@@ -15810,6 +16248,10 @@ function matchProposalHtml(){
           ${r.definesGrid?`<span class="mp-flag">defines the project grid${r.scaleFrom?` · scale from ${esc(r.scaleFrom)}`:''}</span>`:''}${r.scaleCheck?`<span class="mp-flag lm-warn">${esc(r.scaleCheck)}</span>`:''}</div>
         <div class="mp-stat">${f?esc(stat):`<span class="lm-warn">${esc(r.err||'not read')}</span>`}</div>
         ${f?`<div class="mp-why">${esc(r.why||'')}</div>`:''}
+        ${f&&r.off&&r.off.length?`<div class="mp-why lm-warn">${r.off.slice(0,4).map(o=>`bubble ${esc(o.label)} reads ${Math.abs(o.ft)<100?feetToStr(Math.abs(o.ft)):Math.round(Math.abs(o.ft))+' ft'} off the grid`).join(' · ')}${r.off.length>4?` · ${r.off.length-4} more`:''} — not used (a key plan, or a bubble moved off its line)</div>`:''}
+        ${ask?`<div class="mp-why lm-warn">This sheet's plan note reads ${esc(planScaleText(r.scaleAsk))}, the job scale is ${esc(planScaleText(jobPlanScale()?jobPlanScale().ftPerInch:r.scaleAsk))} — matched at its own note for now.
+          <button class="btn btn-sm" data-mscale="${r.page}" data-mscalev="${r.scaleAsk}">Use ${esc(planScaleText(r.scaleAsk))} for this sheet</button>
+          <button class="btn btn-sm" data-mscale="${r.page}" data-mscalev="${jobPlanScale()?jobPlanScale().ftPerInch:''}">Keep the job scale</button></div>`:''}
       </div>
       <div class="mp-acts">
         ${f?`<button class="btn btn-sm" data-mshow="${i}" title="Draw this fit's grid over its sheet — if the dashed lines sit on the printed grid, the fit is right">${sel?'Showing':'Show'}</button>`:''}
@@ -15847,12 +16289,19 @@ function sheetAlignmentFor(li,pg){
   const sh=(lv.sheets||[]).find(x=>x&&x.page===pg);
   return sh?sh.alignment:null;
 }
+// BLD-19: saying a sheet's grid sits on the printed grid says its scale is
+// right too — no separate click for the scale when a match was made at it
+function confirmScaleWith(a){
+  const j=jobPlanScale();
+  if(j&&!j.confirmed&&a&&a.ftPerInch&&Math.abs(a.ftPerInch-j.ftPerInch)/j.ftPerInch<=LOCK_STRETCH*1.2)j.confirmed=true;
+}
 function confirmSheetMatch(li,pg){
   const a=sheetAlignmentFor(li,pg);
   if(!a||!a.transform){toast('This sheet has no match to confirm yet.',2600);return false}
   if(a.confirmed)return true;
   history.record('Confirm match');
   a.confirmed=true;
+  confirmScaleWith(a);
   if(state.ui.gridReview&&state.ui.gridReview.page===pg)state.ui.gridReview=null;
   persist();refreshFlow();renderSidebar();renderCanvas();
   return true;
@@ -15861,7 +16310,7 @@ function confirmAllMatches(){
   const rows=matchSheetRows().filter(r=>r.matched&&!r.confirmed);
   if(!rows.length){toast('Every matched sheet is already confirmed.');return 0}
   history.record('Confirm matches');
-  for(const r of rows)r.alignment.confirmed=true;
+  for(const r of rows){r.alignment.confirmed=true;confirmScaleWith(r.alignment)}
   persist();refreshFlow();renderSidebar();renderCanvas();
   toast(`${rows.length} match${rows.length>1?'es':''} confirmed.`,3200);
   return rows.length;
@@ -15925,6 +16374,7 @@ function rescaleGrid(k){
   };
   for(const lv of state.levels){fix(lv.alignment);for(const sh of (lv.sheets||[]))if(sh)fix(sh.alignment)}
   if(state.project.assumedScale)state.project.assumedScale*=k;
+  {const j=state.project.planScale;if(j&&j.from==='matches'){j.ftPerInch*=k;j.text=planScaleText(j.ftPerInch)}}
   gridScaleCheck=null;
   persist();refreshFlow();renderSidebar();renderCanvas();
   toast(`Grid and ${matchSheetRows().filter(r=>r.matched).length} matches rescaled ×${Math.abs(k-Math.round(k))<0.02?Math.round(k):k.toFixed(2)}. Check a sheet's grid overlay — it should still sit on the printed grid, and the grid spans should now read in real feet.`,7000);
@@ -16059,6 +16509,33 @@ function modelPanelHtml(){
   }
   return html;
 }
+function planScaleCardHtml(){
+  const j=jobPlanScale();
+  if(!state.pdf.doc)return '';
+  if(!j)return `<div class="mp-card v-check ps-card"><div class="mp-main"><div class="mp-name">Plan scale</div><div class="mp-why">Not read yet — it is read from the plan sheets when matching starts. Or set it: ${planScaleSelectHtml(null)}</div></div></div>`;
+  const read=j.of?`read from the plan note on ${j.votes} of ${j.of} plan sheet${j.of>1?'s':''}${j.chainN?`, the dimension chain agrees on ${j.chainOk} of ${j.chainN}`:''}`:(j.typed?'set by hand':(j.from==='matches'?'taken from the matches already confirmed on this job':'read from the plans'));
+  return `<div class="mp-card ${j.confirmed?'v-good':'v-check'} ps-card"><div class="mp-main">
+    <div class="mp-name">Plan scale ${esc(j.text||planScaleText(j.ftPerInch))} <span class="lm-dim">1" = ${(+j.ftPerInch).toFixed(j.ftPerInch%1?2:0)}'</span> ${j.confirmed?'<span class="ps-ok">· confirmed</span>':'<span class="lm-warn">confirm it</span>'}</div>
+    <div class="mp-why">${esc(read)}. Every floor is matched at this scale — the fit only finds where each sheet sits. Change it: ${planScaleSelectHtml(j.ftPerInch)}</div>
+  </div><div class="mp-acts">${j.confirmed?'':`<button class="btn btn-sm btn-go" id="btnScaleConfirm" title="The plans in this set are drawn at this scale">Confirm scale</button>`}</div></div>`;
+}
+function planScaleSelectHtml(cur){
+  const opts=PLAN_SCALES.map(([t,v])=>`<option value="${v}"${cur&&Math.abs(cur-v)/v<0.005?' selected':''}>${esc(t)}</option>`).join('');
+  const known=cur&&PLAN_SCALES.some(([,v])=>Math.abs(cur-v)/v<0.005);
+  return `<select id="selPlanScale"><option value=""${cur?'':' selected'}>—</option>${opts}${cur&&!known?`<option value="${cur}" selected>1" = ${(+cur).toFixed(2)}'</option>`:''}<option value="custom">Other…</option></select>`;
+}
+function rebuildBannerHtml(){
+  if(gridScaleCheck&&gridScaleCheck.ready&&gridScaleCheck.k)return '';     // the rescale is the fix
+  const r=gridNeedsRebuild();
+  if(!r||matchRead)return '';
+  const bits=[];
+  if(r.offScale.length)bits.push(`${r.offScale.length} sheet${r.offScale.length>1?'s were':' was'} matched at another scale than ${esc(planScaleText(jobPlanScale().ftPerInch))}`);
+  if(r.drifting.length)bits.push(`${r.drifting.length} sheet${r.drifting.length>1?'s disagree':' disagrees'} with the project grid by up to ${Math.round(r.worst*10)/10} ft`);
+  return `<div class="mp-card v-poor rb-banner"><div class="mp-main">
+    <div class="mp-name lm-warn">The project grid does not hold together</div>
+    <div class="mp-why">${bits.join('; ')}. The ghost of the floor below cannot line up while the grid holds two positions for the same lines. Rebuilding clears the grid and every sheet's match and reads every sheet again at the job scale; the areas drawn on the sheets stay where they are. Ctrl+Z puts it back.</div>
+  </div><div class="mp-acts"><button class="btn btn-sm btn-primary" id="btnRebuildGrid">Rebuild the grid</button></div></div>`;
+}
 function renderMatchPanel(){
   const el=document.getElementById('matchList');
   if(!el)return;
@@ -16071,7 +16548,7 @@ function renderMatchPanel(){
       const rows=matchSheetRows();const toConf=rows.filter(r=>r.matched&&!r.confirmed).length;
       return `<div class="primary-act">${toConf?`<button class="btn btn-sm btn-wide btn-go" id="btnConfirmMatches" title="Confirm every matched sheet without looking at each grid">Confirm all ${toConf} matched</button>`:''}</div>`})()}
     ${byHandHtml('match',`<button class="btn btn-sm btn-wide" id="btnMatchAll" title="Read the grid bubbles on every assigned sheet again, fit each one, and show the lot for review">${unmatched?'Match every floor from its grid bubbles':'Re-read every sheet’s grid bubbles'}</button><span class="lm-dim">Each row has <b>Match by hand</b> (click two grid crossings), <b>Show grid</b>, <b>Redo</b> and <b>Clear</b>.</span>`,'or match again / by hand')}
-    ${gridScaleBannerHtml()}${matchProposalHtml()}`
+    ${planScaleCardHtml()}${rebuildBannerHtml()}${gridScaleBannerHtml()}${matchProposalHtml()}`
     // A floor drawn across several sheets gets a row per sheet: each is matched
     // on its own bubbles, and the project grid puts them in the same frame.
     +state.levels.map((l,i)=>{
@@ -16124,6 +16601,25 @@ function renderMatchPanel(){
     reviewSheetMatch(+b.dataset.reviewli,pgN);
   }));
   el.querySelectorAll('button[data-mconfirm]').forEach(b=>b.addEventListener('click',ev=>{ev.stopPropagation();confirmSheetMatch(+b.dataset.mconfirm,+b.dataset.mcpage)}));
+  {const c=document.getElementById('btnScaleConfirm');if(c)c.addEventListener('click',()=>{const j=jobPlanScale();if(j)setJobPlanScale(j.ftPerInch,true)});
+   const sel=document.getElementById('selPlanScale');
+   if(sel)sel.addEventListener('change',()=>{
+     let v=sel.value;
+     if(v==='custom'){const t=prompt('1" on the sheet = how many feet?',String(jobPlanScale()?+jobPlanScale().ftPerInch.toFixed(3):''));v=t==null?'':t}
+     const f=parseFloat(v);if(f>0)setJobPlanScale(f,true);else renderMatchPanel();
+   });
+   const rb=document.getElementById('btnRebuildGrid');
+   if(rb)rb.addEventListener('click',async()=>{rb.disabled=true;rb.textContent='Reading every sheet…';try{await rebuildGridAndRematch()}finally{renderMatchPanel()}});
+   el.querySelectorAll('button[data-mscale]').forEach(b=>b.addEventListener('click',ev=>{
+     ev.stopPropagation();
+     const pg=+b.dataset.mscale,v=+b.dataset.mscalev;
+     if(!state.project.sheetScales)state.project.sheetScales={};
+     const jf=jobPlanScale()?jobPlanScale().ftPerInch:null;
+     // keeping the job scale is recorded too, so the sheet does not ask again
+     state.project.sheetScales[pg]=v;
+     if(jf&&Math.abs(v-jf)/jf<0.001)state.project.sheetScales[pg]=jf;
+     persist();matchProposal=null;matchAutoKey=null;proposeMatchAll();
+   }));}
   const ca=document.getElementById('btnConfirmMatches');
   if(ca)ca.addEventListener('click',confirmAllMatches);
   const gr=document.getElementById('btnGridRescale');
@@ -17252,6 +17748,11 @@ function focusCodePicker(){
 //  sheet shows that floor once that sheet is matched.
 // ════════════════════════════════════════════════════════════
 const strokeCache={};
+// LOD-13: a sheet drawn with a lighter pen set (Horizon House load maps: the
+// area outlines are 1.4-1.9 px, gridlines 0.5-1.0) has almost nothing over
+// HEAVY_PX. MID_PX is the next pen down, used by the load-map trace only when
+// the page's heavy lines are that scarce.
+const MID_PX=1.3;
 const HEAVY_PX=3.3;            // image px; boundaries on the test set are 5.5, tag boxes 2.9
 
 function isDarkCol(col){
@@ -17271,7 +17772,7 @@ async function pageStrokes(num){
   const opList=await page.getOperatorList();
   const O=pdfjsLib.OPS;
   let ctm=vp.transform.slice();const stack=[];let lw=1,col='0,0,0';
-  const heavy=[],thin=[],boxes=[];
+  const heavy=[],thin=[],boxes=[],mid=[];
   const fn=opList.fnArray,ar=opList.argsArray;
   for(let k=0;k<fn.length;k++){
     const op=fn[k];
@@ -17288,9 +17789,10 @@ async function pageStrokes(num){
     const w=lw*Math.hypot(ctm[0],ctm[1]);
     const dark=isDarkCol(col);
     const dest=w>=HEAVY_PX?(dark?heavy:null):(dark?thin:null);
+    const isMid=dark&&w<HEAVY_PX&&w>=MID_PX;
     let cx=null,cy=null,sx=0,sy=0,subStart=null,subN=0;
     const line=(x,y)=>{
-      if(cx!=null&&dest){const a=matApply(ctm,cx,cy),b=matApply(ctm,x,y);dest.push(a[0],a[1],b[0],b[1])}
+      if(cx!=null&&dest){const a=matApply(ctm,cx,cy),b=matApply(ctm,x,y);dest.push(a[0],a[1],b[0],b[1]);if(isMid)mid.push(a[0],a[1],b[0],b[1])}
       cx=x;cy=y;subN++;
     };
     for(let i=0,j=0;i<ops.length;i++){
@@ -17323,7 +17825,7 @@ async function pageStrokes(num){
       }
     }
   }
-  const rec={W:vp.width,H:vp.height,heavy:new Float32Array(heavy),thin:new Float32Array(thin),boxes};
+  const rec={W:vp.width,H:vp.height,heavy:new Float32Array(heavy),thin:new Float32Array(thin),mid:new Float32Array(mid),boxes};
   strokeCache[num]=rec;
   return rec;
 }
@@ -17470,7 +17972,7 @@ async function fillRegionAt(num,px,py){
 // Heavy dark strokes rasterized at half resolution.
 const rasterCache={};
 async function heavyRaster(num,useAllDark){
-  const key=num+(useAllDark?'a':'h');
+  const key=num+(useAllDark==='mid'?'m':useAllDark?'a':'h');
   if(rasterCache[key])return rasterCache[key];
   const st=await pageStrokes(num);
   if(!st)return null;
@@ -17485,7 +17987,8 @@ async function heavyRaster(num,useAllDark){
   // drawn fat on purpose: CAD outlines often stop a few pixels short of the
   // line they meet, and a 1-px gap is a leak. ~9 image px closes those.
   draw(st.heavy,3);
-  if(useAllDark)draw(st.thin,1.6);
+  if(useAllDark==='mid')draw(st.mid||new Float32Array(0),3);
+  else if(useAllDark)draw(st.thin,1.6);
   const px=g.getImageData(0,0,W,H).data;
   let ink=new Uint8Array(W*H);
   for(let i=0;i<W*H;i++)ink[i]=px[i*4]<128?1:0;
@@ -18034,9 +18537,9 @@ async function traceRegionAt(num,px,py,opts){
   // a painted region object under the point wins outright
   const fr=await fillRegionAt(num,px,py);
   if(fr&&!(opts&&opts.noFillObjects))return{polygon:fr.polygon,areaPx2:fr.areaPx2,bbox:fr.bbox,mode:'fill'};
-  let r=await heavyRaster(num,false);
+  let r=await heavyRaster(num,opts&&opts.mid?'mid':false);
   let m=r?floodMask(r,px,py):null;
-  let mode='heavy';
+  let mode=opts&&opts.mid?'mid':'heavy';
   if(!m&&!(opts&&opts.heavyOnly)){r=await heavyRaster(num,true);m=r?floodMask(r,px,py):null;mode='all'}
   if(!m)return null;
   let poly=maskOutline(m);
@@ -18160,12 +18663,31 @@ function loadMapTitles(items){
       if(m&&m[1]&&!/^(NOTES?|SCHEDULE|LEGEND|EGEND)/i.test(m[1])&&!/LEGEND|NOTES|SCHEDULE/i.test(s)){out.push({text:s,token:m[1].replace(/[.:]+$/,''),x:ln.x,y:ln.y,w:ln.w,h:ln.h});break}
     }
   }
+  if(out.length)return out;
+  // LOD-11: a sheet of load maps whose views are titled with the floor alone —
+  // Horizon House S-1.01 carries six maps titled "LEVEL B7", "11 LEVEL B5"
+  // (detail number in front), "LEVEL 22-28", "ROOF". Only on a sheet that
+  // calls itself a load map, and only drawing-title text (well above the
+  // sheet's body text), so a legend row reading "ROOF" is never a title.
+  const lines=textLines(items);
+  if(!lines.some(l=>/\bLOAD(?:ING)?\s*MAPS?\b/i.test(l.text)))return out;
+  const hs=lines.map(l=>l.h||0).sort((a,b)=>a-b),hMed=hs[hs.length>>1]||12;
+  for(const ln of lines){
+    if((ln.h||0)<hMed*1.5)continue;
+    const s=ln.text.trim().replace(/\s+/g,' ');
+    let m=s.match(/^(?:\d{1,3}\s+)?(?:LEVEL|LVL)\s*[-.]?\s*([A-Z]{0,2}\d{1,3}(?:\s*[-–]\s*\d{1,3})?|[A-Z]{1,2})$/i);
+    if(!m)m=s.match(/^(?:\d{1,3}\s+)?(ROOF|PENTHOUSE|MEZZANINE|MEZZ)$/i);
+    if(!m)continue;
+    out.push({text:s.replace(/^\d{1,3}\s+/,''),token:m[1].replace(/\s+/g,'').toUpperCase(),x:ln.x,y:ln.y,w:ln.w,h:ln.h});
+  }
   return out;
 }
 // Level in the stack that a title token most likely means.
 function guessLevelIdx(token){
   if(!token)return -1;
   const t=String(token).toUpperCase();
+  // the level's own name first: "B1" is B1, not level 1 (Horizon House has both)
+  {const n0=t.replace(/\s+/g,'');const i=state.levels.findIndex(l=>String(l.name).toUpperCase().replace(/\s+/g,'')===n0);if(i>=0)return i}
   const num=s=>{const m=String(s).toUpperCase().match(/(\d+)\s*$/);return m?parseInt(m[1],10):null};
   const rng=t.match(/^(\d+)\s*[-–]\s*(\d+)$/);
   if(rng){
@@ -18174,9 +18696,13 @@ function guessLevelIdx(token){
     if(i>=0)return i;
   }
   if(/ROOF/.test(t)){const i=state.levels.findIndex(l=>/ROOF/i.test(l.name));if(i>=0)return i}
-  const n=num(t);
+  // a basement letter must agree too: token B7 is never level 7, token 7 is
+  // level 7 before it is B7
+  const pre=s=>{const m=String(s).toUpperCase().replace(/^(LEVEL|LVL|L)\s*/,'').match(/^([A-Z]+)\s*\d/);return m?m[1]:''};
+  if(pre(t)){const i=state.levels.findIndex(l=>!isRange(l)&&pre(l.name)===pre(t)&&num(l.name)===num(t));if(i>=0)return i}
+  const n=pre(t)?null:num(t);
   if(n!=null){
-    let i=state.levels.findIndex(l=>!isRange(l)&&num(l.name)===n);
+    let i=state.levels.findIndex(l=>!isRange(l)&&!pre(l.name)&&num(l.name)===n);
     if(i>=0)return i;
     i=state.levels.findIndex(l=>isRange(l)&&n>=l.rangeFrom&&n<=l.rangeTo);
     if(i>=0)return i;
@@ -18199,7 +18725,21 @@ function fitKeyPlan(plan,items,pageNum){
   // The traced areas may cover only part of the plan, so the column bubbles
   // (a band of numbers just above or below the plan) also tell us how wide
   // the plan really is; the row bubbles are then looked for beside THAT.
-  const colSets=bands.cols.map(band=>{const d=band.k<bb.miny?bb.miny-band.k:band.k>bb.maxy?band.k-bb.maxy:0;
+  // LOD-13: maps drawn side by side share a bubble row (Horizon House S-1.01:
+  // B7 beside B6, B5 beside B4 …). Split a band where it jumps between maps
+  // and keep the run that sits over this plan.
+  const runOver=(its,key,lo,hi)=>{
+    if(its.length<3)return its;
+    const srt=its.slice().sort((p,q)=>p[key]-q[key]);
+    const gaps=[];for(let i=1;i<srt.length;i++)gaps.push(srt[i][key]-srt[i-1][key]);
+    const med=gaps.slice().sort((p,q)=>p-q)[gaps.length>>1]||0;
+    const runs=[[srt[0]]];
+    for(let i=1;i<srt.length;i++){if(gaps[i-1]>Math.max(400,med*6))runs.push([]);runs[runs.length-1].push(srt[i])}
+    if(runs.length===1)return its;
+    const ov=r=>{const a=Math.min(...r.map(i=>i[key])),b2=Math.max(...r.map(i=>i[key]));return Math.max(0,Math.min(hi,b2)-Math.max(lo,a))-Math.max(0,Math.max(lo,a)-Math.min(hi,b2))*0.01};
+    return runs.sort((p,q)=>ov(q)-ov(p)||q.length-p.length)[0];
+  };
+  const colSets=bands.cols.map(band0=>{const band={...band0,items:runOver(band0.items,'x',bb.minx,bb.maxx)};const d=band.k<bb.miny?bb.miny-band.k:band.k>bb.maxy?band.k-bb.maxy:0;
       const xs=band.items.map(it=>it.x+6);
       const spans=Math.min(...xs)<bb.maxx+M&&Math.max(...xs)>bb.minx-M;
       const its=(d<R&&spans)?band.items:[];
@@ -18208,7 +18748,7 @@ function fitKeyPlan(plan,items,pageNum){
   if(!colSets.length)return{ok:false,reason:'grid bubbles not found around the plan',nBubbles:0};
   const cx=colSets[0].items;
   const ex={minx:Math.min(bb.minx,...cx.map(it=>it.x+6))-40,maxx:Math.max(bb.maxx,...cx.map(it=>it.x+6))+40,miny:bb.miny,maxy:bb.maxy};
-  const rowSets=bands.rows.map(band=>{const d=band.k<ex.minx?ex.minx-band.k:band.k>ex.maxx?band.k-ex.maxx:0;
+  const rowSets=bands.rows.map(band0=>{const band={...band0,items:runOver(band0.items,'y',bb.miny,bb.maxy)};const d=band.k<ex.minx?ex.minx-band.k:band.k>ex.maxx?band.k-ex.maxx:0;
       const its=d<R?band.items.filter(it=>it.y-6>ex.miny-M&&it.y-6<ex.maxy+M):[];
       const known=gridIsEmpty()?its.length:its.filter(it=>gridPos('y',it.s.trim())!=null).length;
       return{d,items:its,known}}).filter(o=>o.items.length>=2&&o.known>=2).sort((a,b)=>b.known-a.known||a.d-b.d);
@@ -18258,14 +18798,37 @@ async function autoTracePage(num){
   await extractPageGeometry(num);
   const strokes=await pageStrokes(num);
   if(!strokes)return{error:'This sheet has no vector linework to trace.'};
+  // LOD-13: a light pen set — the area outlines are the next pen down
+  const lightPens=strokes.heavy.length<strokes.thin.length*0.03&&(strokes.mid||[]).length>=1600;
+  const TR={heavyOnly:true,mid:lightPens};
   const titles=loadMapTitles(items);
   const bubbleLabels=new Set(labelsInBubbles(items,num).list);
   // the schedule / legend table itself is full of mark letters: not tags
   const tableZones=parseLoadMapTables(items).map(t=>({x0:t.x-120,x1:t.x+950,y0:t.y-100,y1:Math.max(...t.rows.map(r=>r.y))+40}));
   const inTable=it=>tableZones.some(z=>it.x>=z.x0&&it.x<=z.x1&&it.y>=z.y0&&it.y<=z.y1);
   const tags=[];
-  for(const it of items){
-    if(bubbleLabels.has(it)||inTable(it))continue;    // grid bubble or legend row, not a load tag
+  // LOD-13: a split-schedule tag drawn as two cells, letter | number, comes
+  // through as two runs with the cell divider between them (Horizon House
+  // "C|4" — a 10 px gap, too wide for the glyph-run merge). Pair a live-load
+  // letter with the SDL number right beside it on the same baseline.
+  const tagItems=items.slice();
+  if(scheduleShape()==='split'){
+    const used=new Set();
+    const letters=items.filter(i=>/^[A-Z]{1,2}$/i.test(i.s.trim())&&!bubbleLabels.has(i)&&!inTable(i));
+    for(const L of letters){
+      const h=Math.max(L.h||0,8),x1=L.x+(L.w||0);
+      const N=items.filter(j=>j!==L&&!used.has(j)&&/^\d{1,2}$/.test(j.s.trim())&&!bubbleLabels.has(j)&&Math.abs(j.y-L.y)<h*0.4&&j.x>x1-2&&j.x-x1<h*1.1)
+        .sort((p,q)=>p.x-q.x)[0];
+      if(!N)continue;
+      const code=L.s.trim().toUpperCase()+N.s.trim();
+      if(!tagCodeInfo(code))continue;
+      used.add(N);used.add(L);
+      tagItems.push({...L,s:code,w:(N.x+(N.w||0))-L.x,_pair:true});
+    }
+    for(let i=tagItems.length-1;i>=0;i--)if(used.has(tagItems[i]))tagItems.splice(i,1);
+  }
+  for(const it of tagItems){
+    if(!it._pair&&(bubbleLabels.has(it)||inTable(it)))continue;    // grid bubble or legend row, not a load tag
     const info=tagCodeInfo(it.s);
     if(!info)continue;
     const box=tagBoxFor(strokes,it);
@@ -18297,9 +18860,26 @@ async function autoTracePage(num){
       if(!bx){const r=await heavyRaster(num,false);bx=r?inkBlobBox(r,start.x,start.y):null}
       if(bx){fills.push(asBox(bx));continue}
     }
-    let m=await traceRegionAt(num,start.x,start.y,{heavyOnly:true});
+    let m=await traceRegionAt(num,start.x,start.y,TR);
     if((!m||m.areaPx2<minArea)&&viaLeader){
-      m=await traceRegionAt(num,t.centre.x,t.centre.y,{heavyOnly:true});viaLeader=false;
+      m=await traceRegionAt(num,t.centre.x,t.centre.y,TR);viaLeader=false;
+    }
+    // LOD-13: a boxed tag with no leader (Horizon House) — the flood from its
+    // centre only fills the tag's own box. Step outside the box and flood the
+    // area the tag sits in; the probes that agree win.
+    if((!m||m.areaPx2<minArea)&&t.box&&!viaLeader){
+      const bw=t.box.x1-t.box.x0,bh=t.box.y1-t.box.y0,g=Math.max(6,Math.min(bw,bh)*0.3);
+      const cx=(t.box.x0+t.box.x1)/2,cy=(t.box.y0+t.box.y1)/2;
+      const probes=[{x:cx,y:t.box.y1+g},{x:cx,y:t.box.y0-g},{x:t.box.x1+g,y:cy},{x:t.box.x0-g,y:cy}];
+      const got=[];
+      for(const p of probes){const mm=await traceRegionAt(num,p.x,p.y,TR);if(mm&&mm.areaPx2>=minArea)got.push(mm)}
+      if(got.length){
+        // the region most probes landed in (same area within 2%), smallest on a tie
+        got.sort((a,b)=>a.areaPx2-b.areaPx2);
+        let best=null,bestN=0;
+        for(const a of got){const n=got.filter(b=>Math.abs(b.areaPx2-a.areaPx2)<=a.areaPx2*0.02).length;if(n>bestN){best=a;bestN=n}}
+        m=best;t.agree=bestN;
+      }
     }
     if(!m||m.areaPx2<minArea){
       const bx=boxAt(t.centre);
@@ -18307,6 +18887,34 @@ async function autoTracePage(num){
       failed.push({code:t.code,x:t.centre.x,y:t.centre.y,reason:m?'only a sliver was enclosed — the tag sits between lines':'no clean pocket around the tag (hatched, or the outline is not closed with heavy lines)'});continue;
     }
     fills.push({...t,...m,viaLeader});
+  }
+  // LOD-13: several tags that flooded into ONE traced region (a room whose
+  // walls are drawn lighter than the pen being traced lets its tag out into
+  // the floor around it). The region is the tag's that every probe agreed
+  // on; the others are reported, not written over it.
+  {
+    const sig=f=>f.mode==='fill'?null:[f.bbox.minx,f.bbox.miny,f.bbox.maxx,f.bbox.maxy].map(v=>Math.round(v)).join(',')+':'+Math.round(f.areaPx2/100);
+    const bySig=new Map();
+    for(const f of fills){const k=sig(f);if(!k)continue;if(!bySig.has(k))bySig.set(k,[]);bySig.get(k).push(f)}
+    for(const list of bySig.values()){
+      const codes=new Set(list.map(f=>f.code));
+      if(list.length<2||codes.size<2)continue;
+      // the area's own tag is the one standing clear of the others (a
+      // parking bay's tag sits out in the open; stair and room tags cluster
+      // round the cores) — proposed, with the code left for the user
+      // the tag deepest inside the region: a leaked room tag sits against the
+      // walls its outline leaked through, the area's own tag out in the open
+      const depth=f=>{const P=f.polygon||[];let d=1e9;for(let i=0,j=P.length-1;i<P.length;j=i++){const ax=P[j].x,ay=P[j].y,bx=P[i].x,by=P[i].y,dx=bx-ax,dy=by-ay,L2=dx*dx+dy*dy;const t=L2?Math.max(0,Math.min(1,((f.centre.x-ax)*dx+(f.centre.y-ay)*dy)/L2)):0;d=Math.min(d,Math.hypot(ax+t*dx-f.centre.x,ay+t*dy-f.centre.y))}return d};
+      list.sort((a,b)=>depth(b)-depth(a));
+      const keep=list[0];
+      const cnt={};for(const f of list)cnt[f.code]=(cnt[f.code]||0)+1;
+      keep.note='tags inside: '+Object.entries(cnt).map(([c,n])=>`${c}×${n}`).join(', ');
+      keep.untagged=true;keep.pick=keep.code;keep.code='?';keep.capacity=null;keep.llMark=keep.sdlMark=keep.mark=undefined;{const info=tagCodeInfo(keep.pick);if(info)Object.assign(keep,info)}
+      for(const f of list.slice(1)){
+        fills.splice(fills.indexOf(f),1);
+        if(f.code!==keep.pick)failed.push({code:f.code,x:f.centre.x,y:f.centre.y,reason:`its outline leaks into the area around it — draw it by hand`});
+      }
+    }
   }
   // several tags inside one painted outline: one proposal. Same code ->
   // that code; mixed codes -> the outline is probably a background or a
