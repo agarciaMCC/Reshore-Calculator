@@ -637,6 +637,10 @@ input[readonly],input.derived{background:var(--derived-bg);color:var(--text-seco
 .sb-sheet{display:flex;align-items:center;gap:6px;font-size:var(--fs-sm);font-weight:700;color:var(--text);margin:12px 0 2px;padding:3px 6px;border-left:3px solid var(--accent);background:var(--panel-2,rgba(127,127,127,.10));border-radius:3px}
 .sb-sheet:first-child{margin-top:0}
 .match-row[data-reviewpage]{cursor:pointer}
+.match-row.proposed{border-color:var(--accent);border-style:dashed}
+.match-row .mp-why{flex:1 1 100%}
+.match-row .mp-stat{margin-left:auto}
+.match-row.sel{box-shadow:0 0 0 1px var(--accent) inset}
 .match-row.here{background:var(--panel-2,rgba(127,127,127,.14))}
 .match-row.reviewing{outline:2px solid var(--accent);outline-offset:-2px;border-radius:4px}
 .st-panel{margin:6px 0 10px}
@@ -646,19 +650,21 @@ input[readonly],input.derived{background:var(--derived-bg);color:var(--text-seco
 .st-head .lm-dim{margin-left:auto}
 .st-body{padding:4px 0 2px}
 .st-split{margin:4px 2px 8px;padding:5px 8px;border-radius:4px;background:var(--panel-2,rgba(127,127,127,.10));font-size:var(--fs-sm);color:var(--text-secondary)}
-.st-grid,.st-row{display:grid;grid-template-columns:28px minmax(120px,1.6fr) minmax(96px,1fr) minmax(80px,.8fr) minmax(110px,1.1fr);
-  gap:6px;align-items:center;padding:4px 6px;font-size:var(--fs-sm)}
-.st-hd{color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;font-size:var(--fs-sm);border-bottom:1px solid var(--panel-2,rgba(127,127,127,.25))}
+#sheetTable{--cols:26px minmax(110px,1fr) 104px 92px 150px}
+.st-caption{display:flex;align-items:center;gap:8px;padding:6px 8px 2px;font-size:var(--fs-md)}
+.st-caption .lm-dim{margin-left:auto;font-size:var(--fs-sm)}
+.st-row{padding:4px 8px;min-height:30px}
+.st-hd{padding-left:8px;padding-right:8px}
 .st-row{border-radius:4px;border-left:3px solid transparent;cursor:pointer;margin:2px 0}
 .st-row:hover{background:var(--panel-2,rgba(127,127,127,.14))}
 .st-row.on{border-left-color:var(--accent)}
 .st-row.off{opacity:.62}
 .st-row.here{background:var(--panel-2,rgba(127,127,127,.18))}
 .st-pg{font-weight:700;text-align:right}
-.st-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.st-title .lm-dim{display:block;font-size:var(--fs-sm)}
-.st-lv select,.st-zone input{width:100%;font-size:var(--fs-sm);padding:2px 4px}
-.st-state{color:var(--text-secondary);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.st-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-sm)}
+.st-lv select,.st-zone select{width:100%;font-size:var(--fs-sm);padding:2px 4px;font-family:var(--font-ui,inherit)}
+.st-state{color:var(--text-secondary);display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;font-size:var(--fs-sm)}
+.st-state .btn{flex:none}
 .st-row.unsure{border-left-color:var(--warn);background:rgba(232,160,38,.08)}
 .at-group{margin:8px 0 4px}
 .at-group-head{font-size:var(--fs-md);padding:4px 2px;border-bottom:1px solid var(--border);margin-bottom:4px}
@@ -9904,10 +9910,17 @@ async function proposeMatchAll(){
   renderMatchPanel();
   return matchProposal;
 }
-function applyMatchAll(){
+// ONE LIST, ONE CONFIRM (UI-34, Adolfo Sep 23 2026: the proposed matches
+// followed by a list of the same sheets was "redundant … 2 separate steps
+// for confirmation"). A proposed fit is written AND confirmed in the one
+// press — pressing Confirm on a row you have looked at IS the look-and-say-so
+// of BLD-07 — so `confirm` is the default; `rows` narrows it to one row.
+function applyMatchAll(opts){
   if(!matchProposal)return 0;
-  const picks=matchProposal.rows.filter(r=>r.pick&&r.fit);
-  if(!picks.length){toast('Nothing ticked to apply.',2600);return 0}
+  const o=opts&&typeof opts==='object'&&!(opts instanceof Event)?opts:{};
+  const confirm=o.confirm!==false;
+  const picks=(o.rows||matchProposal.rows.filter(r=>r.pick)).filter(r=>r.fit);
+  if(!picks.length){toast('Nothing to confirm.',2600);return 0}
   history.record('Match floors');
   let n=0,mat=0;
   for(const r of picks){
@@ -9921,23 +9934,27 @@ function applyMatchAll(){
       points:r.keep.map(p=>({px:p.px,py:p.py,gx:p.gx,gy:p.gy})),
       transform:f.transform,scale:f.scale,ftPerInch:f.ftPerInch,rotationDeg:f.rotationDeg,
       mirror:f.mirror,rmsFt:f.rmsFt,worstFt:f.worstFt,nPoints:f.points,
-      sheetScaleFtPerInch:r.sheetScaleFtPerInch||null,page:r.page,auto:true
+      sheetScaleFtPerInch:r.sheetScaleFtPerInch||null,page:r.page,auto:true,confirmed:confirm
     };
     if(lv.pdfPage==null||lv.pdfPage===r.page){lv.pdfPage=r.page;lv.alignment=align}
     else{
       const s=(lv.sheets||(lv.sheets=[])).find(x=>x&&x.page===r.page);
       if(s)s.alignment=align;else lv.sheets.push({page:r.page,alignment:align});
     }
+    // BLD-19: confirming a match made at the job scale confirms the scale
+    if(confirm&&typeof confirmScaleWith==='function')confirmScaleWith(align);
     if(typeof materializeLevelZones==='function')mat+=materializeLevelZones(lv,r.page)||0;
     // and the rest of that sheet's grid comes with it
     fillGridFromSheet(lv,r.page,r.fit.transform,`${lv.name}${sheetZoneName(lv,r.page)?' \u00b7 '+sheetZoneName(lv,r.page):''}`);
     n++;
   }
   state.results=null;
-  matchProposal=null;
+  // the rows just written leave the proposal; the proposal closes when none is left
+  if(o.rows){matchProposal.rows=matchProposal.rows.filter(r=>!picks.includes(r));if(!matchProposal.rows.some(r=>r.fit||r.err))matchProposal=null}
+  else matchProposal=null;
   state.ui.matchPreview=null;
   persist();refreshFlow();renderSidebar();renderCanvas();
-  toast(`${n} sheet${n>1?'s':''} matched${mat?` · ${mat} load-map area${mat>1?'s':''} placed`:''}. Ctrl+Z puts it back.`,4600);
+  toast(`${n} sheet${n>1?'s':''} matched${confirm?' and confirmed':''}${mat?` · ${mat} load-map area${mat>1?'s':''} placed`:''}. Ctrl+Z puts it back.`,4600);
   return n;
 }
 // Draw one proposed fit over the sheet it belongs to: the grid it implies,
@@ -10908,50 +10925,38 @@ function renderSheetTable(){
     o.push(`<option value="__new">+ add a zone…</option>`);
     return o.join('');
   };
+  // THE SHEETS TABLE (UI-33, Adolfo Sep 23 2026): one grid — Pg · Title
+  // block · Floor · Zone · state. What the reader thought a sheet was is
+  // back-of-house (it sits in the row's tooltip), the "+ also serves" picker
+  // is gone (a typical range on Levels already makes one sheet serve those
+  // floors), and a row to check carries its flag and Looks right in ONE line.
   const row=r=>{
     const here=r.page===state.pdf.current;
-    const sug=r.readLevel&&r.levelIdx<0?`<button class="btn btn-sm" data-stuse="${r.page}" data-stlv="${esc(r.readLevel)}">Use ${esc(r.readLevel)}${r.readZone?' · '+esc(r.readZone):''}</button>`:'';
+    const sug=r.readLevel&&r.levelIdx<0?`<button class="btn btn-sm" data-stuse="${r.page}" data-stlv="${esc(r.readLevel)}" title="The title block reads as ${esc(r.readLevel)}${r.readZone?' '+esc(r.readZone):''}">Use ${esc(r.readLevel)}${r.readZone?' · '+esc(r.readZone):''}</button>`:'';
     const chk=r.unsure?`<span class="st-unsure" title="Read with less than full confidence — check the floor and zone, then say so">check</span><button class="btn btn-sm" data-stok="${r.page}" title="The floor and zone on this row are right">Looks right</button>`:'';
-    return `<div class="st-row${here?' here':''}${r.levelIdx>=0?' on':''}${r.skipped?' off':''}${r.unsure?' unsure':''}" data-stpage="${r.page}">
-      <span class="st-pg">${r.page}</span>
-      <span class="st-title" title="${esc(r.title||'')}">${esc(r.title||'(no title read)')}
-        <span class="lm-dim">${esc(r.kindLabel||'')}${r.readLevel?` · reads as ${esc(r.readLevel)}${r.readZone?' '+esc(r.readZone):''}`:''}</span></span>
-      <span class="st-lv"><select data-stsel="${r.page}">${opt(r)}</select></span>
+    const tip=[r.title||'(no title read)',r.kindLabel?`read as a ${r.kindLabel}`:'',r.readLevel?`reads as ${r.readLevel}${r.readZone?' '+r.readZone:''}`:''].filter(Boolean).join(' — ');
+    const note=r.levelIdx>=0?`${r.areas?`${r.areas} area${r.areas===1?'':'s'}`:''}${r.primary&&byLevel.get(r.levelIdx)&&byLevel.get(r.levelIdx).length>1?`${r.areas?' · ':''}first sheet`:''}`:'';
+    return `<div class="tbl-row st-row${here?' here':''}${r.levelIdx>=0?' on':''}${r.skipped?' off':''}${r.unsure?' unsure':''}" data-stpage="${r.page}" title="${esc(tip)}">
+      <span class="st-pg num">${r.page}</span>
+      <span class="st-title">${esc(r.title||'(no title read)')}</span>
+      <span class="st-lv"><select class="tbl-in" data-stsel="${r.page}">${opt(r)}</select></span>
       <span class="st-zone">${r.levelIdx>=0
-        ?`<select data-stzone="${r.page}" title="Which part of the floor this sheet shows. Whole floor when the plan is on one sheet.">${zopt(r)}</select>`
+        ?`<select class="tbl-in" data-stzone="${r.page}" title="Which part of the floor this sheet shows. Whole floor when the plan is on one sheet.">${zopt(r)}</select>`
         :'<span class="lm-dim">—</span>'}</span>
-      <span class="st-also">${(()=>{
-        if(!state.levels.length)return '';
-        const extra=(r.also||[]).filter(i=>i!==r.levelIdx);
-        const opts=state.levels.map((l,i)=>(r.also||[]).includes(i)?'':`<option value="${i}">${esc(l.name||'unnamed')}</option>`).join('');
-        return (extra.length?`<span class="lm-dim" title="This sheet is a typical plan: it serves these floors too">+ ${extra.map(i=>esc(state.levels[i].name)).join(', ')}</span> `:'')
-          +(r.levelIdx>=0&&opts?`<select data-stadd="${r.page}" title="A typical plan can serve more than one floor — add another here."><option value="">+ also serves…</option>${opts}</select>`:'');
-      })()}</span>
-      <span class="st-state">${r.levelIdx>=0
-        ?`${r.areas?`${r.areas} area${r.areas===1?'':'s'}`:''}${r.primary&&byLevel.get(r.levelIdx)&&byLevel.get(r.levelIdx).length>1?`${r.areas?' · ':''}first sheet`:''}`
-        :(r.skipped?'not a floor plan':'')}
-        ${sug}${chk}</span>
+      <span class="st-state">${chk||sug||`<span class="lm-dim">${note}</span>`}</span>
     </div>`;
   };
-  host.innerHTML=`<button type="button" class="st-head${unsure?' warn':''}" id="stToggle">
-      <span>${sheetTableOpen?'▾':'▸'}</span><b>Sheets in this set</b>
-      <span class="lm-dim">${assigned} on floors${open?` · ${open} to place`:''}${nUnsure?` · ${nUnsure} to check`:''}</span></button>`
-    +(sheetTableOpen?`<div class="st-body">
+  host.innerHTML=`<div class="st-caption"><b>Sheets in this set</b>
+      <span class="lm-dim">${assigned} on floors${open?` · ${open} to place`:''}${nUnsure?` · ${nUnsure} to check`:''}</span></div>
+    <div class="st-body">
       <p class="step-help dim">A row for every page — nothing is hidden. Each has the floor it shows and its zone (<b>Whole floor</b> when the plan is on one sheet; North, South, Zone 1 when it is split). The title blocks filled this in; a row marked <b>check</b> was read with less confidence, so look at it and say <b>Looks right</b> or change it.</p>
       ${split.length?`<div class="st-split"><b>Split floors</b> ${split.join(' · ')}</div>`:''}
       ${nUnsure?`<div class="primary-act"><button class="btn btn-sm btn-wide btn-go" id="stOkAll" title="Every flagged row is right as it stands">All ${nUnsure} flagged look right</button></div>`:''}
-      <div class="st-grid st-hd"><span>Pg</span><span>Title block</span><span>Floor</span><span>Zone</span><span></span></div>
+      <div class="tbl-head st-hd"><span class="num">Pg</span><span>Title block</span><span>Floor</span><span>Zone</span><span></span></div>
       ${rows.map(row).join('')}
       ${byHandHtml('sheets',`<button class="btn btn-sm btn-wide" id="stReread" title="Re-read every title block and fill the table again; your own picks are kept">Read the title blocks again</button><span class="lm-dim">Change a floor or zone in the rows above; pick <b>not a floor plan</b> for anything that is not one.</span>`,'or read again / fix a row by hand')}
-    </div>`:'');
+    </div>`;
   bindByHand(host);
-  const t=host.querySelector('#stToggle');
-  if(t)t.addEventListener('click',()=>{sheetTableOpen=!sheetTableOpen;renderSheetTable()});
-  host.querySelectorAll('select[data-stadd]').forEach(sel=>sel.addEventListener('change',()=>{
-    const pg=+sel.dataset.stadd,v=sel.value;
-    if(v==='')return;
-    addSheetLevel(pg,+v);
-  }));
   host.querySelectorAll('select[data-stsel]').forEach(sel=>sel.addEventListener('change',()=>{
     const pg=+sel.dataset.stsel;
     if(sel.value==='new'){
@@ -16883,49 +16888,24 @@ function renderDrawingsPanel(){
     ${unclaimed.length?`<p class="step-help dim">${unclaimed.length} sheet${unclaimed.length>1?'s':''} still unanswered (${unclaimed.slice(0,8).join(', ')}${unclaimed.length>8?'…':''}).</p>`:''}`;
 }
 
-function matchProposalHtml(){
-  const P=matchProposal;
-  if(!P)return '';
-  const askedPage=new Set();
-  const rows=P.rows.map((r,i)=>{
-    const f=r.fit;
-    const sel=state.ui.matchPreview&&state.ui.matchPreview.idx===i;
-    // one sheet serving many floors asks about its scale once, on its first row
-    const ask=r.scaleAsk&&!askedPage.has(r.page);if(ask)askedPage.add(r.page);
-    // the residual is in the verdict line under this, so it is not repeated here
-    const stat=f?`${r.keep.length} crossings of ${r.nx}×${r.ny} bubbles · 1" = ${f.ftPerInch.toFixed(2)}'`
-      +(Math.abs(f.rotationDeg)>=0.01?` · ${f.rotationDeg.toFixed(2)}°`:'')
-      +(r.dropped?` · ${r.dropped} outlier${r.dropped>1?'s':''} dropped`:''):'';
-    return `<div class="mp-row v-${r.verdict}${sel?' sel':''}">
-      <label class="mp-tick">${f?`<input type="checkbox" data-mpick="${i}"${r.pick?' checked':''}>`:'<span class="mp-x">—</span>'}</label>
-      <div class="mp-main">
-        <div class="mp-name">${esc(r.name||'')}${r.page!=null?` <span class="lm-dim">${esc(sheetTag(state.levels[r.levelIdx],r.page))}</span>`:''}
-          ${r.hadMatch?`<span class="mp-flag">already matched${r.drift!=null?` · this fit moves it ${r.drift<0.02?'less than ¼"':feetToStr(r.drift)}`:''}</span>`:''}
-          ${r.definesGrid?`<span class="mp-flag">defines the project grid${r.scaleFrom?` · scale from ${esc(r.scaleFrom)}`:''}</span>`:''}${r.scaleCheck?`<span class="mp-flag lm-warn">${esc(r.scaleCheck)}</span>`:''}</div>
-        <div class="mp-stat">${f?esc(stat):`<span class="lm-warn">${esc(r.err||'not read')}</span>`}</div>
-        ${f?`<div class="mp-why">${esc(r.why||'')}</div>`:''}
-        ${f&&r.off&&r.off.length?`<div class="mp-why lm-warn">${r.off.slice(0,4).map(o=>`bubble ${esc(o.label)} reads ${Math.abs(o.ft)<100?feetToStr(Math.abs(o.ft)):Math.round(Math.abs(o.ft))+' ft'} off the grid`).join(' · ')}${r.off.length>4?` · ${r.off.length-4} more`:''} — not used (a key plan, or a bubble moved off its line)</div>`:''}
-        ${ask?`<div class="mp-why lm-warn">This sheet's plan note reads ${esc(planScaleText(r.scaleAsk))}, the job scale is ${esc(planScaleText(jobPlanScale()?jobPlanScale().ftPerInch:r.scaleAsk))} — matched at its own note for now.
-          <button class="btn btn-sm" data-mscale="${r.page}" data-mscalev="${r.scaleAsk}">Use ${esc(planScaleText(r.scaleAsk))} for this sheet</button>
-          <button class="btn btn-sm" data-mscale="${r.page}" data-mscalev="${jobPlanScale()?jobPlanScale().ftPerInch:''}">Keep the job scale</button></div>`:''}
-      </div>
-      <div class="mp-acts">
-        ${f?`<button class="btn btn-sm" data-mshow="${i}" title="Draw this fit's grid over its sheet — if the dashed lines sit on the printed grid, the fit is right">${sel?'Showing':'Show'}</button>`:''}
-        <button class="btn btn-sm" data-mhand="${r.levelIdx}"${r.page!=null?` data-mhandpage="${r.page}"`:''} title="Match this sheet by clicking two grid crossings">By hand</button>
-      </div></div>`;
-  }).join('');
-  const n=P.rows.filter(r=>r.pick&&r.fit).length;
-  const bad=P.rows.filter(r=>!r.fit).length;
-  return `<div class="mp-panel">
-    <div class="mp-head">Proposed matches — nothing is written until you apply
-      <span class="lm-dim">${P.rows.length} sheet${P.rows.length>1?'s':''}${bad?` · ${bad} could not be read`:''}</span></div>
-    <p class="step-help dim">Click <b>Show</b> on a row to draw the grid that fit implies over its own sheet. Rows are applied top down, so the one that defines the grid has to stay ticked for the rest to mean anything.</p>
-    ${rows}
-    <div class="mp-actions">
-      <button class="btn btn-sm btn-primary" id="mpApply"${n?'':' disabled'}>Apply ${n||''} match${n===1?'':'es'}</button>
-      <button class="btn btn-sm" id="mpAll">Tick all readable</button>
-      <button class="btn btn-sm" id="mpClose">Close</button>
-    </div></div>`;
+// UI-34: what a proposed fit says on its own sheet's row — stats, the
+// verdict, the bubbles that read off, the scale question — with Show and one
+// Confirm. Nothing is written until Confirm.
+function matchProposalHtml(){return ''}
+function proposalRowHtml(pr,pi,askedPage){
+  const f=pr.fit;
+  const sel=state.ui.matchPreview&&state.ui.matchPreview.idx===pi;
+  const ask=pr.scaleAsk&&askedPage&&!askedPage.has(pr.page);if(ask)askedPage.add(pr.page);
+  if(!f)return `<span class="match-stat"><span class="lm-warn">could not be read: ${esc(pr.err||'no fit')}</span></span>`;
+  const stat=`${pr.keep.length} crossings of ${pr.nx}×${pr.ny} bubbles · 1" = ${f.ftPerInch.toFixed(2)}'`
+    +(Math.abs(f.rotationDeg)>=0.01?` · ${f.rotationDeg.toFixed(2)}°`:'')
+    +(pr.dropped?` · ${pr.dropped} outlier${pr.dropped>1?'s':''} dropped`:'');
+  return `<span class="match-stat mp-stat v-${esc(pr.verdict||'')}"><span class="${pr.verdict==='poor'?'lm-warn':'lm-dim'}">proposed</span> · ${esc(stat)}</span>
+    <div class="mp-why">${esc(pr.why||'')}${pr.hadMatch&&pr.drift!=null?` · this fit moves the sheet ${pr.drift<0.02?'less than ¼"':feetToStr(pr.drift)}`:''}${pr.definesGrid?` · defines the project grid${pr.scaleFrom?` (scale from ${esc(pr.scaleFrom)})`:''}`:''}${pr.scaleCheck?` <span class="lm-warn">${esc(pr.scaleCheck)}</span>`:''}</div>
+    ${pr.off&&pr.off.length?`<div class="mp-why lm-warn">${pr.off.slice(0,4).map(o=>`bubble ${esc(o.label)} reads ${Math.abs(o.ft)<100?feetToStr(Math.abs(o.ft)):Math.round(Math.abs(o.ft))+' ft'} off the grid`).join(' · ')}${pr.off.length>4?` · ${pr.off.length-4} more`:''}</div>`:''}
+    ${ask?`<div class="mp-why lm-warn">This sheet's plan note reads ${esc(planScaleText(pr.scaleAsk))}, the job scale is ${esc(planScaleText(jobPlanScale()?jobPlanScale().ftPerInch:pr.scaleAsk))} — matched at its own note for now.
+      <button class="btn btn-sm" data-mscale="${pr.page}" data-mscalev="${pr.scaleAsk}">Use ${esc(planScaleText(pr.scaleAsk))} for this sheet</button>
+      <button class="btn btn-sm" data-mscale="${pr.page}" data-mscalev="${jobPlanScale()?jobPlanScale().ftPerInch:''}">Keep the job scale</button></div>`:''}`;
 }
 // one row per sheet of every floor: its fit and whether that fit is confirmed
 function matchSheetRows(){
@@ -17202,17 +17182,24 @@ function renderMatchPanel(){
     ${(()=>{
       if(matchRead)return `<div class="primary-act"><button class="btn btn-sm btn-wide" id="matchProgress" disabled>Reading sheet ${matchRead.i} of ${matchRead.n} for its grid bubbles…</button></div>`;
       const rows=matchSheetRows();const toConf=rows.filter(r=>r.matched&&!r.confirmed).length;
+      const prop=matchProposal?matchProposal.rows.filter(r=>r.fit&&r.pick).length:0;
+      // UI-34: the proposals sit on their own rows; one button confirms them all
+      if(prop)return `<div class="primary-act"><button class="btn btn-sm btn-wide btn-go" id="btnConfirmProposed" title="Write every proposed fit and confirm it — nothing is written until this or a row's own Confirm">Confirm all ${prop} proposed match${prop===1?'':'es'}</button></div>`;
       return `<div class="primary-act">${toConf?`<button class="btn btn-sm btn-wide btn-go" id="btnConfirmMatches" title="Confirm every matched sheet without looking at each grid">Confirm all ${toConf} matched</button>`:''}</div>`})()}
-    ${planScaleCardHtml()}${rebuildBannerHtml()}${gridScaleBannerHtml()}${matchProposalHtml()}`
+    ${planScaleCardHtml()}${rebuildBannerHtml()}${gridScaleBannerHtml()}`
     // A floor drawn across several sheets gets a row per sheet: each is matched
     // on its own bubbles, and the project grid puts them in the same frame.
-    +state.levels.map((l,i)=>{
+    +(()=>{const askedPage=new Set();return state.levels.map((l,i)=>{
       const sheets=levelSheets(l);
       const rows=sheets.length>1?sheets:[sheets[0]||{page:l.pdfPage,alignment:l.alignment}];
       const needs=levelNeedsAlignment(l);
       return rows.map((s,k)=>{
         const a=s?s.alignment:null;
         const pgN=s&&s.page!=null?s.page:null;
+        // UI-34: this sheet's proposed fit, if a read produced one
+        const pi=matchProposal?matchProposal.rows.findIndex(r=>r.levelIdx===i&&r.page===pgN):-1;
+        const pr=pi>=0?matchProposal.rows[pi]:null;
+        const psel=pr&&state.ui.matchPreview&&state.ui.matchPreview.idx===pi;
         const nm=esc(isRange(l)?rangeLabel(l):l.name);
         const pg=pgN!=null?` data-matchpage="${pgN}"`:'';
         const rev=state.ui.gridReview&&state.ui.gridReview.page===pgN&&pgN!=null;
@@ -17225,18 +17212,27 @@ function renderMatchPanel(){
           :(below.choices&&below.choices.length>1
             ?`<span class="match-below">stacks on <select data-mbelow="${i}" data-mbpage="${pgN}" title="${esc(below.how)}"><option value=""${below.page==null?' selected':''}>— pick the sheet below —</option>${below.choices.map(c=>{const bl=state.levels[below.levelIdx];return `<option value="${c}"${below.page===c?' selected':''}>${esc(isRange(bl)?rangeLabel(bl):bl.name)}${sheetZoneName(bl,c)?' · '+esc(sheetZoneName(bl,c)):''} (sheet ${c})</option>`}).join('')}</select>${below.how==='same zone'?'<span class="lm-dim"> same zone</span>':''}</span>`
             :`<span class="match-below lm-dim">stacks on ${esc(sheetBelowLabel(below))}</span>`));
-        return `<div class="match-row${a?' ok':(needs?'':' none')}${rev?' reviewing':''}${onScreen?' here':''}"${pgN!=null?` data-reviewpage="${pgN}" data-reviewlevel="${i}" title="Click to open this sheet and draw its fitted grid over it"`:''}>
+        // a proposal on an unmatched sheet, or a re-read of a matched one that
+        // is worth offering (it would move the sheet): the row shows the fit
+        // and ONE green Confirm; a proposal that could not read says so
+        const showProp=pr&&(!a||(pr.fit&&pr.hadMatch&&pr.drift!=null&&pr.drift>=0.02));
+        const stateHtml=showProp?proposalRowHtml(pr,pi,askedPage)
+          :`<span class="match-stat">${a?`${a.confirmed?'<span class="ep-ok">✓ confirmed</span> · ':'<span class="lm-warn">matched, not confirmed</span> · '}${a.ftPerInch!=null?`1" = ${a.ftPerInch.toFixed(1)}'`+(a.nPoints>=3?` · ±${(a.rmsFt*12).toFixed(1)}"`:''):''}`
+          :(needs?'not matched':'no match needed')}</span>`;
+        return `<div class="match-row${a?' ok':(needs?(showProp&&pr.fit?' proposed':''):' none')}${rev||psel?' reviewing':''}${psel?' sel':''}${onScreen?' here':''}"${pgN!=null?` data-reviewpage="${pgN}" data-reviewlevel="${i}" title="Click to open this sheet and draw its fitted grid over it"`:''}>
         <span class="match-name">${nm}${zn?` · ${esc(zn)}`:(sheets.length>1?' · <span class="lm-dim">no zone</span>':'')}${pgN!=null?` <span class="lm-dim">sheet ${pgN}</span>`:''}</span>
-        <span class="match-stat">${a?`${a.confirmed?'<span class="ep-ok">✓ confirmed</span> · ':'<span class="lm-warn">matched, not confirmed</span> · '}${a.ftPerInch!=null?`1" = ${a.ftPerInch.toFixed(1)}'`+(a.nPoints>=3?` · ±${(a.rmsFt*12).toFixed(1)}"`:''):''}`
-          :(needs?'not matched':'no match needed')}</span>
+        ${stateHtml}
         ${belowHtml}
-        ${a&&pgN!=null&&!a.confirmed?`<button class="btn btn-sm btn-go" data-mconfirm="${i}" data-mcpage="${pgN}" title="The dashed grid sits on the printed grid on this sheet — this match is right">Confirm</button>`:''}
-        ${a&&pgN!=null?`<button class="btn btn-sm" data-reviewbtn="${pgN}" data-reviewli="${i}" title="Draw this sheet's fitted grid over the sheet — if the dashed lines sit on the printed grid, the fit is right">${rev?'Showing':'Show grid'}</button>`:''}
-        <button class="btn btn-sm${a||!needs?'':' btn-primary'}" data-matchlevel="${i}"${pg}>${a?'Redo':(needs?'Match by hand':'Match anyway')}</button>
+        ${showProp&&pr.fit?`<button class="btn btn-sm btn-go" data-mpuse="${pi}" title="${a?'Write this re-read fit over the current match and confirm it':'The dashed grid sits on the printed grid — write this fit and confirm it'}">${a?'Use the re-read':'Confirm'}</button>`:''}
+        ${showProp&&pr.fit?`<button class="btn btn-sm" data-mshow="${pi}" title="Draw this fit's grid over its sheet — if the dashed lines sit on the printed grid, the fit is right">${psel?'Showing':'Show grid'}</button>`:''}
+        ${!showProp&&a&&pgN!=null&&!a.confirmed?`<button class="btn btn-sm btn-go" data-mconfirm="${i}" data-mcpage="${pgN}" title="The dashed grid sits on the printed grid on this sheet — this match is right">Confirm</button>`:''}
+        ${a&&pgN!=null&&!(showProp&&pr.fit)?`<button class="btn btn-sm" data-reviewbtn="${pgN}" data-reviewli="${i}" title="Draw this sheet's fitted grid over the sheet — if the dashed lines sit on the printed grid, the fit is right">${rev?'Showing':'Show grid'}</button>`:''}
+        ${showProp&&!a&&pr.fit?`<button class="btn btn-sm" data-mhand="${i}"${pgN!=null?` data-mhandpage="${pgN}"`:''} title="Match this sheet by clicking two grid crossings instead">By hand</button>`
+          :`<button class="btn btn-sm${a||!needs||(showProp&&pr.fit)?'':' btn-primary'}" data-matchlevel="${i}"${pg}>${a?'Redo':(needs?'Match by hand':'Match anyway')}</button>`}
         ${a?`<button class="btn btn-sm" data-matchclear="${i}"${pg} title="Drop this sheet's match. The areas drawn on it stay exactly where they are — they are held in sheet pixels — and can be placed in feet again as soon as it is matched. Ctrl+Z restores the fit.">Clear</button>`:''}
       </div>`;
       }).join('');
-    }).join('')
+    }).join('')})()
     // UI-31: the re-read sits under the list, in view
     +`${byHandHtml('match',`<button class="btn btn-sm btn-wide" id="btnMatchAll" title="Read the grid bubbles on every assigned sheet again, fit each one, and show the lot for review">${unmatched?'Match every floor from its grid bubbles':'Re-read every sheet’s grid bubbles'}</button><span class="lm-dim">Each row has <b>Match by hand</b> (click two grid crossings), <b>Show grid</b>, <b>Redo</b> and <b>Clear</b>.</span>`,'or match again / by hand')}`;
   // ── CLICK A SHEET TO SEE ITS GRID ──
@@ -17316,26 +17312,19 @@ function renderMatchPanel(){
     finally{const b=document.getElementById('btnMatchAll');
       if(b){b.disabled=false;b.textContent='Match every floor from its grid bubbles'}}
   });
-  el.querySelectorAll('input[data-mpick]').forEach(c=>c.addEventListener('change',()=>{
-    const r=matchProposal&&matchProposal.rows[+c.dataset.mpick];
-    if(r)r.pick=c.checked;
-    renderMatchPanel();
-  }));
-  el.querySelectorAll('button[data-mshow]').forEach(b=>b.addEventListener('click',()=>previewMatchRow(+b.dataset.mshow)));
-  el.querySelectorAll('button[data-mhand]').forEach(b=>b.addEventListener('click',()=>{
-    state.ui.matchPreview=null;
+  el.querySelectorAll('button[data-mshow]').forEach(b=>b.addEventListener('click',ev=>{ev.stopPropagation();previewMatchRow(+b.dataset.mshow)}));
+  el.querySelectorAll('button[data-mhand]').forEach(b=>b.addEventListener('click',ev=>{
+    ev.stopPropagation();state.ui.matchPreview=null;
     startAlignment(+b.dataset.mhand,b.dataset.mhandpage!=null?+b.dataset.mhandpage:null);
   }));
-  const ap=document.getElementById('mpApply');
-  if(ap)ap.addEventListener('click',applyMatchAll);
-  const tickAll=document.getElementById('mpAll');
-  if(tickAll)tickAll.addEventListener('click',()=>{
-    if(!matchProposal)return;
-    matchProposal.rows.forEach(r=>{if(r.fit)r.pick=true});
-    renderMatchPanel();
-  });
-  const cl=document.getElementById('mpClose');
-  if(cl)cl.addEventListener('click',()=>{matchProposal=null;state.ui.matchPreview=null;renderMatchPanel();renderCanvas()});
+  // UI-34: one press writes the proposed fit and confirms it
+  el.querySelectorAll('button[data-mpuse]').forEach(b=>b.addEventListener('click',ev=>{
+    ev.stopPropagation();
+    const r=matchProposal&&matchProposal.rows[+b.dataset.mpuse];
+    if(r&&r.fit)applyMatchAll({rows:[r],confirm:true});
+  }));
+  const cp=document.getElementById('btnConfirmProposed');
+  if(cp)cp.addEventListener('click',()=>applyMatchAll({confirm:true}));
 }
 
 // Called whenever project state changes so the rail stays honest.

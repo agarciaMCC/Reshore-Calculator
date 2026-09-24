@@ -82,9 +82,9 @@ const before = await page.evaluate(() => ({
   undos: history.stack ? history.stack.length : null,
 }));
 ok(before.aligned === 0 && before.grid === 0, 'nothing is written until Apply: ' + JSON.stringify(before));
-ok(await page.$$eval('#matchList .mp-row', r => r.length) === P.length, 'the review panel draws a row each');
-ok(await page.$eval('#matchList .mp-panel', e => /nothing is written until you apply/i.test(e.textContent)), 'and says so');
-ok(await page.$eval('#mpApply', b => /Apply \d+ match/.test(b.textContent)), 'the Apply button counts what is ticked: ' + await page.$eval('#mpApply', b => b.textContent.trim()));
+ok(await page.$$eval('#matchList .match-row.proposed', r => r.length) === P.length, 'each proposal sits on its own sheet row (UI-34): ' + await page.$$eval('#matchList .match-row.proposed', r => r.length));
+ok(await page.$$eval('#matchList .mp-panel', r => r.length) === 0, 'there is no separate proposal panel');
+ok(await page.$eval('#btnConfirmProposed', b => /Confirm all \d+ proposed/.test(b.textContent)), 'the primary counts what it would confirm: ' + await page.$eval('#btnConfirmProposed', b => b.textContent.trim()));
 
 // ── E. Show draws the fit on its own sheet, Escape peels it ─────────────
 console.log('E. Show, and Escape');
@@ -107,7 +107,7 @@ ok(drew.sel, 'the preview is up');
 ok(drew.strokes > 10, 'it strokes the grid it implies and the crossings it used: ' + drew.strokes);
 ok(drew.texts.some(t => /^\d+$/.test(t)) && drew.texts.some(t => /,/.test(t)),
   'labelled grid lines and labelled crossings: ' + JSON.stringify(drew.texts.slice(0, 6)));
-ok(await page.$eval('#matchList .mp-row.sel button[data-mshow]', b => b.textContent.trim() === 'Showing'), 'the row says it is showing');
+ok(await page.$eval('#matchList .match-row.sel button[data-mshow]', b => b.textContent.trim() === 'Showing'), 'the row says it is showing');
 // The Building step stacks drawings/levels/match in one panel: focus can sit on
 // any of the three while the match review is open, and the fit still has to draw.
 for (const sec of ['drawings', 'levels']) {
@@ -133,13 +133,13 @@ await page.keyboard.press('Escape');
 ok(await page.evaluate(() => !state.ui.matchPreview && !!matchProposal), 'Escape takes the drawing off but keeps the proposal');
 await page.keyboard.press('Escape');
 ok(await page.evaluate(() => !matchProposal), 'a second Escape closes the proposal');
-ok(await page.$$eval('#matchList .mp-row', r => r.length) === 0, 'and the panel is back to the plain list');
+ok(await page.$$eval('#matchList .match-row.proposed', r => r.length) === 0, 'and the rows are back to plain');
 
 // ── C. Apply ────────────────────────────────────────────────────────────
 console.log('C. Apply, against his hand matches');
 await page.click('#btnMatchAll');
 await page.waitForFunction(() => !!matchProposal, { timeout: 120000 });
-await page.click('#mpApply');
+await page.click('#btnConfirmProposed');
 await page.waitForTimeout(300);
 // A cold start has no reason to land on the same ORIGIN he happened to use —
 // his first hand match anchored the grid where it anchored it. What has to
@@ -171,6 +171,7 @@ console.log('   against his hand fits: one shared offset of '
 ok(applied.aligned === P.length, `every ticked sheet is matched: ${applied.aligned} of ${P.length}`);
 ok(applied.grid >= 8, 'the project grid was filled in: ' + applied.grid + ' labels (5 columns + 4 rows on this set)');
 ok(applied.gone, 'the proposal closes once applied');
+ok(await page.evaluate(() => matchSheetRows().every(r => r.confirmed)), 'and every sheet written this way is confirmed in the same press (UI-34)');
 // 0.06% of a 240 ft sheet: the cold-started scale is 1" = 10.006' off the
 // dimension chain against the 10.000' his hand match used, so the far corner
 // of the sheet lands 2" out. Nothing in the calc reads at that resolution.
@@ -193,10 +194,8 @@ const second = await page.evaluate(() => matchProposal.rows.map(r => ({
 ok(second.every(r => r.had), 'every row is now an already-matched sheet');
 ok(second.every(r => !r.pick), 'so none of them is ticked');
 ok(second.every(r => r.drift != null && r.drift < 0.05), 'each says how far its re-fit would move the sheet: ' + JSON.stringify(second.map(r => r.drift)));
-ok(await page.$eval('#matchList .mp-row .mp-flag', e => /already matched/.test(e.textContent)), 'the row is flagged as already matched');
-ok(await page.$eval('#mpApply', b => b.disabled), 'Apply is disabled with nothing ticked');
-await page.click('#mpAll');
-ok(await page.evaluate(() => matchProposal.rows.every(r => r.pick)), '"Tick all readable" is there when you do want to re-fit everything');
+ok(await page.$$eval('#matchList button[data-mpuse]', b => b.length) === 0, 'a re-read that moves nothing offers nothing on the rows');
+ok(await page.$$eval('#btnConfirmProposed', b => b.length) === 0, 'and there is nothing to confirm');
 await page.keyboard.press('Escape');
 
 // ── F. the no-shore alert says where ────────────────────────────────────
@@ -294,7 +293,7 @@ console.log('G. the read says where it is');
     'saying which sheet it is on: ' + JSON.stringify(run.seen[0]));
   ok(run.seen.every(s => s.inSlot), 'in the step\'s own primary slot, not inside the by-hand disclosure');
   ok(run.after === null && !run.el, 'and it stops saying so once the proposal is up');
-  ok(await page.evaluate(() => !!document.querySelector('#matchList .mp-head')), 'which is the proposal panel itself');
+  ok(await page.evaluate(() => !!matchProposal && matchProposal.rows.length > 1), 'which is the proposal itself (on the rows where it has something to offer)');
 }
 
 await browser.close();

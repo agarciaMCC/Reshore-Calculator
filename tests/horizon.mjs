@@ -134,7 +134,10 @@ ok(E.find(p => p.lv === 'B6').big.pick === 'B3' && /tags inside/.test(E.find(p =
 
 console.log('F. the scale card');
 const F = await page.evaluate(async () => {
-  state.project.planScale.confirmed = false; renderMatchPanel();
+  state.project.planScale.confirmed = false;
+  // UI-34 confirmed the matches as it wrote them; un-confirm one so there is a match to confirm
+  matchSheetRows().filter(r => r.matched).slice(0, 1).forEach(r => { sheetAlignmentFor(r.levelIdx, r.page).confirmed = false; });
+  renderMatchPanel();
   const card = document.querySelector('.ps-card'), btn = document.getElementById('btnScaleConfirm');
   const st1 = stepStatus('match').text;
   confirmAllMatches();

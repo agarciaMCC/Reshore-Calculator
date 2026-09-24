@@ -238,29 +238,42 @@ ok(F2.proposed && F2.rows >= 6, 'matching ran itself on arrival and proposed a f
 ok(F2.zonesShown && F2.stacksOn, 'the rows name level and zone and say what each stacks on');
 ok(F2.noZoneInput, 'zones are no longer typed on the Match step');
 
-// ── G. a match is confirmed, sheet by sheet ──────────────────────────────
+// ── G. one list: a proposed fit is confirmed on its own row (UI-34) ──────
 console.log('G. confirming the matches');
 const G = await page.evaluate(() => {
-  matchProposal.rows.forEach(r => { if (r.fit) r.pick = true; });
-  applyMatchAll();
   renderMatchPanel();
   const el = document.getElementById('matchList');
-  const before = { st: stepStatus('match'), confirmBtns: el.querySelectorAll('button[data-mconfirm]').length,
-    notConf: (el.innerText.match(/matched, not confirmed/g) || []).length, all: !!document.getElementById('btnConfirmMatches') };
-  const rows = matchSheetRows().filter(r => r.matched);
-  confirmSheetMatch(rows[0].levelIdx, rows[0].page);
-  const one = { st: stepStatus('match'), confirmed: matchSheetRows().filter(r => r.confirmed).length };
-  confirmAllMatches();
+  const nProp = matchProposal.rows.filter(r => r.fit && r.pick).length;
+  const before = { st: stepStatus('match'), useBtns: el.querySelectorAll('button[data-mpuse]').length, proposedRows: el.querySelectorAll('.match-row.proposed').length,
+    panel: !!el.querySelector('.mp-panel'), all: (document.getElementById('btnConfirmProposed') || {}).textContent || null, nProp, oldConfirm: el.querySelectorAll('button[data-mconfirm]').length };
+  // one row's Confirm writes that fit and confirms it in the one press
+  el.querySelector('button[data-mpuse]').click();
+  const one = { st: stepStatus('match'), confirmed: matchSheetRows().filter(r => r.confirmed).length, matched: matchSheetRows().filter(r => r.matched).length,
+    left: matchProposal ? matchProposal.rows.filter(r => r.fit && r.pick).length : 0, ticks: (document.getElementById('matchList').innerText.match(/✓ confirmed/g) || []).length };
+  // the primary confirms the rest
+  document.getElementById('btnConfirmProposed').click();
   renderMatchPanel();
-  const after = { st: stepStatus('match'), ticks: (el.innerText.match(/✓ confirmed/g) || []).length, confirmBtns: el.querySelectorAll('button[data-mconfirm]').length,
-    matched: matchSheetRows().filter(r => r.matched).length, total: matchSheetRows().length };
+  const after = { st: stepStatus('match'), ticks: (document.getElementById('matchList').innerText.match(/✓ confirmed/g) || []).length,
+    useBtns: document.querySelectorAll('#matchList button[data-mpuse]').length, proposal: !!matchProposal,
+    matched: matchSheetRows().filter(r => r.matched).length, confirmed: matchSheetRows().filter(r => r.confirmed).length, total: matchSheetRows().length };
   return { before, one, after };
 });
-ok(G.before.confirmBtns > 0 && G.before.notConf === G.before.confirmBtns, 'every matched sheet offers Confirm and says it is not confirmed yet: ' + JSON.stringify(G.before));
-ok(!G.before.st.done && /confirmed/.test(G.before.st.text) && G.before.all, 'Match floors is not done until confirmed, and offers Confirm all: ' + G.before.st.text);
-ok(G.one.confirmed === 1 && /1 confirmed/.test(G.one.st.text), 'one Confirm counts: ' + G.one.st.text);
-ok(G.after.ticks === G.after.matched && G.after.confirmBtns === 0, 'Confirm all ticks every matched row: ' + JSON.stringify(G.after));
+ok(G.before.useBtns === G.before.nProp && G.before.proposedRows === G.before.nProp && !G.before.panel, 'every proposed fit sits on its own sheet row with a Confirm — no separate proposal panel: ' + JSON.stringify(G.before));
+ok(G.before.oldConfirm === 0, 'and no row asks for a second confirmation');
+ok(!G.before.st.done && /Confirm all \d+ proposed/.test(G.before.all || ''), 'Match floors is not done, and the primary confirms all proposed: ' + G.before.all);
+ok(G.one.matched === 1 && G.one.confirmed === 1 && G.one.ticks === 1 && G.one.left === G.before.nProp - 1, 'one press writes the fit AND confirms it; the other proposals stay: ' + JSON.stringify(G.one));
+ok(/1 confirmed/.test(G.one.st.text), 'the step counts it: ' + G.one.st.text);
+ok(G.after.confirmed === G.after.matched && G.after.useBtns === 0 && !G.after.proposal, 'Confirm all writes and confirms the rest, and the proposal is spent: ' + JSON.stringify(G.after));
 ok(G.after.matched === G.after.total ? G.after.st.done : !G.after.st.done, 'the step is done exactly when every sheet is matched and confirmed: ' + JSON.stringify(G.after.st));
+// a hand match still asks for its own Confirm (BLD-07): the fit is not the look
+const H = await page.evaluate(() => {
+  const rows = matchSheetRows();
+  const r = rows[0]; const lv = state.levels[r.levelIdx];
+  const a = sheetAlignmentFor(r.levelIdx, r.page); a.confirmed = false; renderMatchPanel();
+  const el = document.getElementById('matchList');
+  return { btn: el.querySelectorAll('button[data-mconfirm]').length, txt: /matched, not confirmed/.test(el.innerText), all: !!document.getElementById('btnConfirmMatches') };
+});
+ok(H.btn === 1 && H.txt && H.all, 'a matched-but-unconfirmed sheet still offers Confirm and Confirm all: ' + JSON.stringify(H));
 
 await browser.close();
 console.log(`\n${pass} passed, ${fail} failed`);
