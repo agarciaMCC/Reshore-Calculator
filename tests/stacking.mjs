@@ -134,7 +134,7 @@ ok(jumped.page === l2pages[1] && jumped.level === '2', `clicking a row goes to t
 console.log('B. the floor below, drawn under the sheet you are on');
 const G = await page.evaluate(() => {
   const i = state.levels.findIndex(l => l.name === '3');
-  state.activeLevelIdx = i; state.pdf.current = 10; setStep('areas');
+  state.activeLevelIdx = i; state.pdf.current = 10; setStep('match');
   const count = () => {
     const c = document.getElementById('drawCanvas').getContext('2d');
     let strokes = 0, texts = [];
@@ -155,11 +155,11 @@ ok(G.below === '2', 'the floor below Level 3 is Level 2: ' + G.below);
 ok(!G.off.ghosted && G.on.ghosted, 'the ghost can be switched off, and is labelled when on: ' + JSON.stringify(G));
 ok(G.dflt.ghosted && G.dflt.above && G.above === '4', 'by default it is ON, and draws the floor above as well as the floor below (UI-37): ' + JSON.stringify([G.dflt, G.above]));
 ok(G.on.strokes > G.off.strokes, 'and it actually draws: ' + JSON.stringify([G.off.strokes, G.on.strokes]));
-ok(await page.evaluate(() => { setStep('loads'); state.ui.ghostBelow = true;
+ok(await page.evaluate(() => { const out = {}; for (const s of ['loads', 'areas', 'edge', 'levels']) { setStep(s); state.ui.ghostBelow = true;
   const c = document.getElementById('drawCanvas').getContext('2d'); let t = [];
   const t0 = c.fillText.bind(c); c.fillText = function (x) { t.push(String(x)); return t0.apply(c, arguments) };
-  renderNow(); c.fillText = t0; setStep('areas');
-  return !t.some(x => /FLOOR BELOW/.test(x)); }), 'and stays on the Areas step');
+  renderNow(); c.fillText = t0; out[s] = t.some(x => /FLOOR (BELOW|ABOVE)/.test(x)); }
+  setStep('match'); return Object.values(out).every(v => !v); }), 'and is drawn on Match floors only — not on Loads, Areas, Floor edge or Levels (UI-37)');
 
 // ── C. trace only adds what a sheet of that floor shows ────────────────
 console.log('C. a traced area with no sheet to live on is left out');

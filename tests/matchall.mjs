@@ -108,26 +108,26 @@ ok(drew.strokes > 10, 'it strokes the grid it implies and the crossings it used:
 ok(drew.texts.some(t => /^\d+$/.test(t)) && drew.texts.some(t => /,/.test(t)),
   'labelled grid lines and labelled crossings: ' + JSON.stringify(drew.texts.slice(0, 6)));
 ok(await page.$eval('#matchList .match-row.sel button[data-mshow]', b => b.textContent.trim() === 'Showing'), 'the row says it is showing');
-// The Building step stacks drawings/levels/match in one panel: focus can sit on
-// any of the three while the match review is open, and the fit still has to draw.
-for (const sec of ['drawings', 'levels']) {
+// UI-36 (Sep 24 2026): the grid marks and lines belong to Match floors alone —
+// on any other section they are neither kept nor drawn
+for (const sec of ['drawings', 'levels', 'edge']) {
   const d2 = await page.evaluate(async (sec) => {
+    setStep('match'); await previewMatchRow(matchProposal.rows.findIndex(r => r.fit));
+    const had = !!state.ui.matchPreview;
     setStep(sec);
     const c = document.getElementById('drawCanvas').getContext('2d');
     let strokes = 0; const s0 = c.stroke.bind(c);
     c.stroke = function () { strokes++; return s0.apply(c, arguments) };
-    const i = matchProposal.rows.findIndex(r => r.fit);
-    await previewMatchRow(i);
-    renderNow();
+    const before = strokes; renderNow();
+    const withPreview = strokes - before;
     c.stroke = s0;
-    return { strokes, step: curStep, sel: !!state.ui.matchPreview };
+    return { had, step: curStep, sel: !!state.ui.matchPreview, gr: !!state.ui.gridReview };
   }, sec);
-  ok(d2.sel, 'the preview survives focus on ' + sec);
-  ok(d2.strokes > 10, 'and still draws with focus on ' + sec + ': ' + d2.strokes);
+  ok(d2.had && !d2.sel && !d2.gr, 'moving to ' + sec + ' drops the grid preview: ' + JSON.stringify(d2));
 }
 await page.evaluate(() => setStep('match'));
 await page.evaluate(async () => { await previewMatchRow(matchProposal.rows.findIndex(r => r.fit)); });
-ok(await page.evaluate(() => { setStep('loads'); return !state.ui.matchPreview }), 'leaving the Building step drops the preview');
+ok(await page.evaluate(() => { setStep('loads'); return !state.ui.matchPreview }), 'leaving for Loads drops the preview too');
 await page.evaluate(async () => { setStep('match'); await previewMatchRow(matchProposal.rows.findIndex(r => r.fit)); });
 await page.keyboard.press('Escape');
 ok(await page.evaluate(() => !state.ui.matchPreview && !!matchProposal), 'Escape takes the drawing off but keeps the proposal');

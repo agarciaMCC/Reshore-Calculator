@@ -2153,7 +2153,7 @@ function drawGridReview(lv,zoom,F_MONO){
   const R=state.ui.gridReview;
   if(!R||!lv)return;
   if(state.pdf.pages&&R.page!==state.pdf.current)return;
-  if(typeof curGroup==='function'&&curGroup().id!=='building')return;
+  if(typeof curStep==='undefined'||curStep!=='match')return;
   const a=levelAlignmentFor(lv,R.page)||lv.alignment;
   if(!a||!a.transform)return;
   drawCtx.save();
@@ -3585,7 +3585,9 @@ function drawFrame(){
     if(state.align.active){
       const fit=alignFitNow(state.align.points).fit;
       if(fit){T=fit.transform;live=true}
-    }else if(typeof curStep!=='undefined'&&groupOf(curStep).id==='building'&&screenTransform(lv)){
+    }else if(typeof curStep!=='undefined'&&curStep==='match'&&screenTransform(lv)){
+      // the fitted grid is drawn on Match floors only (UI-36) — not on the
+      // other Building sections, not on Areas
       T=screenTransform(lv);
       // the sheet being reviewed gets the grid at full strength
       if(state.ui.gridReview&&state.ui.gridReview.page===state.pdf.current)live=true;
@@ -7014,7 +7016,9 @@ function ghostOn(){return state.ui.ghostBelow!==false}
 const GHOST_BELOW_RGB='120,120,255',GHOST_ABOVE_RGB='230,120,20';
 function drawFloorBelowGhost(lv,zoom,F_MONO){
   if(!ghostOn())return;
-  if(typeof curGroup==='function'&&curGroup().id!=='areas'&&curGroup().id!=='building')return;
+  // UI-37 (Adolfo Sep 24 2026): the ghosts belong to Match floors alone —
+  // "it shouldn't carry over into the rest of the steps"
+  if(typeof curStep==='undefined'||curStep!=='match')return;
   const T=screenTransform(lv);
   if(!T||!lv)return;
   // EVERY sheet of the floor below, together: its North and South edges land
@@ -10162,7 +10166,7 @@ function drawMatchPreview(zoom,F_MONO,snapColor){
   // The Building step stacks drawings/levels/match in one panel, so focus can
   // sit on any of the three while the match review is open — gate on the GROUP,
   // not the section, or the fit draws nowhere.
-  if(!mp||(typeof curStep!=='undefined'&&groupOf(curStep).id!=='building'))return;
+  if(!mp||(typeof curStep!=='undefined'&&curStep!=='match'))return;
   if(mp.page!=null&&state.pdf.pages&&mp.page!==state.pdf.current)return;
   const T=mp.transform;
   const W=state.drawing.imgW||state.drawing.cssW||pdfCvs.width;
@@ -17150,7 +17154,7 @@ function setStep(id){
   if(grp.id!=='areas'&&(state.tool==='polygon'||state.tool==='fill')&&!(grp.id==='building'&&typeof edgeDraw!=='undefined'&&edgeDraw))setTool('select');
   if(id!=='results'&&id!=='sequence'&&state.ui.highlight){state.ui.highlight=null;stopAnts();renderCanvas()}
   if(grp.id!=='building'&&state.align.active)cancelAlignment();
-  if(grp.id!=='building'){state.ui.matchPreview=null;state.ui.gridReview=null}
+  if(id!=='match'){state.ui.matchPreview=null;state.ui.gridReview=null}
   // arriving on a locked step: drop the selection with it, so no corner
   // handles or move cursor are offered on markup that cannot be edited
   if(id==='results'||id==='sequence'){
