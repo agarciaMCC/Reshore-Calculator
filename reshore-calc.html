@@ -208,6 +208,11 @@ button{color:inherit}
   margin-bottom:-1px;padding-bottom:8px}
 .group-tabs .gt.on b{color:var(--mcc-red)}
 .btn-go{background:#1f9d55;border-color:#1f9d55;color:#fff;font-weight:600}
+.btn-add{background:#2563a8;border-color:#2563a8;color:#fff;font-weight:600}
+.btn-add:hover{background:#1d5190;border-color:#1d5190}
+.sched-region-head .btn-add{margin-left:auto}
+.lm-notes .lm-txt{min-width:80px}
+.lm-scroll.split #lmCombined{display:none!important}
 .btn-go:hover{background:#178045;border-color:#178045}
 #btnAutoDetect{margin:0 0 8px;padding:9px 12px;font-size:var(--fs-lg)}
 .step-foot{position:sticky;bottom:0;z-index:5;display:flex;align-items:center;gap:10px;
@@ -1020,7 +1025,16 @@ select.sched-shore option,select.sel-styled option{background:var(--surface-rais
 .typ-state{font-size:var(--fs-sm);font-weight:700;letter-spacing:.3px;text-transform:uppercase;padding:2px 8px;border-radius:9px;border:1px solid var(--safe);color:var(--safe);white-space:nowrap}
 .typ-block.needs .typ-state{border-color:var(--warn);color:var(--warn)}
 .typ-block .typ-sub{display:block;font-size:var(--fs-sm);color:var(--text-secondary);margin:3px 0 6px}
-.typ-block .typ-brow{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:var(--fs-md);flex-wrap:wrap;border-top:1px solid var(--border-light)}
+.typ-block .typ-grid{--cols:minmax(64px,1fr) 78px 118px}
+.typ-block .typ-grid.split{--cols:minmax(64px,1fr) 96px 96px 68px 128px}
+.typ-block .typ-grid.combined{--cols:minmax(64px,1fr) 120px 68px 128px}
+.typ-block .typ-grid .tbl-head{padding-left:0;padding-right:0}
+.typ-block .typ-brow{padding:4px 0;font-size:var(--fs-md);border-top:1px solid var(--border-light)}
+.typ-block .typ-brow .tb-ctl{display:flex;align-items:center;gap:4px;min-width:0}
+.typ-block .typ-brow .tb-ctl .tb-lbl{display:none}
+.typ-block .typ-brow .tb-psfcell{text-align:right}
+.typ-block .typ-brow .tb-state{display:flex;align-items:center;gap:6px;justify-content:flex-end;white-space:nowrap;font-size:var(--fs-sm)}
+.typ-block .typ-brow select.tbl-in{padding:2px 4px;font-family:var(--font-ui,inherit)}
 .typ-block .typ-brow.first{border-top:none}
 .typ-block .typ-brow .tb-name{min-width:64px;font-weight:600}
 .typ-block .typ-brow .tb-psf{min-width:64px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
@@ -1029,7 +1043,6 @@ select.sched-shore option,select.sel-styled option{background:var(--surface-rais
 .typ-block .typ-brow .lvl-edit{font-size:var(--fs-sm)}
 /* the LL and DL pickers were stacking, so "B" over "2" read as one broken
    code; they sit side by side with their own labels */
-.typ-block .typ-brow .tb-ctl{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:nowrap}
 .typ-block .typ-brow .tb-ctl .lvl-edit-wrap{margin-left:0}
 .typ-block .typ-brow .lvl-sel{min-width:60px;padding:2px 4px}
 .typ-block .typ-brow .tb-lbl{font-size:var(--fs-sm);letter-spacing:.4px;color:var(--text-tertiary);text-transform:uppercase}
@@ -4888,6 +4901,7 @@ let lmScan=null;   // last scan result, for the conflicts banner
 // two-schedule view. Exactly one is ever populated.
 function lmShowCombined(){
   const t=document.getElementById('lmCombined'),s=document.getElementById('lmSplit');
+  {const sc=document.querySelector('.lm-scroll');if(sc)sc.classList.remove('split')}
   if(t)t.style.display='';
   if(s){s.style.display='none';s.innerHTML=''}
 }
@@ -5230,14 +5244,24 @@ function renderTypicalBlock(){
   const state_=g.unset?`${g.unset} still to set`:(g.assumed?`${g.assumed} to confirm`:(g.rows?`all ${g.rows} set`:'nothing to set'));
   el.innerHTML=`<h4>Typical capacity per floor <span class="typ-state">${esc(state_)}</span></h4>
     <span class="typ-sub">What covers a floor wherever no loading area is drawn — every floor under the pour needs one.</span>
-    ${rows.length?rows.map((o,k)=>{const cap=levelDefaultCapacity(o.l);
+    ${rows.length?`<div class="typ-grid ${shape==='split'?'split':shape==='combined'?'combined':'psf'}"><div class="tbl-head"><span>Floor</span>${shape==='split'?'<span title="Default live-load mark">LL</span><span title="Default superimposed dead-load mark">DL</span>':shape==='combined'?'<span title="Default loading mark from the load map">Mark</span>':''}<span class="num">PSF</span><span></span></div>`
+      +rows.map((o,k)=>{const cap=levelDefaultCapacity(o.l);
       const miss=typicalMissing(o.l);
-      return `<div class="typ-brow${k===0?' first':''}${o.l.typicalAssumed?' assumed':''}${miss?' unset':''}" data-tli="${o.i}">
+      const byMark=o.l.defLL!=null||o.l.defMark!=null;
+      // UI-33: the PSF cell is always there — a box while it is typed, the
+      // worked-out figure once a mark decides it — so nothing shifts on a pick
+      const psfCell=byMark
+        ?`<span class="tb-psf" title="Worked out from the mark">${cap>0?Math.round(cap):'—'}</span>`
+        :`<input class="lvl-edit tbl-in num" data-li="${o.i}" data-f="cap" value="${o.l.defaultCapacity>0?o.l.defaultCapacity:''}" placeholder="PSF" title="Default capacity (PSF) — used wherever no tagged area covers this floor">`;
+      const stateCell=o.l.typicalAssumed?`<span class="lm-dim" title="${esc('Taken from '+o.l.typicalAssumed)}">assumed</span><button class="btn btn-sm btn-go" data-tconfirm="${o.i}">Confirm</button>`
+        :miss?'<span class="lm-warn">not set</span>'
+        :(!(cap>0)?'<span class="lm-dim" title="Every loading area on this floor is drawn and marked, so it needs no typical">from drawn areas</span>':'');
+      return `<div class="tbl-row typ-brow${k===0?' first':''}${o.l.typicalAssumed?' assumed':''}${miss?' unset':''}" data-tli="${o.i}">
         <span class="tb-name">${esc(isRange(o.l)?rangeLabel(o.l):o.l.name)}</span>
-        <span class="tb-ctl">${levelCapacityControl(o.l,o.i)}</span>
-        <span class="tb-psf">${cap>0?Math.round(cap)+' PSF':(miss?'<span class="lm-warn">not set</span>':'<span class="lm-dim" title="Every loading area on this floor is drawn and marked, so it needs no typical">from drawn areas</span>')}</span>
-        ${o.l.typicalAssumed?`<span class="lm-dim" title="${esc('Taken from '+o.l.typicalAssumed)}">assumed</span><button class="btn btn-sm" data-tconfirm="${o.i}">Confirm</button>`:''}
-      </div>`}).join('')
+        ${typicalMarkCells(o.l,o.i,shape)}
+        <span class="tb-psfcell num">${psfCell}</span>
+        <span class="tb-state">${stateCell}</span>
+      </div>`}).join('')+'</div>'
     :'<span class="lm-dim">Every floor here is the top of the stack or on grade — nothing to set.</span>'}
     ${nAss?`<div class="typ-act"><button class="btn btn-sm btn-go" id="typConfirmAll" title="Every assumed value reads right — confirm them all">Confirm all ${nAss} assumed</button></div>`:''}
     <div class="lm-dim">The top floor pours last and carries nothing above it; slab on grade absorbs everything. Neither needs a capacity.</div>`;
@@ -5260,24 +5284,22 @@ function renderLoadActions(){
   renderLoadStart();
   renderLoadPrimary();
   let bar=document.getElementById('lmActions');
+  const scroll=document.querySelector('.lm-scroll');
   if(!bar){
     bar=document.createElement('div');bar.id='lmActions';bar.className='lm-acts';
-    const scroll=document.querySelector('.lm-scroll');
     if(!scroll)return;
-    scroll.parentNode.insertBefore(bar,scroll.nextSibling);
+    scroll.parentNode.insertBefore(bar,scroll);
   }
+  // UI-38 (Adolfo Sep 23 2026): "Adding a live or dead load mark buttons
+  // should live at the top of their respective tables. Right now the buttons
+  // get pushed down as more rows are added." The combined chart's Add sits
+  // above the chart; the split tables carry their own in their heads.
+  if(scroll&&bar.nextSibling!==scroll)scroll.parentNode.insertBefore(bar,scroll);
   const shape=scheduleShape();
-  if(shape==='none'){bar.innerHTML='';bar.style.display='none';renderTypicalBlock();renderLoadsByHand();return}
+  if(shape!=='combined'){bar.innerHTML='';bar.style.display='none';renderTypicalBlock();renderLoadsByHand();return}
   bar.style.display='';
-  // adding a row is the normal way to extend a chart; everything else
-  // (re-read, import, template, switching the shape) is behind "by hand"
-  bar.innerHTML=(shape==='combined'
-      ?`<button class="btn btn-sm" id="lmAdd">+ Add a mark</button>`
-      :`<button class="btn btn-sm" id="lmAddLL">+ Add a live-load mark</button>
-        <button class="btn btn-sm" id="lmAddSDL">+ Add a dead-load mark</button>`);
+  bar.innerHTML=`<button class="btn btn-sm btn-add" id="lmAdd" title="Add a mark to the chart">+ Add a mark</button>`;
   const a=document.getElementById('lmAdd');if(a)a.addEventListener('click',addCombinedMark);
-  const al=document.getElementById('lmAddLL');if(al)al.addEventListener('click',()=>addSplitMark('ll'));
-  const as=document.getElementById('lmAddSDL');if(as)as.addEventListener('click',()=>addSplitMark('sdl'));
   renderTypicalBlock();
   renderLoadsByHand();
 }
@@ -5341,9 +5363,9 @@ function renderLoadsByHand(){
   const tp=q('lmTemplate');if(tp)tp.addEventListener('click',downloadLoadTemplate);
   const sp=q('lsSplit');if(sp)sp.addEventListener('click',()=>switchScheduleShape('split'));
   const cb=q('lsCombined');if(cb)cb.addEventListener('click',()=>switchScheduleShape('combined'));
-  // sits after the typical block and before the load-map trace
-  const typ=document.getElementById('lmTypical');
-  if(typ&&typ.parentNode===pl)pl.insertBefore(box,typ.nextSibling);else pl.appendChild(box);
+  // UI-31/UI-38: the hand tools close the step, under the tables and their notes
+  if(pl.lastElementChild!==box)pl.appendChild(box);
+  const nx=pl.querySelector(':scope > .sec-next');if(nx)pl.appendChild(nx);
 }
 
 function renderSplitTables(){
@@ -5375,14 +5397,14 @@ function renderSplitTables(){
       <td><input class="lm-num" data-lf="load" value="${r.load==null?'':r.load}"></td>
       <td class="lm-red"><input type="checkbox" data-lf="reducible"${r.reducible?' checked':''}
           title="Live load reduced per code — read from the (R) flag on the drawing"></td>
-      <td class="lm-desc">${esc(r.comments||'')}${r.reducibleFromDrawing?' <span class="lm-chip on" title="(R) printed on the drawing">(R)</span>':''}</td>
+      <td class="lm-desc lm-notes"><input class="lm-txt" data-lnote="${i}" value="${esc(r.comments||'')}" placeholder="notes">${r.reducibleFromDrawing?' <span class="lm-chip on" title="(R) printed on the drawing">(R)</span>':''}</td>
       <td class="lm-del"><button data-ldel="${i}" title="Delete this mark">&times;</button></td>
     </tr>`).join('');
   const sdlRows=S.map((r,i)=>`<tr data-si="${i}">
       <td class="lm-mark"><input class="lm-mk" data-smk="${i}" value="${esc(String(r.mark))}" title="Renaming carries every area tagged with it along."></td>
       <td class="lm-desc"><input class="lm-txt" data-sdesc="${i}" value="${esc(r.desc||'')}" placeholder="description">${handTag(r)}${clashHtml(r,'split')}</td>
       <td><input class="lm-num" data-sf="load" value="${r.load==null?'':r.load}"></td>
-      <td class="lm-desc">${esc(r.comments||'')}</td>
+      <td class="lm-desc lm-notes"><input class="lm-txt" data-snote="${i}" value="${esc(r.comments||'')}" placeholder="notes"></td>
       <td class="lm-del"><button data-sdel="${i}" title="Delete this mark">&times;</button></td>
     </tr>`).join('');
 
@@ -5418,15 +5440,17 @@ function renderSplitTables(){
       <div class="sched-region-head"><b>Live load schedule</b>
         <span class="sched-stat">${state.project.loadsFromDiagrams
           ?'read off the loading diagrams — "reducible at columns" is taken as NOT reduced for the slab'
-          :'reducibility read from the (R) flag'}</span></div>
+          :'reducibility read from the (R) flag'}</span>
+        <button class="btn btn-sm btn-add" id="lmAddLL" title="Add a live-load mark to this table">+ Add a live-load mark</button></div>
       <table class="lm-table"><thead><tr><th>Mark</th><th>Description</th>
         <th>LL<br><span>PSF</span></th><th>Reduced</th><th>Notes</th><th></th></tr></thead>
         <tbody id="lmLLBody">${llRows||'<tr><td colspan="6" class="lm-dim">none yet</td></tr>'}</tbody></table>
     </div>
     <div class="sched-region">
-      <div class="sched-region-head"><b>Superimposed dead load schedule</b></div>
+      <div class="sched-region-head"><b>Superimposed dead load schedule</b>
+        <button class="btn btn-sm btn-add" id="lmAddSDL" title="Add a dead-load mark to this table">+ Add a dead-load mark</button></div>
       <table class="lm-table"><thead><tr><th>Mark</th><th>Description</th>
-        <th>SDL<br><span>PSF</span></th><th>Comments</th><th></th></tr></thead>
+        <th>SDL<br><span>PSF</span></th><th>Notes</th><th></th></tr></thead>
         <tbody id="lmSDLBody">${sdlRows||'<tr><td colspan="5" class="lm-dim">none yet</td></tr>'}</tbody></table>
     </div>
     ${used.size?`<div class="sched-region">
@@ -5437,6 +5461,7 @@ function renderSplitTables(){
     </div>`:''}`;
 
   const body=document.getElementById('lmSplit');
+  {const sc=document.querySelector('.lm-scroll');if(sc)sc.classList.add('split')}   // the combined chart's header has no business over the split tables
   body.querySelectorAll('input[data-lf]').forEach(inp=>{
     inp.addEventListener('change',()=>{
       const i=+inp.closest('tr').dataset.li,f=inp.dataset.lf;
@@ -5461,6 +5486,17 @@ function renderSplitTables(){
       afterConditionChange();
     });
   });
+  body.querySelectorAll('input[data-lnote]').forEach(inp=>inp.addEventListener('change',()=>{
+    const r=llSchedule()[+inp.dataset.lnote];if(!r)return;
+    history.record('Edit note');r.comments=inp.value.trim();persist();
+  }));
+  body.querySelectorAll('input[data-snote]').forEach(inp=>inp.addEventListener('change',()=>{
+    const r=sdlSchedule()[+inp.dataset.snote];if(!r)return;
+    history.record('Edit note');r.comments=inp.value.trim();persist();
+  }));
+  // UI-38: the Add buttons sit at the top of their own tables
+  {const al=body.querySelector('#lmAddLL');if(al)al.addEventListener('click',()=>addSplitMark('ll'));
+   const as=body.querySelector('#lmAddSDL');if(as)as.addEventListener('click',()=>addSplitMark('sdl'));}
   body.querySelectorAll('input[data-lmk]').forEach(inp=>inp.addEventListener('change',()=>{
     if(!renameMark('ll',+inp.dataset.lmk,inp.value))renderLoadMapTable();
   }));
@@ -7387,6 +7423,21 @@ function levelCapacityReadOnly(l){
     set?`${code?esc(code)+' · ':''}${Math.round(cap)} PSF`:'no typical'}${l.typicalAssumed?' <span class="lm-warn" title="Filled in automatically, not yet confirmed">?</span>':''} <a data-golo="1" title="Set the typical capacity on the Loads step">Loads</a></span>`;
 }
 function bindCapacityLinks(host){(host||document).querySelectorAll('a[data-golo]').forEach(a=>{if(a._golo)return;a._golo=true;a.addEventListener('click',e=>{e.stopPropagation();e.preventDefault();setStep('loads');requestAnimationFrame(()=>{const b=document.getElementById('lmTypical');if(b&&b.scrollIntoView)try{b.scrollIntoView({block:'start'})}catch(_){}})})})}
+// the mark pickers as bare cells for the typical-capacity grid (UI-33); the
+// labels live in the header row
+function typicalMarkCells(l,i,shape){
+  if(shape==='split'){
+    const ll=llSchedule().map(r=>`<option value="${esc(String(r.mark))}"${l.defLL!=null&&String(l.defLL)===String(r.mark)?' selected':''}>${esc(String(r.mark))}</option>`).join('');
+    const sd=sdlSchedule().map(r=>`<option value="${esc(String(r.mark))}"${l.defSDL!=null&&String(l.defSDL)===String(r.mark)?' selected':''}>${esc(String(r.mark))}</option>`).join('');
+    return `<span class="tb-ctl"><span class="tb-lbl">LL</span><select class="lvl-edit lvl-sel tbl-in" data-li="${i}" data-f="defLL" title="Default live-load mark from the schedule"><option value="">—</option>${ll}</select></span>`
+         +`<span class="tb-ctl"><span class="tb-lbl">DL</span><select class="lvl-edit lvl-sel tbl-in" data-li="${i}" data-f="defSDL" title="Default superimposed dead-load mark"><option value="">—</option>${sd}</select></span>`;
+  }
+  if(shape==='combined'){
+    const m=getConditions().filter(c=>!isConcOnly(c)).map(c=>`<option value="${esc(String(c.mark))}"${l.defMark!=null&&sameMark(l.defMark,c.mark)?' selected':''}>#${esc(String(c.mark))}</option>`).join('');
+    return `<span class="tb-ctl"><span class="tb-lbl">mark</span><select class="lvl-edit lvl-sel tbl-in" data-li="${i}" data-f="defMark" title="Default loading mark from the load map"><option value="">—</option>${m}</select></span>`;
+  }
+  return '';
+}
 function levelCapacityControl(l,i){
   const shape=scheduleShape();
   const psf=`<label class="lvl-edit-wrap" title="Default capacity (PSF) — used wherever no tagged area covers this floor"><input class="lvl-edit" data-li="${i}" data-f="cap" value="${l.defaultCapacity>0&&l.defLL==null&&l.defMark==null?l.defaultCapacity:''}" placeholder="PSF"></label>`;

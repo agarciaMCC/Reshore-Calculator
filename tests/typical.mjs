@@ -145,7 +145,7 @@ const edited = await page.evaluate(() => {
   inp.value = '175';
   inp.dispatchEvent(new Event('change', { bubbles: true }));
   const after = { cap: levelDefaultCapacity(state.levels[1]), depth: history.depth(),
-    shown: document.querySelector('#lmTypical .typ-brow[data-tli="1"] .tb-psf').textContent.trim() };
+    shown: (() => { const r = document.querySelector('#lmTypical .typ-brow[data-tli="1"]'); const sp = r.querySelector('.tb-psf'), inp = r.querySelector('.lvl-edit[data-f="cap"]'); return sp ? sp.textContent.trim() : inp ? inp.value + ' PSF' : ''; })() };
   history.undo();
   return { landed, before, after, undone: levelDefaultCapacity(state.levels[1]) };
 });
