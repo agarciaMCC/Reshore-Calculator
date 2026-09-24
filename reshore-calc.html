@@ -676,8 +676,16 @@ input[readonly],input.derived{background:var(--derived-bg);color:var(--text-seco
 .lc-row{display:flex;align-items:center;gap:8px;margin:8px 0 4px;flex-wrap:wrap;font-size:var(--fs-md)}
 .lc-row .btn-wide{flex:1 1 auto}
 .btn-quiet{opacity:.75}
-.ed-list{margin:6px 0}
-.ed-row{display:grid;grid-template-columns:minmax(120px,1fr) minmax(120px,1.2fr) auto;gap:4px 10px;align-items:center;padding:6px 8px;margin:3px 0;border-radius:4px;border-left:3px solid var(--warn);background:var(--surface);cursor:pointer;font-size:var(--fs-md)}
+.ed-list{margin:6px 0;--cols:minmax(110px,.9fr) minmax(140px,1.4fr) auto}
+.ed-list .tbl-head{padding-left:8px;padding-right:8px}
+.ed-row{padding:6px 8px;margin:3px 0;border-radius:4px;border-left:3px solid var(--warn);background:var(--surface-raised);font-size:var(--fs-md);row-gap:4px}
+.ed-row.reviewing{border-color:rgb(0,170,200);box-shadow:0 0 0 1px rgb(0,170,200) inset}
+.ed-row .ed-adjust{grid-column:1/-1;display:flex;flex-direction:column;gap:6px;padding:6px 0 2px;font-size:var(--fs-sm);color:var(--text-secondary)}
+.ed-row .ed-adjust #propsHead{display:none}
+.ed-row .ed-adjust #propsContent{padding:0}
+.ed-row .ed-adjust .props-grid,.ed-row .ed-adjust .sb-empty{display:none}
+.ed-acts .btn.on{border-color:var(--accent);color:var(--accent)}
+.pb-count{font-family:var(--font-mono);font-size:var(--fs-sm);color:var(--text-secondary);white-space:nowrap}
 .ed-row.drawn{border-left-color:var(--accent)}
 .ed-row.ok{border-left-color:var(--safe)}
 .ed-row.here{box-shadow:0 0 0 1px var(--accent) inset}
@@ -6230,6 +6238,8 @@ function handleClick(e,s){
   if(typeof edgeCandActive==='function'&&edgeCandActive()){
     const ci=edgeCandAt(cp);
     if(ci>=0){
+      // in the queue the outline on the plan IS the one being asked about: a click on it confirms (UI-35)
+      if(edgeProposal.queue){edgeQueueConfirm();return}
       if(ci===edgeProposal.sel)acceptDetectFloorEdge();
       else selectEdgeCand(ci);
       return;
@@ -6424,6 +6434,10 @@ function escapeOnce(e){
   if(typeof matchProposal!=='undefined'&&matchProposal){matchProposal=null;
     if(typeof renderMatchPanel==='function')renderMatchPanel();renderCanvas();return 'matchproposal'}
   if(typeof autoTrace!=='undefined'&&autoTrace){cancelAutoTrace();return 'autotrace'}
+  if(typeof edgeQueue!=='undefined'&&edgeQueue){
+    if(edgeQueue.mode==='draw'&&state.drawing.points.length){state.drawing.points=[];renderCanvas();return 'polygon'}
+    edgeDraw=null;if(state.tool==='polygon')setTool('select');
+    edgeQueueClose();return 'edgequeue'}
   if(typeof edgeProposal!=='undefined'&&edgeProposal){cancelDetectFloorEdge();return 'edge'}
   // the whole-set edge review peels the same way: the outline drawn over the
   // sheet first, then the review itself
@@ -6467,6 +6481,15 @@ document.addEventListener('keydown',e=>{
 
   // the candidates cycle on the arrows and accept on Enter, so the whole
   // pick can be done without leaving the drawing
+  // the floor-edge queue: Enter confirms, A adjusts, T tries the next outline, N skips (UI-35)
+  if(typeof edgeQueueActive==='function'&&edgeQueueActive()){
+    const m=edgeQueue.mode;
+    if(e.key==='Enter'&&m==='pick'){e.preventDefault();edgeQueueConfirm();return}
+    if(e.key==='Enter'&&m==='adjust'){e.preventDefault();edgeQueueDone();return}
+    if((e.key==='a'||e.key==='A')&&m==='pick'){e.preventDefault();edgeQueueAdjust();return}
+    if((e.key==='t'||e.key==='T')&&m==='pick'){e.preventDefault();edgeQueueTryNext();return}
+    if((e.key==='n'||e.key==='N')&&m!=='draw'){e.preventDefault();edgeQueueSkip();return}
+  }
   if(typeof edgeCandActive==='function'&&edgeCandActive()){
     if(e.key==='ArrowRight'||e.key==='ArrowDown'){e.preventDefault();stepEdgeCand(1);return}
     if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();stepEdgeCand(-1);return}
@@ -6757,6 +6780,12 @@ function finishPolygon(){
     // "drawn" and waits for Confirm
     if(kind==='edge'&&typeof edgeDraw!=='undefined'&&edgeDraw){
       edgeDraw=null;setTool('select');refreshFlow();
+      if(typeof edgeQueue!=='undefined'&&edgeQueue&&edgeQueue.mode==='draw'){
+        // UI-35: drawn inside the queue — the bar now offers Done
+        edgeQueue.mode='adjust';renderEdgeSection();renderPendingBar(true);
+        toast('Floor edge drawn — drag a corner if it needs it, then Done in the bar over the plan.',4200);
+        return;
+      }
       toast('Floor edge drawn — adjust a corner if you need to, then Confirm it in the list.',4200);
       return;
     }
@@ -8034,8 +8063,11 @@ function placePropsPanel(){
   // ACCEPT & ADJUST (ARE-11): while the shape just accepted is being adjusted
   // its properties open inside the acceptance card, not at the foot of the
   // pane — going down there is how the wrong Next got pressed
-  const slot=(typeof beamScan!=='undefined'&&beamScan&&beamScan.adjusting&&state.activeZoneIdx!=null)
+  let slot=(typeof beamScan!=='undefined'&&beamScan&&beamScan.adjusting&&state.activeZoneIdx!=null)
     ?document.querySelector('#beamPanel .sq-props'):null;
+  // ADJUST on the Floor edge step (UI-35): the selected edge's corner tools —
+  // Simplify slider, Clean corners, Remove corner — open on its own row
+  if(!slot&&typeof curStep!=='undefined'&&curStep==='edge'&&state.activeZoneIdx!=null)slot=document.querySelector('#edgeRows .ed-adjust');
   const row=(!slot&&list&&state.activeZoneIdx!=null&&!autoTraceEditing())
     ?list.querySelector('.sb-item[data-zone="'+state.activeZoneIdx+'"]'):null;
   head.classList.toggle('inline',!!row||!!slot);
@@ -11220,7 +11252,7 @@ async function edgeAdjust(li,pg){
   setTool('select');
   zoomToPolygon(z.polygon);
   renderSidebar();renderCanvas();renderEdgeSection();
-  toast('Drag a corner to move it, Shift+click a corner to remove it, Alt+click an edge to add one. Confirm when it follows the slab.',5200);
+  toast('Drag a corner to move it · Shift+click a corner, or Shift+drag through corners, removes them · Alt+click a line adds one. The corner tools are on its row.',5200);
 }
 async function edgeClean(li,pg){
   await edgeAdjust(li,pg);
@@ -11275,6 +11307,8 @@ function edgeEditedActive(){const z=typeof getActiveZone==='function'?getActiveZ
 function renderEdgeSection(){
   const host=document.getElementById('edgeRows');
   if(!host)return;
+  // the corner tools may be sitting on a row (UI-35): take them home before the rows are rebuilt
+  if(host.querySelector('#propsContent')&&typeof detachPropsPanel==='function')detachPropsPanel();
   const bl=stepBlockers('edge');
   if(bl.length){host.innerHTML=`<p class="step-help dim">${esc(blockedText(bl))}.</p>`;return}
   const rows=planSheetRows();
@@ -11284,97 +11318,126 @@ function renderEdgeSection(){
   const readOf=r=>(typeof edgeSweepRowAt==='function'?edgeSweepRowAt(r.levelIdx,r.page):null);
   const pending=rows.map(readOf).filter(x=>x&&x.polygon);
   const nProp=pending.filter(x=>x.had).length;
+  // THE EDGE ROWS (UI-33 / UI-35): Level · sheet · state · actions on the
+  // shared grid. The on-grade tick is gone from here (it is the SOG box on
+  // the Levels list); Clean corners is folded into Adjust (the corner tools
+  // open on the row); Pick from the sheet is gone (the queue offers "Try the
+  // next outline"); Redo reads this one sheet again and walks it.
+  const qRow=typeof edgeQueueRow==='function'?edgeQueueRow():null;
+  const qMode=edgeQueue?edgeQueue.mode:null;
   const row=r=>{
     const lv=state.levels[r.levelIdx];
     const here=r.page===state.pdf.current;
     const drawing=edgeDraw&&edgeDraw.page===r.page&&edgeDraw.levelIdx===r.levelIdx;
-    const who=`<b>${esc(r.name)}</b>${r.zone?` · ${esc(r.zone)}`:''} <span class="lm-dim">sheet ${r.page}</span>`;
+    const inQ=!!(qRow&&qRow.levelIdx===r.levelIdx&&qRow.page===r.page);
+    const who=`<b>${esc(r.name)}</b>${r.zone?` · ${esc(r.zone)}`:''}<span class="lm-dim"> sheet ${r.page}</span>${lv&&levelOnGrade(lv)?' <span class="lm-dim" title="Slab on grade — set on the Levels list">SOG</span>':''}`;
     const sw=readOf(r);
     const key=`${r.levelIdx}:${r.page}`;
-    // a floor on grade absorbs whatever reaches it and is asked for no
-    // capacity; the tick is here because this is where the floor's extent is
-    // settled, and it is the whole floor's flag even on a split floor
-    const onG=!!(lv&&levelOnGrade(lv));
-    const grade=(lv&&!isRange(lv))?`<label class="ed-grade${onG?' on':''}" title="${esc(onG?(lv.gradeAssumed?'Taken as slab on grade because it is the bottom of the stack \u2014 clear this if it is not':'Slab on grade: it absorbs whatever load reaches it, nothing is shored below it, and it is asked for no capacity'):'Tick if this floor is slab on grade \u2014 it then absorbs whatever reaches it and needs no capacity')}"><input type="checkbox" data-edgrade="${key}"${onG?' checked':''}> on grade${onG&&lv.gradeAssumed?' <span class="lm-dim">(assumed)</span>':''}</label>`:'';
-    // a sheet still being read, or one the sweep could not read
     const waiting=sw&&!sw.polygon&&!sw.err;
     const readErr=sw&&!sw.polygon&&sw.err?sw.err:null;
     const errNote=readErr?` · <span class="lm-warn">could not be read — ${esc(readErr)}</span>`:'';
-    const redo=sw&&!sw.polygon?`<button class="btn btn-sm" data-esredo="${key}" title="Read this sheet again">Redetect</button>`:'';
+    const redo=`<button class="btn btn-sm" data-esredo="${key}" title="Read this sheet again and review the outline">Redo</button>`;
+    // the edge selected for corner work opens its tools right here (Adjust)
+    const adjusting=r.edge&&curStep==='edge'&&state.activeLevelIdx===r.levelIdx&&zonesOf(lv,'slab')[state.activeZoneIdx]===r.edge;
     let st,acts;
-    if(waiting){st=`<span class="lm-dim">reading this sheet…</span>`;acts=''}
-    else if(sw&&sw.polygon){
-      // ── A READ, ON ITS OWN ROW ── nothing is written until Use this
-      const showing=edgeSweep&&edgeSweep.sel===edgeSweepIdx(r.levelIdx,r.page);
+    if(inQ&&qMode==='pick'&&sw&&sw.polygon){st=`<span class="lm-warn">reviewing</span> · in the bar over the plan`;acts=''}
+    else if(inQ&&qMode==='draw'){st=`<span class="lm-warn">drawing — click the corners on the plan</span>`;acts=''}
+    else if(waiting){st=`<span class="lm-dim">reading this sheet…</span>`;acts=''}
+    else if(sw&&sw.polygon&&!r.edge){
+      // ── A READ, NOT YET REVIEWED ── nothing is written until Confirm
       const what=esc(`${sw.corners} corners${sw.areaSF!=null?` · ${fmtArea(sw.areaSF)}`:''}`);
-      const why=(sw.notes&&sw.notes.length)?` · <span class="lm-warn">${sw.notes.map(esc).join(' · ')}</span>`:'';
-      st=(sw.had?`<span class="lm-warn">proposed</span> · ${what} · ${edgeChangeText(sw)}`
-                :`<span class="lm-warn">read from the sheet</span> · ${what}`)+why;
-      acts=`<button class="btn btn-sm" data-esuse="${key}" title="${sw.had?'Replace the floor edge on this sheet with this outline':'Draw this outline as the floor edge on this sheet'}">Use this</button>`
-          +`<button class="btn btn-sm" data-esshow="${key}" title="Draw it over its own sheet, with the edge it would replace beside it in grey">${showing?'Showing':'Show'}</button>`
-          +`<button class="btn btn-sm" data-espick="${key}" title="Read the sheet again and pick from the outlines yourself">Pick from the sheet</button>`
-          +`<button class="btn btn-sm" data-esdrop="${key}" title="${sw.had?'Leave the floor edge on this sheet as it is':'Leave this sheet without a floor edge for now'}">${sw.had?'Keep current':'Dismiss'}</button>`;
+      const why=(sw.verdict&&sw.verdict!=='good'&&sw.why)?` · <span class="lm-warn">${esc(sw.why)}</span>`:'';
+      const notes=(sw.notes&&sw.notes.length)?` · <span class="lm-warn">${sw.notes.map(esc).join(' · ')}</span>`:'';
+      st=`<span class="lm-warn">read from the sheet</span> · ${what}${why}${notes}`;
+      acts=`<button class="btn btn-sm btn-go" data-esreview="${key}" title="Look at it on the plan: Confirm, Adjust, Try the next outline or Draw by hand">Review</button>`
+          +`<button class="btn btn-sm" data-esdrop="${key}" title="Leave this sheet without a floor edge for now">Dismiss</button>`;
+    }
+    else if(sw&&sw.polygon&&r.edge&&sw.had){
+      const what=esc(`${sw.corners} corners${sw.areaSF!=null?` · ${fmtArea(sw.areaSF)}`:''}`);
+      st=`<span class="lm-warn">re-read</span> · ${what} · ${edgeChangeText(sw)}${(sw.notes&&sw.notes.length)?` · <span class="lm-warn">${sw.notes.map(esc).join(' · ')}</span>`:''}`;
+      acts=`<button class="btn btn-sm btn-go" data-esreview="${key}" title="Look at the re-read on the plan and decide">Review</button>`
+          +`<button class="btn btn-sm" data-esdrop="${key}" title="Leave the floor edge on this sheet as it is">Keep current</button>`;
     }
     else if(drawing){st=`<span class="lm-warn">drawing — click the corners on the plan</span>`;
-      acts=`<button class="btn btn-sm" data-edcancel="${r.levelIdx}:${r.page}">Stop drawing</button>`}
+      acts=`<button class="btn btn-sm" data-edcancel="${key}">Stop drawing</button>`}
     else if(!r.edge){st=`<span class="lm-warn">no floor edge yet</span>`+errNote;
-      acts=`<button class="btn btn-sm" data-edpick="${r.levelIdx}:${r.page}" title="Read the outlines on this sheet and pick the one that is the slab edge">Pick from the sheet</button>`
-          +`<button class="btn btn-sm" data-eddraw="${r.levelIdx}:${r.page}" title="Click the corners of the slab edge yourself">Draw by hand</button>`+redo}
+      acts=`<button class="btn btn-sm" data-eddraw="${key}" title="Click the corners of the slab edge yourself">Draw by hand</button>`+redo}
     else if(!r.confirmed){st=`drawn · ${esc(edgeAreaText(lv,r.page,r.edge))}${r.edge.detected?'':' · by hand'}`+errNote;
-      acts=`<button class="btn btn-sm btn-go" data-edok="${r.levelIdx}:${r.page}" title="This outline is the slab edge on this sheet">Confirm</button>`
-          +`<button class="btn btn-sm" data-edadj="${r.levelIdx}:${r.page}" title="Select it on the plan to drag its corners">Adjust</button>`
-          +`<button class="btn btn-sm" data-edclean="${r.levelIdx}:${r.page}" title="Rebuild the corners onto the drafted lines">Clean corners</button>`
-          +`<button class="btn btn-sm" data-edpick="${r.levelIdx}:${r.page}" title="Read the sheet again and pick another outline">Pick again</button>`
-          +`<button class="btn btn-sm" data-edrm="${r.levelIdx}:${r.page}" title="Remove this floor edge">Remove</button>`+redo}
+      acts=`<button class="btn btn-sm btn-go" data-edok="${key}" title="This outline is the slab edge on this sheet">Confirm</button>`
+          +`<button class="btn btn-sm${adjusting?' on':''}" data-edadj="${key}" title="Select it on the plan to drag its corners; the corner tools open here">Adjust</button>`
+          +redo
+          +`<button class="btn btn-sm" data-edrm="${key}" title="Remove this floor edge">Remove</button>`}
     else{st=`<span class="ep-ok">✓ confirmed</span> · ${esc(edgeAreaText(lv,r.page,r.edge))}`+errNote;
-      acts=`<button class="btn btn-sm" data-edadj="${r.levelIdx}:${r.page}" title="Select it on the plan; any change reopens it">Adjust</button>`
-          +`<button class="btn btn-sm" data-edredo="${r.levelIdx}:${r.page}" title="Read the sheet again and pick another outline">Redo</button>`+redo}
-    return `<div class="ed-row${r.confirmed?' ok':(r.edge?' drawn':'')}${here?' here':''}" data-edgo="${r.levelIdx}:${r.page}">
-      <span class="ed-who">${who}</span><span class="ed-st">${st}</span><span class="ed-acts">${grade}${acts}</span></div>`;
+      acts=`<button class="btn btn-sm${adjusting?' on':''}" data-edadj="${key}" title="Select it on the plan; any change reopens it">Adjust</button>`+redo}
+    return `<div class="tbl-row ed-row${r.confirmed?' ok':(r.edge?' drawn':'')}${here?' here':''}${inQ?' reviewing':''}" data-edgo="${key}">
+      <span class="ed-who">${who}</span><span class="ed-st">${st}</span><span class="ed-acts">${acts}</span>${adjusting?`<div class="ed-adjust" data-edslot="${key}"></div>`:''}</div>`;
   };
-  host.innerHTML=`<p class="step-help">The floor edge is where the slab stops on each plan sheet. Everything the Areas step reads off a sheet — beams, openings, thickened slabs, loading areas — is looked for <b>inside</b> it, so nothing is picked up from a key plan, a detail or the title block. <b>Pick from the sheet</b> offers the outlines found on the sheet for you to choose from; adjust the corners if you need to, then <b>Confirm</b>.</p>
+  const inQueue=typeof edgeQueueActive==='function'&&edgeQueueActive();
+  const good=pending.filter(x=>x.verdict==='good'&&!x.had).length;
+  host.innerHTML=`<p class="step-help">The floor edge is where the slab stops on each plan sheet. Everything the Areas step reads off a sheet — beams, openings, thickened slabs, loading areas — is looked for <b>inside</b> it, so nothing is picked up from a key plan, a detail or the title block. The sheets are read when you arrive here and walked from the bottom floor up in the bar over the plan: <b>Confirm</b> the cyan outline, <b>Adjust</b> its corners, <b>Try the next outline</b>, or <b>Draw by hand</b>.</p>
     <div class="primary-act">
       ${busy?`<button class="btn btn-sm btn-wide" disabled>Reading sheet ${(edgeSweep.done||0)+1} of ${edgeSweep.rows.length}…</button>`
+        :inQueue?`<span class="lm-dim">Reviewing sheet ${edgeQueue.i+1} of ${edgeQueue.rows.length} — in the bar over the plan.</span>${good>1?` <button class="btn btn-sm" id="edgeConfirmGood" title="Write and confirm every read the detector rates good, and walk only the rest">Confirm all ${good} good reads</button>`:''}`
+        :(pending.length?`<button class="btn btn-sm btn-wide btn-go" id="edgeReviewAll" title="Walk the sheets from the bottom floor up, each read outline in the bar over the plan">Review ${pending.length} read${pending.length===1?'':'s'} from the bottom floor up</button>`
         :(drawn?`<button class="btn btn-sm btn-wide btn-go" id="edgeConfirmAll" title="Confirm every edge that is drawn but not yet confirmed">Confirm all ${drawn} drawn</button>`
-        // the doubtful reads are last, deliberately: the confident outlines are
-        // already drawn and want confirming, and a read the app is unsure of is
-        // one to look at, not to take in bulk
-        :(pending.length?`<button class="btn btn-sm btn-wide btn-primary" id="edgeUseAll" title="Draw every outline read from the sheets — each lands on its own row to look at and confirm">Use all ${pending.length} ${nProp===pending.length?'proposed':'read'}</button>`
-        :(none&&none===rows.length?`<span class="lm-dim">The plan sheets are read when you arrive here; the confident outlines are drawn below for you to confirm.</span>`:'')))}
+        :(none&&none===rows.length?`<span class="lm-dim">The plan sheets are read when you arrive here and walked one by one in the bar over the plan.</span>`:'')))}
     </div>
-    <div class="ed-list">${rows.map(row).join('')}</div>
-    ${byHandHtml('edge',`<button class="btn btn-sm btn-wide" id="edgeDetectAll"${busy?' disabled':''} title="Read every plan sheet again and review the outlines together">${busy?'Reading…':(none===rows.length?'Detect the floor edge on every sheet':'Detect again on every sheet')}</button><span class="lm-dim">Each row has <b>Draw by hand</b>, <b>Adjust</b> and <b>Pick again</b> for one sheet at a time.</span>`,'or detect again / draw by hand')}`;
+    <div class="ed-list"><div class="tbl-head"><span>Level · sheet</span><span>Floor edge</span><span></span></div>${rows.map(row).join('')}</div>
+    ${byHandHtml('edge',`<div class="lm-acts"><button class="btn btn-sm" id="edgeDetectThis"${busy||!rows.some(r=>r.page===state.pdf.current)?' disabled':''} title="Read the sheet on screen again and review its outline">Detect again on this sheet</button><button class="btn btn-sm" id="edgeDetectAll"${busy?' disabled':''} title="Read every plan sheet again and walk them from the bottom floor up">${busy?'Reading…':'Detect again on every sheet'}</button></div><span class="lm-dim">Each row has <b>Draw by hand</b>, <b>Adjust</b> and <b>Redo</b> for one sheet at a time.</span>`,'or detect again / draw by hand')}`;
   bindByHand(host);
   const pair=v=>{const [a,b]=String(v).split(':');return[+a,+b]};
   const on=(sel,fn)=>host.querySelectorAll(sel).forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();const k=Object.keys(b.dataset)[0];fn(...pair(b.dataset[k]))}));
-  on('button[data-edpick]',(li,pg)=>edgePick(li,pg));
   on('button[data-eddraw]',(li,pg)=>edgeDrawStart(li,pg));
   on('button[data-edadj]',(li,pg)=>edgeAdjust(li,pg));
-  on('button[data-edclean]',(li,pg)=>edgeClean(li,pg));
   on('button[data-edok]',(li,pg)=>edgeConfirm(li,pg));
-  on('button[data-edredo]',(li,pg)=>edgeRedo(li,pg));
   on('button[data-edrm]',(li,pg)=>edgeRemove(li,pg));
   on('button[data-edcancel]',()=>{edgeDraw=null;state.drawing.points=[];setTool('select');renderCanvas();renderEdgeSection()});
-  on('button[data-esuse]',(li,pg)=>edgeSweepUse(li,pg));
-  on('button[data-esshow]',(li,pg)=>edgeSweepShow(li,pg));
+  on('button[data-esreview]',(li,pg)=>{const r=edgeSweepRowAt(li,pg);if(r)edgeQueueStart(edgeSweep.rows.filter(x=>x.polygon||x.err),r)});
   on('button[data-esdrop]',(li,pg)=>edgeSweepDrop(li,pg));
-  on('button[data-esredo]',(li,pg)=>edgeSweepRedetect(li,pg));
-  on('button[data-espick]',(li,pg)=>{edgeSweepForget(li,pg);edgePick(li,pg)});
-  host.querySelectorAll('input[data-edgrade]').forEach(c=>c.addEventListener('click',e=>{
-    e.stopPropagation();
-    edgeGradeToggle(+String(c.dataset.edgrade).split(':')[0]);
-  }));
+  on('button[data-esredo]',(li,pg)=>edgeDetectAgain(li,pg));
   host.querySelectorAll('.ed-row').forEach(el=>el.addEventListener('click',ev=>{
-    if(ev.target.closest('button'))return;
+    if(ev.target.closest('button,input,select,.ed-adjust'))return;
     const [li,pg]=pair(el.dataset.edgo);
     edgeGo(li,pg).then(()=>{renderSidebar();renderCanvas();renderPageBar();renderEdgeSection()});
   }));
   const da=host.querySelector('#edgeDetectAll');
-  if(da)da.addEventListener('click',async()=>{edgeProposal=null;renderEdgePanel();await runEdgeSweep();renderEdgeSection()});
+  if(da)da.addEventListener('click',()=>edgeDetectAgain());
+  const dt=host.querySelector('#edgeDetectThis');
+  if(dt)dt.addEventListener('click',()=>{const r=rows.find(x=>x.page===state.pdf.current&&x.levelIdx===state.activeLevelIdx)||rows.find(x=>x.page===state.pdf.current);if(r)edgeDetectAgain(r.levelIdx,r.page)});
   const ca=host.querySelector('#edgeConfirmAll');
   if(ca)ca.addEventListener('click',edgeConfirmAll);
-  const ua=host.querySelector('#edgeUseAll');
-  if(ua)ua.addEventListener('click',edgeSweepUseAll);
+  const ra=host.querySelector('#edgeReviewAll');
+  if(ra)ra.addEventListener('click',()=>edgeQueueStart(edgeSweep?edgeSweep.rows.filter(x=>x.polygon||x.err):[]));
+  const cg=host.querySelector('#edgeConfirmGood');
+  if(cg)cg.addEventListener('click',edgeQueueConfirmGood);
+  placePropsPanel();
+}
+// Confirm every read the detector rates good (and is not replacing an edge),
+// then carry on walking whatever is left
+function edgeQueueConfirmGood(){
+  if(!edgeSweep)return 0;
+  const picks=edgeSweep.rows.filter(r=>r.polygon&&r.verdict==='good'&&!r.had);
+  if(!picks.length){toast('No read is rated good on its own.',2600);return 0}
+  history.record('Confirm floor edges');
+  for(const r of picks){
+    if(!state.levels[r.levelIdx])continue;
+    writeEdgeFromRow(r);
+    const z=edgeOf(state.levels[r.levelIdx],r.page);if(z)z.confirmed=true;
+  }
+  state.results=null;
+  for(const r of picks)edgeSweepForget(r.levelIdx,r.page);
+  persist();refreshFlow();
+  const cur=edgeQueueRow();
+  if(edgeQueue){
+    edgeQueue.rows=edgeQueue.rows.filter(r=>!picks.includes(r));
+    const k=cur?edgeQueue.rows.indexOf(cur):-1;
+    if(k>=0){edgeQueue.i=k;renderEdgeSection();renderPendingBar(true)}
+    else if(edgeQueue.rows.length){edgeQueue.i=-1;edgeQueueNext()}
+    else edgeQueueClose();
+  }else renderEdgeSection();
+  renderSidebar();renderCanvas();
+  toast(`${picks.length} floor edge${picks.length>1?'s':''} confirmed.`,3200);
+  return picks.length;
 }
 
 // ── Which sheet below a sheet stacks on ──
@@ -16714,6 +16777,148 @@ function openByHand(sec){/* UI-31: nothing is folded any more */}
 // sheet, draws the confident outlines for Confirm / Adjust, and leaves the
 // doubtful ones in the review to pick from. Once per set of sheets.
 let edgeAutoKey=null;
+// ════════════════════════════════════════════════════════════
+//  THE FLOOR EDGE IS A QUEUE  (UI-35, Adolfo Sep 23 2026)
+//
+//  "I think it may be a better flow if the flow was similar to the
+//   auto-detect areas flow where you go through steps to confirm floor
+//   edges. The options would be confirm, adjust, draw by hand. It would be
+//   nice to have it as a menu visible in the PDF viewer window at the top."
+//
+//  The sweep reads every plan sheet; then the sheets are walked from the
+//  BOTTOM floor up, each fitted to the window with its read outline in cyan
+//  and one bar over the plan: Confirm · Adjust · Try the next outline · Draw
+//  by hand · Skip. Nothing is written until Confirm (or Adjust / Draw, which
+//  write an unconfirmed edge that Done confirms). Closing the bar keeps the
+//  reads on their rows for later.
+// ════════════════════════════════════════════════════════════
+let edgeQueue=null;   // {rows:[sweep rows], i, mode:'pick'|'adjust'|'draw'}
+function edgeQueueOrder(rows){
+  const el=r=>{const l=state.levels[r.levelIdx];return l&&l.elevation!=null?l.elevation:-1e9};
+  return rows.slice().sort((a,b)=>el(a)-el(b)||a.page-b.page);
+}
+function edgeQueueActive(){return !!edgeQueue&&edgeQueue.i>=0&&edgeQueue.i<edgeQueue.rows.length}
+function edgeQueueRow(){return edgeQueueActive()?edgeQueue.rows[edgeQueue.i]:null}
+function edgeQueueStart(rows,startAt){
+  const list=edgeQueueOrder((rows||[]).filter(r=>r&&(r.polygon||r.err)));
+  if(!list.length)return false;
+  edgeQueue={rows:list,i:-1,mode:null};
+  let i=0;
+  if(startAt){const k=list.findIndex(r=>r.levelIdx===startAt.levelIdx&&r.page===startAt.page);if(k>=0)i=k}
+  edgeQueueShow(i);
+  return true;
+}
+async function edgeQueueShow(i){
+  if(!edgeQueue)return;
+  edgeQueue.i=i;edgeQueue.mode='pick';
+  const r=edgeQueue.rows[i];
+  if(!r){edgeQueueClose();return}
+  const lv=state.levels[r.levelIdx];
+  if(!lv){edgeQueueNext();return}
+  edgeProposal=null;
+  await edgeGo(r.levelIdx,r.page);
+  setLayer('slab');setTool('select');
+  fitView();
+  if(r.polygon&&r.cands&&r.cands.length){
+    const k=r.candIdx||0,c=r.cands[k];
+    edgeProposal={levelIdx:r.levelIdx,page:r.page,cands:r.cands,sel:k,polygon:c.polygon,areaSF:c.areaSF,
+                  notes:c.notes||r.notes||[],ms:r.ms,existing:levelEdges(lv).filter(z=>zonePage(lv,z)===r.page).length,queue:true};
+  }
+  renderEdgePanel();renderEdgeSection();renderSidebar();renderCanvas();renderPendingBar(true);
+}
+function edgeQueueNext(){
+  if(!edgeQueue)return;
+  edgeProposal=null;
+  const n=edgeQueue.rows.length;
+  let i=edgeQueue.i+1;
+  // a sheet confirmed in the meantime (Confirm all, say) needs no visit
+  while(i<n){const r=edgeQueue.rows[i];const lv=state.levels[r.levelIdx];const z=lv?edgeOf(lv,r.page):null;if(z&&z.confirmed&&!r.had)i++;else break}
+  if(i>=n){
+    const done=n;
+    edgeQueueClose();
+    toast(`That was the last sheet — ${done} floor edge${done===1?'':'s'} reviewed.`,3600);
+    return;
+  }
+  edgeQueueShow(i);
+}
+function edgeQueueClose(){
+  edgeQueue=null;edgeProposal=null;
+  if(edgeSweep)edgeSweep.sel=-1;
+  renderEdgePanel();renderEdgeSection();renderCanvas();renderPendingBar(true);
+}
+// Try the next outline: the runner-up the detector found on this sheet
+function edgeQueueTryNext(){
+  const r=edgeQueueRow();if(!r||!r.cands||r.cands.length<2)return;
+  r.candIdx=((r.candIdx||0)+1)%r.cands.length;
+  const c=r.cands[r.candIdx];
+  r.polygon=c.polygon;r.areaSF=c.areaSF;
+  if(edgeProposal){edgeProposal.sel=r.candIdx;edgeProposal.polygon=c.polygon;edgeProposal.areaSF=c.areaSF;edgeProposal.notes=c.notes||[]}
+  renderEdgeSection();renderCanvas();renderPendingBar(true);
+}
+// Confirm: write the outline on the sheet as its floor edge, confirmed, and move on
+function edgeQueueConfirm(){
+  const r=edgeQueueRow();if(!r)return;
+  if(!r.polygon){toast('Nothing was read on this sheet — draw it by hand or skip it.',3200);return}
+  history.record('Confirm floor edge');
+  writeEdgeFromRow(r);
+  const lv=state.levels[r.levelIdx];const z=edgeOf(lv,r.page);if(z)z.confirmed=true;
+  state.results=null;
+  edgeSweepForget(r.levelIdx,r.page);
+  persist();refreshFlow();
+  edgeQueueNext();
+}
+// Adjust: write it unconfirmed, select it for corner work; Done confirms
+function edgeQueueAdjust(){
+  const r=edgeQueueRow();if(!r||!r.polygon)return;
+  history.record('Adjust floor edge');
+  writeEdgeFromRow(r);
+  state.results=null;
+  edgeSweepForget(r.levelIdx,r.page);
+  edgeProposal=null;edgeQueue.mode='adjust';
+  const lv=state.levels[r.levelIdx];const z=edgeOf(lv,r.page);
+  setLayer('slab');state.activeZoneIdx=zonesOf(lv,'slab').indexOf(z);state.ui.vertexIdx=null;setTool('select');
+  persist();refreshFlow();renderSidebar();renderCanvas();renderEdgeSection();renderPendingBar(true);
+}
+// Draw by hand: the drawing tool armed for this sheet; closing the shape lands in Adjust
+async function edgeQueueDraw(){
+  const r=edgeQueueRow();if(!r)return;
+  edgeProposal=null;edgeQueue.mode='draw';
+  await edgeDrawStart(r.levelIdx,r.page);
+  renderPendingBar(true);
+}
+// Done (after Adjust or Draw): confirm what is on the sheet and move on
+function edgeQueueDone(){
+  const r=edgeQueueRow();if(!r)return;
+  const lv=state.levels[r.levelIdx];const z=edgeOf(lv,r.page);
+  if(!z){toast('No floor edge on this sheet yet — draw it, or skip.',3200);return}
+  if(!z.confirmed){history.record('Confirm floor edge');z.confirmed=true;persist();refreshFlow()}
+  state.activeZoneIdx=null;state.ui.vertexIdx=null;
+  edgeQueueNext();
+}
+function edgeQueueSkip(){
+  const r=edgeQueueRow();if(!r)return;
+  if(edgeQueue.mode==='draw'){edgeDraw=null;state.drawing.points=[];setTool('select')}
+  state.activeZoneIdx=null;
+  edgeQueueNext();
+}
+// "Detect again" — this sheet alone, or every sheet — then walk the queue
+async function edgeDetectAgain(li,pg){
+  edgeProposal=null;edgeQueue=null;
+  if(li!=null&&pg!=null){
+    if(!edgeSweep||edgeSweep.running)edgeSweep={rows:[],sel:-1,running:false,done:0};
+    let row=edgeSweepRowAt(li,pg);
+    if(!row){const lv=state.levels[li];row={levelIdx:li,page:pg,name:lv?(isRange(lv)?rangeLabel(lv):lv.name):'',zone:lv?sheetZoneName(lv,pg):''};edgeSweep.rows.push(row)}
+    row.polygon=null;row.err=null;
+    renderEdgeSection();
+    await readEdgeRow(row);
+    if(!edgeSweep)return;
+    edgeQueueStart([row]);
+    return;
+  }
+  const sw=await runEdgeSweep();
+  if(sw)edgeQueueStart(sw.rows);
+  renderEdgeSection();
+}
 async function autoDetectEdges(){
   if(!state.pdf.doc||!state.levels.length)return null;
   if(edgeSweep||(typeof edgeDraw!=='undefined'&&edgeDraw))return null;
@@ -16724,12 +16929,12 @@ async function autoDetectEdges(){
   edgeAutoKey=key;
   const sw=await runEdgeSweep();
   if(!sw)return null;
-  // confident outlines land as drawn, ready to confirm; the doubtful ones
-  // stay in the review to look at and pick from (Sep 14: confident ticked,
-  // doubtful left unticked)
-  const rest=sw.rows.filter(r=>!(r.pick&&r.polygon));
-  if(rest.length<sw.rows.length)applyEdgeSweep();
-  if(rest.length){edgeSweep={rows:rest,sel:-1,running:false,done:rest.length,auto:true};renderEdgeSweepPanel()}
+  // UI-35: nothing is written on arrival. The reads are walked from the
+  // bottom floor up in the queue, each confirmed, adjusted or drawn on its
+  // own sheet. (Supersedes the Sep 21 confident-written / doubtful-listed
+  // split of UI-16.)
+  edgeSweep.auto=true;
+  if(typeof curStep!=='undefined'&&curStep==='edge')edgeQueueStart(sw.rows);
   renderEdgeSection();
   return sw;
 }
@@ -16798,6 +17003,7 @@ function setStep(id){
   if(grp.id==='areas')prefillTypicals();       // never arrive on a floor with a silent 0 PSF
   if(id==='levels')renderLevelList();          // default-capacity pickers follow the schedule
   if(grp.id!=='building'&&typeof edgeDraw!=='undefined'&&edgeDraw)edgeDraw=null;
+  if(id!=='edge'&&typeof edgeQueue!=='undefined'&&edgeQueue){edgeQueue=null;edgeProposal=null;renderPendingBar(true)}
   // MATCHING RUNS ITSELF. Arriving on Match floors with sheets still to match
   // reads every one of them and lays the fits out for review; nothing is
   // written until Apply. (Adolfo, Sep 17 2026: auto-pair by zone, then review.)
@@ -20810,7 +21016,7 @@ function acceptDetectFloorEdge(){
 function renderEdgePanel(){
   const host=document.getElementById('edgePanel');
   if(!host)return;
-  if(!edgeProposal){host.style.display='none';host.innerHTML='';renderPendingBar(true);return}
+  if(!edgeProposal||edgeProposal.queue){host.style.display='none';host.innerHTML='';renderPendingBar(true);return}
   const P=edgeProposal;const lv=state.levels[P.levelIdx];
   host.style.display='';
   // ── THE TOP FEW, NOT ONE ANSWER ──
@@ -20917,6 +21123,38 @@ function stepEdgeCand(d){
 // What is the app waiting for on the plan right now? One answer, used by the
 // ring, the bar and the cursor.
 function pendingAction(){
+  // UI-35: the floor-edge queue owns the bar while it walks the sheets
+  if(typeof edgeQueueActive==='function'&&edgeQueueActive()&&(!state.pdf.pages||edgeQueueRow().page===state.pdf.current)){
+    const Q=edgeQueue,r=edgeQueueRow(),lv=state.levels[r.levelIdx];
+    const who=`${lv?(isRange(lv)?rangeLabel(lv):lv.name):'?'}${r.zone?' · '+r.zone:''} — sheet ${r.page}`;
+    const pos=`${Q.i+1} of ${Q.rows.length}`;
+    if(Q.mode==='adjust')return{id:'edgeq',queue:true,
+      title:`Adjust the floor edge for ${who}`,
+      hint:'Drag a corner to move it · Shift+click a corner, or Shift+drag through corners, removes them · Alt+click a line adds one · the Simplify slider is on its row in the pane',
+      nav:{i:Q.i,n:Q.rows.length,text:pos},
+      actions:[{id:'qdone',label:'Done — confirm it',primary:true},{id:'qskip',label:'Skip'}]};
+    if(Q.mode==='draw')return{id:'edgeq',queue:true,
+      title:`Draw the floor edge for ${who}`,
+      hint:`${state.drawing.points.length} corners placed — double-click or Enter closes it, right-click takes one back`,
+      nav:{i:Q.i,n:Q.rows.length,text:pos},
+      actions:[{id:'qskip',label:'Skip'}]};
+    const nC=r.cands?r.cands.length:0;
+    if(!r.polygon)return{id:'edgeq',queue:true,
+      title:`Floor edge for ${who}`,
+      hint:`could not be read${r.err?' — '+r.err:''}`,
+      nav:{i:Q.i,n:Q.rows.length,text:pos},
+      actions:[{id:'qhand',label:'Draw by hand',primary:true},{id:'qskip',label:'Skip'}]};
+    const what=`${r.polygon.length} corners${r.areaSF!=null?' · '+fmtArea(r.areaSF):''}`;
+    const vd=r.verdict==='good'?'reads well':r.verdict?'look closely':'';
+    const why=r.why&&r.why!==what&&!(r.verdict==='good')?' · '+r.why:'';
+    return{id:'edgeq',queue:true,
+      title:`Floor edge for ${who}`,
+      hint:`the cyan outline is the slab edge as read — ${what}${vd?' · '+vd:''}${why}${(r.notes&&r.notes.length)?' · '+r.notes.join(' · '):''}${r.had?' · replaces the edge already there':''}`,
+      nav:{i:Q.i,n:Q.rows.length,text:pos},
+      actions:[{id:'quse',label:r.had?'Use this one':'Confirm',primary:true},{id:'qadjust',label:'Adjust'}]
+        .concat(nC>1?[{id:'qnext',label:`Try the next outline (${(r.candIdx||0)+1} of ${nC})`}]:[])
+        .concat([{id:'qhand',label:'Draw by hand'},{id:'qskip',label:r.had?'Keep current':'Skip'}])};
+  }
   if(edgeCandActive()){
     const P=edgeProposal,lv=state.levels[P.levelIdx],n=edgeCands().length;
     return{id:'edge',
@@ -20950,11 +21188,13 @@ function renderPendingBar(force){
   pendingKey=key;
   if(wrap)wrap.classList.toggle('armed',!!A);
   if(!A||A.own){bar.classList.remove('visible');bar.innerHTML='';return}
-  const nav=(A.nav&&A.nav.n>1)
+  const nav=A.queue?`<span class="pb-nav pb-count">${esc(A.nav.text)}</span>`
+    :(A.nav&&A.nav.n>1)
     ?`<span class="pb-nav"><button class="pb-step" data-pb="prev" title="Previous outline (←)">‹</button>`
      +`<span>${A.nav.i+1} of ${A.nav.n}</span>`
      +`<button class="pb-step" data-pb="next" title="Next outline (→)">›</button></span>`:'';
-  const sw=(A.id==='edge')?`<span class="pb-sw" style="background:rgb(${edgeCandColor(A.nav.i)})"></span>`:'';
+  const sw=(A.id==='edge')?`<span class="pb-sw" style="background:rgb(${edgeCandColor(A.nav.i)})"></span>`
+    :(A.id==='edgeq'&&edgeQueue.mode==='pick'&&edgeProposal)?`<span class="pb-sw" style="background:rgb(${EDGE_QUEUE_RGB})"></span>`:'';
   const acts=(A.actions||[]).map(a=>`<button class="btn btn-sm${a.primary?' btn-primary':''}" data-pb="${a.id}">${esc(a.label)}</button>`).join('');
   bar.innerHTML=`<span class="pb-title">${sw}${esc(A.title)}</span>`
     +`<span class="pb-hint">${esc(A.hint||'')}</span>${nav}${acts}`
@@ -20966,6 +21206,12 @@ function renderPendingBar(force){
     else if(w==='next')stepEdgeCand(1);
     else if(w==='use')acceptDetectFloorEdge();
     else if(w==='hand'){const P=edgeProposal;cancelDetectFloorEdge();if(P)edgeDrawStart(P.levelIdx,P.page)}
+    else if(w==='quse')edgeQueueConfirm();
+    else if(w==='qadjust')edgeQueueAdjust();
+    else if(w==='qnext')edgeQueueTryNext();
+    else if(w==='qhand')edgeQueueDraw();
+    else if(w==='qdone')edgeQueueDone();
+    else if(w==='qskip')edgeQueueSkip();
     else if(w==='cancel')escapeOnce();
   }));
 }
@@ -20973,9 +21219,25 @@ function renderPendingBar(force){
 // Every candidate on the sheet: the unpicked ones thin and dashed, the
 // hovered one lit, the picked one filled and labelled, each with the number
 // its row carries.
+const EDGE_QUEUE_RGB='0,200,230';   // the proposal in the queue: bright cyan, so it reads over the slab edge lines (UI-35)
 function drawEdgeProposal(zoom,F_MONO){
   const P=edgeProposal;
   if(!P||!edgeCandActive())return;
+  if(P.queue){
+    // one outline, the one being asked about, in cyan; nothing numbered
+    const poly=P.polygon;if(!poly||poly.length<3)return;
+    drawCtx.save();
+    drawCtx.beginPath();drawCtx.moveTo(poly[0].x,poly[0].y);
+    for(let k=1;k<poly.length;k++)drawCtx.lineTo(poly[k].x,poly[k].y);
+    drawCtx.closePath();
+    drawCtx.fillStyle=`rgba(${EDGE_QUEUE_RGB},.10)`;drawCtx.fill();
+    drawCtx.strokeStyle='rgba(255,255,255,.9)';drawCtx.lineWidth=5/zoom;drawCtx.stroke();
+    drawCtx.strokeStyle=`rgba(${EDGE_QUEUE_RGB},.95)`;drawCtx.lineWidth=3/zoom;drawCtx.stroke();
+    drawCtx.fillStyle=`rgba(${EDGE_QUEUE_RGB},1)`;
+    for(const q of poly){drawCtx.beginPath();drawCtx.arc(q.x,q.y,4.5/zoom,0,Math.PI*2);drawCtx.fill()}
+    drawCtx.restore();
+    return;
+  }
   const cands=edgeCands();
   const hov=P.hover!=null?P.hover:-1;
   const order=[];
@@ -21107,6 +21369,11 @@ async function readEdgeRow(row){
   if(!res.ok){row.err=res.reason;row.polygon=null;return row}
   const T=(levelAlignmentFor(lv,row.page)||lv.alignment||{}).transform||null;
   row.polygon=res.polygon;row.corners=res.polygon.length;row.notes=res.notes||[];row.ms=res.ms;
+  // the runner-up outlines too, so the queue can offer "Try the next outline"
+  // without reading the sheet again (UI-35)
+  row.cands=(res.candidates||[{polygon:res.polygon,notes:res.notes,frac:res.frac,why:'heavy lines'}])
+    .map(c=>({...c,areaSF:T?Math.abs(polyAreaFt(transformPolyToBuilding(c.polygon,T))):null}));
+  row.candIdx=0;
   row.matched=!!T;
   Object.assign(row,edgeChangeVs(lv,row.page,res.polygon,T));
   row.areaSF=row.areaAfter;
@@ -21250,6 +21517,7 @@ function renderEdgeSweepPanel(){
 function drawEdgeSweep(zoom,F_MONO){
   const S=edgeSweep;
   if(!S||S.sel<0)return;
+  if(typeof edgeQueueActive==='function'&&edgeQueueActive())return;   // the queue draws its own cyan outline (UI-35)
   const r=S.rows[S.sel];
   if(!r||!r.polygon||(state.pdf.pages&&r.page!==state.pdf.current))return;
   const lv=state.levels[r.levelIdx];

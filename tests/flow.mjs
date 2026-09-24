@@ -40,35 +40,53 @@ await page.evaluate(async b64 => {
 await page.waitForFunction(() => state.levels.length > 0 && sheetRead && sheetRead.size > 0, null, { timeout: 90000 });
 await page.waitForTimeout(1500);
 
-console.log('A. the floor edge reads itself on arrival');
+console.log('A. the floor edge reads itself on arrival and walks the sheets from the bottom up (UI-16 as amended by UI-35)');
 const A0 = await page.evaluate(() => ({ edges: planSheetRows().filter(r => r.edge).length, n: planSheetRows().length, key: edgeAutoKey }));
 ok(A0.n >= 6 && A0.edges === 0 && A0.key === null, 'a fresh set: plan sheets, no edge drawn, nothing swept yet: ' + JSON.stringify(A0));
 // the sweep is mostly synchronous raster work, so the page is busy until it
-// is done — arrive, then wait for it to finish
+// is done — arrive, then wait for it to finish and the queue to open
 await page.evaluate(() => { confirmLevels(); setStep('edge'); });
-await page.waitForFunction(() => edgeAutoKey && !(edgeSweep && edgeSweep.running) && (planSheetRows().some(r => r.edge) || (edgeSweep && edgeSweep.auto)), null, { timeout: 170000, polling: 1000 });
+await page.waitForFunction(() => edgeAutoKey && !(edgeSweep && edgeSweep.running) && typeof edgeQueueActive === 'function' && edgeQueueActive() && edgeProposal && edgeProposal.queue, null, { timeout: 170000, polling: 1000 });
 await page.waitForTimeout(600);
 const A = await page.evaluate(() => {
   const rows = planSheetRows();
-  return { drawn: rows.filter(r => r.edge && !r.confirmed).length, confirmed: rows.filter(r => r.confirmed).length, n: rows.length,
-    detected: rows.filter(r => r.edge).every(r => r.edge.detected),
-    review: edgeSweep ? { auto: !!edgeSweep.auto, rows: edgeSweep.rows.length, picked: edgeSweep.rows.filter(r => r.pick).length,
-      onRows: edgeSweep.rows.every(r => document.querySelector(`#edgeRows button[data-esuse="${r.levelIdx}:${r.page}"], #edgeRows button[data-esredo="${r.levelIdx}:${r.page}"]`) != null),
-      noPanel: (() => { const p = document.getElementById('edgeSweepPanel'); return !p || p.style.display === 'none' })() } : null,
+  const el = r => { const l = state.levels[r.levelIdx]; return l.elevation == null ? -1e9 : l.elevation; };
+  const q = edgeQueue.rows.map(r => ({ page: r.page, el: el(r), read: !!r.polygon }));
+  const bar = document.getElementById('pendingBar');
+  return { drawn: rows.filter(r => r.edge).length, n: rows.length, qn: edgeQueue.rows.length, qi: edgeQueue.i,
+    bottomUp: q.every((r, i) => i === 0 || r.el >= q[i - 1].el), first: q[0], onPage: state.pdf.current === edgeQueue.rows[0].page,
+    fitted: state.drawing.zoom <= 0.5,
+    bar: bar.classList.contains('visible') ? bar.innerText.replace(/\s+/g, ' ') : null,
+    btns: [...bar.querySelectorAll('button[data-pb]')].map(b => b.dataset.pb),
     primary: document.querySelector('#edgeRows .primary-act').textContent.replace(/\s+/g, ' ').trim(),
-    detectBtn: !!document.querySelector('#edgeRows [data-byhand="edge"] #edgeDetectAll'), key: edgeAutoKey };
+    noPanel: (() => { const p = document.getElementById('edgeSweepPanel'); return !p || p.style.display === 'none' })(),
+    candPanelHidden: document.getElementById('edgePanel').style.display === 'none',
+    detectBtn: !!document.querySelector('#edgeRows [data-byhand="edge"] #edgeDetectAll'), detectThis: !!document.querySelector('#edgeRows [data-byhand="edge"] #edgeDetectThis'), key: edgeAutoKey };
 });
 console.log('   ' + JSON.stringify(A));
-ok(A.drawn >= 1 && A.confirmed === 0, 'confident outlines are drawn, none confirmed for him: ' + A.drawn + ' of ' + A.n);
-ok(A.detected, 'and marked as detected, not hand-drawn');
-ok(A.drawn + (A.review ? A.review.rows : 0) === A.n, 'every sheet is either drawn or in the review: ' + JSON.stringify([A.drawn, A.review && A.review.rows, A.n]));
-ok(!A.review || (A.review.auto && A.review.picked === 0 && A.review.onRows && A.review.noPanel),
-  'the doubtful ones stay on their own sheet\'s row, not in a second panel: ' + JSON.stringify(A.review));
-ok(/Confirm all \d+ drawn/.test(A.primary), 'the primary action is Confirm all N drawn: ' + A.primary);
-ok(A.detectBtn, 'Detect again sits in the hand-tools row (UI-31)');
+ok(A.drawn === 0, 'nothing is written on arrival — the reads wait for him: ' + A.drawn + ' drawn of ' + A.n);
+ok(A.qn === A.n && A.qi === 0, 'every sheet is in the queue, starting at the first: ' + JSON.stringify([A.qn, A.n, A.qi]));
+ok(A.bottomUp, 'the queue runs from the bottom floor up');
+ok(A.onPage && A.fitted, 'the first sheet is on screen, fitted to the window: zoom ' + A.fitted);
+ok(A.bar && /Floor edge for/.test(A.bar) && /1 of \d+/.test(A.bar), 'the bar over the plan names the sheet and where it is in the walk: ' + (A.bar || '').slice(0, 90));
+ok(A.btns.includes('quse') && A.btns.includes('qadjust') && A.btns.includes('qhand') && A.btns.includes('qskip'), 'with Confirm · Adjust · Draw by hand · Skip: ' + A.btns.join(','));
+ok(A.noPanel && A.candPanelHidden, 'no second review panel, no candidate list in the pane');
+ok(/Reviewing sheet 1 of/.test(A.primary), 'the primary slot says the review is in the bar: ' + A.primary);
+ok(A.detectBtn && A.detectThis, 'Detect again — this sheet / every sheet — sit in the hand-tools row (UI-31)');
+// Confirm walks on; Escape closes the walk and leaves the reads on their rows
+await page.evaluate(() => edgeQueueConfirm());
+await page.waitForTimeout(500);
+const A1 = await page.evaluate(() => ({ drawn: planSheetRows().filter(r => r.edge && r.confirmed).length, qi: edgeQueue && edgeQueue.i, rowsLeft: edgeSweep ? edgeSweep.rows.length : 0 }));
+ok(A1.drawn === 1 && A1.qi === 1, 'Confirm writes that edge, confirmed, and moves to the next sheet: ' + JSON.stringify(A1));
+await page.keyboard.press('Escape');
+await page.waitForTimeout(200);
+const A2 = await page.evaluate(() => ({ q: !!edgeQueue, reads: document.querySelectorAll('#edgeRows button[data-esreview]').length, primary: document.querySelector('#edgeRows .primary-act').textContent.replace(/\s+/g, ' ').trim() }));
+ok(!A2.q && A2.reads >= 1 && /Review \d+ reads? from the bottom floor up/.test(A2.primary), 'Escape closes the walk; the reads stay on their rows with Review, and the primary reopens the walk: ' + JSON.stringify(A2));
 // once: leaving and coming back does not sweep again
-const A2 = await page.evaluate(async () => { const k = edgeAutoKey; setStep('sheets'); setStep('edge'); await new Promise(r => setTimeout(r, 300)); return { same: edgeAutoKey === k, running: !!(edgeSweep && edgeSweep.running) }; });
-ok(A2.same && !A2.running, 'coming back does not sweep again');
+const A3 = await page.evaluate(async () => { const k = edgeAutoKey; setStep('sheets'); setStep('edge'); await new Promise(r => setTimeout(r, 300)); return { same: edgeAutoKey === k, running: !!(edgeSweep && edgeSweep.running) }; });
+ok(A3.same && !A3.running, 'coming back does not sweep again');
+// confirm the rest the quick way so the later sections have edges to work with
+await page.evaluate(() => { edgeQueueConfirmGood(); if (edgeSweep) { edgeSweep.rows.forEach(r => { if (r.polygon) r.pick = true; }); applyEdgeSweep(); } });
 
 console.log('B. one primary action per section; the hand tools in plain view under it (UI-15 as amended by UI-31, Sep 23 2026)');
 const B = await page.evaluate(() => {

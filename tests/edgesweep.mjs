@@ -98,9 +98,9 @@ ok(read.every(r => r.areaSF > 1000), 'each has an area in square feet, so the sh
 ok(R.every(r => r.had === false), 'none of them replaces anything yet');
 const P = await panel();
 ok(/read from the sheet/.test(P), 'each read sits on its own sheet\'s row: ' + P.slice(0, 110));
-ok(/Use this/.test(P) && /Dismiss/.test(P), 'with Use this and Dismiss on the row');
-ok(/Use all \d read/.test(await page.$eval('#edgeUseAll', b => b.textContent)),
-  'and one primary action counts them: ' + await page.$eval('#edgeUseAll', b => b.textContent));
+ok(/Review/.test(P) && /Dismiss/.test(P), 'with Review and Dismiss on the row (UI-35)');
+ok(/Review \d reads? from the bottom floor up/.test(await page.$eval('#edgeReviewAll', b => b.textContent)),
+  'and one primary action counts them: ' + await page.$eval('#edgeReviewAll', b => b.textContent));
 ok(await page.evaluate(() => !document.getElementById('edgeConfirmAll')), 'Confirm all waits its turn');
 
 // ── C. a doubtful read arrives unticked, with the reason ────────────────
@@ -137,7 +137,7 @@ await page.waitForFunction(i => edgeSweep.sel === i && state.pdf.current === edg
   target, { timeout: 30000 });
 ok(true, 'clicking a row flips to that row\'s own sheet');
 ok(await page.evaluate(i => state.activeLevelIdx === edgeSweep.rows[i].levelIdx, target), 'and makes that floor active');
-ok(/Showing/.test(await panel()), 'the row says it is the one being shown');
+ok(await page.evaluate(i => document.querySelector(`.ed-row[data-edgo="${edgeSweep.rows[i].levelIdx}:${edgeSweep.rows[i].page}"]`).classList.contains('here'), target), 'the row reads as the one on screen');
 // it really draws: count the strokes the overlay lays down
 const drew = await page.evaluate(() => {
   const calls = []; const p = drawCtx.stroke, f = drawCtx.fillText;
@@ -164,7 +164,7 @@ await page.waitForFunction(() => edgeSweep && !edgeSweep.running, null, { timeou
 const want = (await rows()).filter(r => r.pick).length;
 ok(want >= 4, want + ' rows ticked to apply');
 const d0 = await page.evaluate(() => history.depth());
-await page.click('#edgeUseAll');
+await page.evaluate(() => edgeSweepUseAll());   // the engine's bulk write; the UI walks the queue instead (UI-35)
 await page.waitForFunction(() => !edgeSweep || !edgeSweep.rows.some(r => r.polygon), null, { timeout: 10000 });
 const after = await nEdges();
 ok(after.filter(n => n === 1).length === want, `one floor edge on each of the ${want} ticked floors: ` + JSON.stringify(after));
@@ -209,7 +209,7 @@ const one = await rows();
 ok(one.length === 1, 'only the bound sheet is read: ' + JSON.stringify(one.map(r => [r.name, r.page])));
 ok(one[0].had, 'the row knows this floor already has an edge');
 const txt = await panel();
-ok(/proposed/.test(txt), 'the row reads as a proposal against what is there: ' + txt.slice(0, 120));
+ok(/re-read/.test(txt), 'the row reads as a re-read against what is there: ' + txt.slice(txt.indexOf('re-read') - 30, txt.indexOf('re-read') + 60));
 ok(/replaces the current edge/.test(txt), 'and leads with what it does');
 const chg = await page.evaluate(() => edgeChangeText(edgeSweep.rows[0]).replace(/<[^>]*>/g, ''));
 ok(/\d[\d.]*k? SF → \d[\d.]*k? SF/.test(chg), 'the area either side of the change: ' + chg);
@@ -260,8 +260,10 @@ await page.evaluate(() => { edgeSweep.rows[0].polygon = null; edgeSweep.rows[0].
 ok(/could not be read/.test(await panel()), 'a sheet that would not read says so on its row');
 await page.click(`button[data-esredo="${await rowKey(0)}"]`);
 await page.waitForFunction(() => edgeSweep && edgeSweep.rows[0].polygon, null, { timeout: 60000 });
-ok((await rows())[0].corners > 3, 'Redetect reads that sheet again on its own: ' + (await rows())[0].corners + ' corners');
-ok(await page.evaluate(() => edgeSweep.sel === 0), 'and shows what it found');
+ok((await rows())[0].corners > 3, 'Redo reads that sheet again on its own: ' + (await rows())[0].corners + ' corners');
+await page.waitForFunction(() => typeof edgeQueueActive === 'function' && edgeQueueActive() && edgeProposal && edgeProposal.queue, null, { timeout: 10000 }).catch(() => {});
+ok(await page.evaluate(() => edgeQueueActive() && edgeQueueRow() === edgeSweep.rows[0] && edgeProposal && edgeProposal.queue), 'and walks it in the bar over the plan (UI-35): ' + await page.evaluate(() => JSON.stringify({q: !!edgeQueue, i: edgeQueue && edgeQueue.i, same: edgeQueue && edgeQueueRow() === edgeSweep.rows[0], ep: !!edgeProposal, epq: edgeProposal && edgeProposal.queue, cands: edgeSweep.rows[0].cands && edgeSweep.rows[0].cands.length, mode: edgeQueue && edgeQueue.mode})));
+await page.evaluate(() => { edgeQueueClose(); });
 ok(await page.evaluate(() => state.levels.filter(l => levelEdges(l).length).length) === want,
   'while still writing nothing — the job is as Apply left it');
 
@@ -316,10 +318,10 @@ console.log('H. the row is the choice');
     renderEdgeSection();
     return { li, pg, other, op, text: document.getElementById('edgeRows').innerText.replace(/\s+/g, ' ') };
   });
-  ok(/proposed/.test(st.text) && /Keep current/.test(st.text), 'a read on a sheet that has an edge is a proposal: ' + st.text.slice(0, 120));
-  ok(/Use all 2 proposed|Use all 2 read/.test(await page.$eval('#edgeUseAll', b => b.textContent)), 'both are counted at the top');
+  ok(/re-read/.test(st.text) && /Keep current/.test(st.text), 'a read on a sheet that has an edge is a re-read with Keep current: ' + st.text.slice(0, 120));
+  ok(/Review 2 reads/.test(await page.$eval('#edgeReviewAll', b => b.textContent)), 'both are counted at the top');
   const d1 = await page.evaluate(() => history.depth());
-  await page.click(`button[data-esuse="${st.other}:${st.op}"]`);
+  await page.evaluate(([o, op]) => edgeSweepUse(o, op), [st.other, st.op]);
   const used = await page.evaluate(([li, pg, o]) => ({
     wrote: levelEdges(state.levels[o]).length,
     gone: !edgeSweep.rows.some(r => r.levelIdx === o),

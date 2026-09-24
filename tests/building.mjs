@@ -138,22 +138,33 @@ const D0 = await page.evaluate(() => {
 });
 ok(D0.n >= 6, 'one row per plan sheet: ' + D0.n);
 ok(!D0.st.done && /0 of/.test(D0.st.text), 'nothing confirmed yet: ' + D0.st.text);
-ok(/Pick from the sheet/.test(D0.html) && /Draw by hand/.test(D0.html), 'each row offers Pick from the sheet and Draw by hand');
-// pick on the first plan sheet
-await page.evaluate(async r => { await edgePick(r.levelIdx, r.page); }, D0.first);
-await page.waitForFunction(() => edgeProposal && edgeProposal.cands && edgeProposal.cands.length > 0, null, { timeout: 90000 });
+ok(/Draw by hand/.test(D0.html) && /Redo/.test(D0.html) && !/Pick from the sheet/.test(D0.html), 'each row offers Draw by hand and Redo — Pick from the sheet is gone (UI-35)');
+// Redo on the first plan sheet reads it and opens the queue on that one sheet
+await page.evaluate(async r => { await edgeDetectAgain(r.levelIdx, r.page); }, D0.first);
+await page.waitForFunction(() => typeof edgeQueue !== 'undefined' && edgeQueue && edgeQueue.mode === 'pick' && edgeProposal && edgeProposal.queue, null, { timeout: 90000 });
 const D1 = await page.evaluate(() => {
-  const panelIn = document.getElementById('edgePanel').closest('.step-panel').dataset.step;
+  const bar = document.getElementById('pendingBar');
+  const btns = [...bar.querySelectorAll('button[data-pb]')].map(b => b.dataset.pb);
   const n = edgeProposal.cands.length;
-  document.getElementById('edgeAccept').click();
+  const panelHidden = document.getElementById('edgePanel').style.display === 'none';
+  // Adjust writes it unconfirmed and opens the corner tools on the row
+  bar.querySelector('button[data-pb="qadjust"]').click();
   const r = planSheetRows()[0];
-  return { panelIn, n, drawn: !!r.edge, confirmed: r.confirmed, st: stepStatus('edge'),
-    rowTxt: document.getElementById('edgeRows').innerText.replace(/\s+/g, ' ') };
+  return { btns, n, panelHidden, drawn: !!r.edge, confirmed: r.confirmed, st: stepStatus('edge'), mode: edgeQueue && edgeQueue.mode,
+    rowTxt: document.getElementById('edgeRows').innerText.replace(/\s+/g, ' '),
+    tools: !!document.querySelector('#edgeRows .ed-adjust #propSimplify') && !!document.querySelector('#edgeRows .ed-adjust #propCleanCorners'),
+    barNow: document.getElementById('pendingBar').innerText.replace(/\s+/g, ' ') };
 });
-ok(D1.panelIn === 'edge', 'the candidates appear on the Floor edge step: ' + D1.panelIn);
-ok(D1.n >= 1, 'outlines were offered: ' + D1.n);
-ok(D1.drawn && !D1.confirmed, 'accepting one draws it, still unconfirmed');
-ok(/Confirm/.test(D1.rowTxt) && /Adjust/.test(D1.rowTxt) && /Clean corners/.test(D1.rowTxt), 'the row offers Confirm, Adjust and Clean corners');
+ok(D1.btns.includes('quse') && D1.btns.includes('qadjust') && D1.btns.includes('qhand') && D1.btns.includes('qskip'), 'the bar over the plan offers Confirm, Adjust, Draw by hand and Skip: ' + D1.btns.join(','));
+ok(D1.n >= 1 && D1.panelHidden, 'the outline is on the plan, not in a pane list: ' + D1.n + ' candidates');
+ok(D1.drawn && !D1.confirmed && D1.mode === 'adjust', 'Adjust draws it, still unconfirmed, and the queue is in adjust mode');
+ok(/Confirm/.test(D1.rowTxt) && /Adjust/.test(D1.rowTxt) && !/Clean corners.*Clean corners/.test(D1.rowTxt), 'the row offers Confirm and Adjust');
+ok(D1.tools, 'and the corner tools — Simplify slider and Clean corners — open on the row');
+ok(/Done — confirm it/.test(D1.barNow), 'the bar now offers Done: ' + D1.barNow.slice(0, 80));
+await page.evaluate(() => { document.querySelector('#pendingBar button[data-pb="qdone"]').click(); });
+await page.waitForTimeout(200);
+ok(await page.evaluate(() => planSheetRows()[0].confirmed && !edgeQueue), 'Done confirms it and, being the only sheet in the queue, closes the bar');
+await page.evaluate(() => { const r = planSheetRows()[0]; edgeEdited(r.edge); });
 const D2 = await page.evaluate(() => {
   const r = planSheetRows()[0];
   edgeConfirm(r.levelIdx, r.page);

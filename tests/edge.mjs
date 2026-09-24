@@ -63,15 +63,15 @@ console.log('C. UI: propose, cancel with Esc, accept, replace, undo');
 await page.evaluate(() => { edgeAutoKey = planSheetRows().map(r => r.page).join(','); setStep('edge'); state.activeLevelIdx = state.levels.findIndex(l => l.name === '3'); renderEdgeSection(); });
 ok(await page.evaluate(() => GROUPS[0].sections.join(',') === 'drawings,levels,sheets,edge,match'), 'Floor edge is a section of Building, before Match floors');
 ok(await page.evaluate(() => document.getElementById('adEdge').closest('label').hidden), 'and is no longer a tick box on the Areas auto-detect');
-const pickBtn = await page.evaluate(() => {
-  const lv = getActiveLevel(); const b = document.querySelector(`button[data-edpick="${state.activeLevelIdx}:${lv.pdfPage}"]`);
-  return b ? b.textContent : null;
-});
-ok(/Pick from the sheet/.test(pickBtn || ''), 'the floor\'s row offers Pick from the sheet: ' + pickBtn);
-await page.evaluate(() => { const lv = getActiveLevel(); document.querySelector(`button[data-edpick="${state.activeLevelIdx}:${lv.pdfPage}"]`).click(); });
+// UI-35 (Sep 23 2026): the rows no longer offer "Pick from the sheet" — the
+// queue offers "Try the next outline" instead; the candidate engine behind it
+// (startDetectFloorEdge / edgeProposal) is unchanged and is driven directly here
+const rowBtns = await page.evaluate(() => { const lv = getActiveLevel(); const row = document.querySelector(`.ed-row[data-edgo="${state.activeLevelIdx}:${lv.pdfPage}"]`); return row ? [...row.querySelectorAll('button')].map(b => b.textContent.trim()) : null; });
+ok(rowBtns && rowBtns.includes('Draw by hand') && rowBtns.includes('Redo') && !rowBtns.some(t => /Pick/.test(t)), 'the floor\'s row offers Draw by hand and Redo, no Pick: ' + JSON.stringify(rowBtns));
+await page.evaluate(() => startDetectFloorEdge());
 await page.waitForFunction(() => edgeProposal !== null, null, { timeout: 60000 });
 ok(await page.evaluate(() => { const b = document.getElementById('edgeDetectAll'); return !b.disabled && !/Reading/.test(b.textContent) }),
-   'the button that started it is held while it reads and released with the proposal: ' + await page.evaluate(() => document.getElementById('edgeDetectAll').textContent));
+   'the detect button is released with the proposal: ' + await page.evaluate(() => document.getElementById('edgeDetectAll').textContent));
 ok(await page.$eval('#edgePanel', e => e.style.display !== 'none' && /Floor edge for 3/.test(e.textContent) && /corners/.test(e.textContent)), 'proposal panel shows');
 ok(await page.evaluate(() => document.getElementById('edgePanel').closest('.step-panel').dataset.step === 'edge'), 'on the Floor edge section');
 ok(await page.evaluate(() => state.pdf.current === state.levels[state.activeLevelIdx].pdfPage), 'flipped to the floor\'s sheet');
