@@ -167,7 +167,7 @@ const E = await page.evaluate(() => {
   setStep('levels'); renderLevelList();
   const row = document.querySelector('#levelList .sb-item[data-level="1"]');
   const before = !!row.querySelector('.lvl-range');
-  row.querySelector('.lvl-more').click();
+  row.querySelector('.lvl-typ').click();   // the Typical Floor? box (UI-33)
   const row2 = document.querySelector('#levelList .sb-item[data-level="1"]');
   const open = !!row2.querySelector('.lvl-range');
   const set = (f, v) => { const e = row2.querySelector(`.lvl-edit[data-f="${f}"]`); e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); };
@@ -184,7 +184,7 @@ const E = await page.evaluate(() => {
 });
 console.log('   ' + JSON.stringify(E));
 ok(E.noModal && E.noFn, 'no level modal in the page, no function to open one');
-ok(!E.before && E.open, '… opens the range fields under the row');
+ok(!E.before && E.open, 'ticking Typical Floor? opens the range fields under the row');
 ok(E.range && E.range[0] === 3 && E.range[1] === 6 && E.range[2] === 10 && E.isRange && E.count === 4, 'typing from / to / F2F makes the row a typical range: ' + JSON.stringify(E.range) + ' ' + E.label);
 ok(E.stillOpen, 'and a range keeps its fields showing');
 const E2 = await page.evaluate(() => {

@@ -104,6 +104,7 @@ the system; this file holds the rules and is versioned with the code.
 | BLD-19 | The plan scale is the job's, read once from the plan note on every plan sheet (checked by the dimension chain), held provisionally, and CONFIRMED once — on its card on Match floors or by confirming a match made at it. Every floor match, automatic or by hand, is held at it: the fit finds only where the sheet sits (rotation snaps to square within 0.25°, and up to 0.5% plotter stretch is taken). A sheet whose own plan note is a different plan scale is tried at both and keeps the one its bubbles agree with, and asks once. A job saved before this takes its scale from the matches its user confirmed. | Sep 23 |
 | BLD-20 | A key plan's bubbles never place a floor: a bubble band under a third the length of the longest on its axis only speaks for labels the grid already knows, a bubble whose crossings the locked fit rejects is named on the row with how far off it read, and the grid is never given a line from a short band. When the project grid disagrees with two or more lines of a sheet by over a foot, or sheets were matched at another scale than the locked one, Match floors says the grid does not hold together and offers Rebuild the grid (clear the grid and every match, read every sheet again at the job scale; areas stay in sheet pixels). | Sep 23 |
 | BLD-21 | A grid bubble moved clear of its neighbour on an elbowed leader (Horizon House 2.7, 2'-3" off 2.6) is followed down its leader to the dash-dot line it names; the line's position is the reading, not the bubble's. A bubble with a gridline through its own centre is read at its centre. | Sep 23 |
+| BLD-22 | THE ELEVATION TAG. A plan (slab-on-grade and foundation plans above all) may state its T.O.S. as the bare elevation — 197'-4" — in a rounded box with a leader to a dot, no T/SLAB word and no strip. It is read as a third channel, only when the callout channel and the title strip both found nothing: a horizontal text item that is exactly an elevation string, with dark linework close in on all four sides of it and nothing else written in the box. A dimension string reads the same but has its line on one side only, so it is not a tag. The sheet takes the mode of its tags (n of total shown in the review, "elevation tags"). | Sep 23 |
 
 ## LOD — Loads
 
@@ -197,7 +198,7 @@ the system; this file holds the rules and is versioned with the code.
 | UI-10 | The slab kind is called Slab, not Step. | Sep |
 | UI-11 | The ghost of the floor below combines the North and South floor edges into ONE complete floor, alongside a stacking-check panel. | Sep 17 |
 | UI-12 | The stacking warning auto-clears where an on-grade area is drawn there, with an OK button on the row remembered on the job until the overshoot grows. | Sep 17 |
-| UI-13 | On the Levels list, headers sit over the field they reference, and the F2F and shore-height line is bold and easy to read. | Sep 17 |
+| UI-13 | On the Levels list, headers sit over the field they reference (by the shared grid of UI-33, no measuring), and the F2F and shore-height line is bold and easy to read. | Sep 17, Sep 23 |
 | UI-15 | Every section has ONE primary action at the top (Confirm levels · All N flagged look right · Confirm all N drawn · Confirm all N matched · Confirm all N marks · Add the proposed shapes). Re-readers and hand tools sit in ONE captioned row under the primary action, always in view — never folded behind a disclosure (UI-31). | Sep 21, Sep 23 |
 | UI-16 | The Floor edge section reads itself on arrival: every plan sheet is swept, confident outlines are drawn for Confirm / Adjust, doubtful ones stay on their own sheet's row to look at and pick from (UI-22). Once per set of sheets; the button is the re-run. | Sep 21 |
 | UI-17 | The Areas step reads itself on arrival: sheets with a confirmed edge and nothing yet read off them are scanned for beams and openings and the proposal opens (none ticked, BEM-08). Remembered on the job per sheet, so an old job is not rescanned. | Sep 21 |
@@ -216,6 +217,7 @@ the system; this file holds the rules and is versioned with the code.
 | UI-30 | REMOVING CORNERS TOUCHES THE SELECTED SHAPE ONLY. Shift+click, the eraser sweep, the box and hover+Delete see the corners of the selected shape and nothing else; with no shape selected they remove nothing and say to select one first. | Sep 23 |
 | UI-31 | NOTHING FOLDED. No hand tool, re-reader, importer or switch on any step sits behind a disclosure; each section's tools are a plain captioned row under its primary action. (Replaces the "or do it by hand" details of UI-15.) | Sep 23 |
 | UI-32 | THE WAY FORWARD IS AT THE END OF EACH SECTION. Every section ends with one row: its standing (Done / To do and the one-line status) and ONE button — "Next: <section>" inside a stacked step, "Next: <step>" from a step's last section or tab — enabled the moment the section (for a step's last section, the step) is done, disabled with the reason until then. The foot bar keeps the status line only (UI-26). | Sep 23 |
+| UI-33 | ONE TABLE SYSTEM. Every list in the pane is a grid on a shared column template (`--cols` on the container; `.tbl-head` and every `.tbl-row` lay out on it): headers sit over their fields, columns are fixed widths, and nothing shifts when a value changes or an option is picked. The Levels list is the first: Level · TOS Elev · Slab Thickness (in) · SOG (a box) · Typical Floor? (a box that opens floors from / to plus shore height OR F2F, either typed) · Sheet (Show: the level's sheet, fitted) · ×. Confirm levels is the green confirm like every other section; Add a level, Read again and Import from Excel share the hand-tools row. | Sep 23 |
 | UI-14 | PDF fidelity: device-pixel-ratio-correct canvases, no PNG round trip, the visible patch re-rendered at on-screen magnification, auto-trace and floor-edge raster at 144 DPI. | Sep 9 |
 
 ## BRD — Brand
@@ -272,6 +274,7 @@ the system; this file holds the rules and is versioned with the code.
 
 | Was | Replaced by | When |
 |---|---|---|
+| Levels row controls as icon buttons (▰ on grade, … range) with headers positioned by measuring the fields | UI-33 | Sep 23 |
 | Shift+click / sweep / box / Delete removing corners of any shape on the sheet | UI-30 | Sep 23 |
 | Re-readers and hand tools behind an "or do it by hand" `<details>` disclosure, remembered per section (UI-15 as first written) | UI-31 | Sep 23 |
 | The Next / Go to button on the foot bar; Tab past the last property field returning to the plan | UI-32, UI-29 | Sep 23 |

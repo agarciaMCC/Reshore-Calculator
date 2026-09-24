@@ -33,7 +33,8 @@ const setup = () => page.evaluate(levels => {
   state.levels = levels; state.activeLevelIdx = 0; state.activeZoneIdx = null; state.results = null;
   setTool('select'); setStep('levels'); renderSidebar(); renderNow();
 }, [mk('3', 30, 8), mk('2', 20, 8), mk('1', 10, 8)]);
-const active = () => page.evaluate(() => { const e = document.activeElement; return e && e.dataset && e.dataset.f ? e.dataset.li + ':' + e.dataset.f : (e ? e.tagName + '#' + e.id : null) });
+const active = () => page.evaluate(() => { const e = document.activeElement; if (!e) return null; const d = e.dataset || {};
+  return d.f ? d.li + ':' + d.f : d.soglevel ? d.soglevel + ':sog' : d.morelevel ? d.morelevel + ':typ' : e.tagName + '#' + e.id; });
 
 console.log('A. feet and inches read every way the plans write them (UI-28)');
 {
@@ -51,7 +52,7 @@ await setup();
 {
   const v = await page.$$eval('#levelList .lvl-edit[data-f="elevation"]', els => els.map(e => e.value));
   eq(v.join('|'), `30'-0"|20'-0"|10'-0"`, 'elevations are shown as feet and inches');
-  const hd = await page.$eval('#levelList .lvl-cols [data-col="elevation"]', e => e.textContent.trim());
+  const hd = await page.$eval('#levelList .tbl-head [data-col="elevation"]', e => e.textContent.trim());
   eq(hd, 'TOS Elev', 'and the column says so');
   await page.click('#levelList .sb-item[data-level="0"] .lvl-edit[data-f="elevation"]');
   await page.keyboard.press('Control+A'); await page.keyboard.type('31-6'); await page.keyboard.press('Enter');
@@ -72,12 +73,19 @@ await setup();
   eq(await page.evaluate(() => state.levels[0].elevation), 32, 'and the field left behind committed');
   await page.keyboard.press('Control+A'); await page.keyboard.type('9');
   await page.keyboard.press('Tab');
-  eq(await active(), '2:name', 'Tab from the last field of a row goes to the first field of the next row');
+  eq(await active(), '1:sog', 'Tab from the slab goes on to the SOG box in the same row');
   eq(await page.evaluate(() => state.levels[1].slabThickness), 9, 'committing on the way');
+  await page.keyboard.press('Tab');
+  eq(await active(), '1:typ', 'then the Typical Floor? box');
+  await page.keyboard.press('Tab');
+  eq(await active(), '2:name', 'then the first field of the next row (the Show and × buttons are not stops)');
   await page.keyboard.press('Tab');
   eq(await active(), '2:elevation', 'and on across that row');
   await page.keyboard.press('Shift+Tab');
   eq(await active(), '2:name', 'Shift+Tab walks back');
+  await page.keyboard.press('Shift+Tab');
+  eq(await active(), '1:typ', 'and back up into the row above');
+  await page.keyboard.press('Tab');
   const before = await page.evaluate(() => state.levels[2].name);
   await page.keyboard.press('Control+A'); await page.keyboard.type('junk');
   await page.keyboard.press('Escape');

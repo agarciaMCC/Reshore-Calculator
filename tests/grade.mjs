@@ -154,7 +154,7 @@ ok(await page.$$eval('#levelList .lvl-sog', b => b.length) === 3, 'a grade toggl
 await page.evaluate(() => setStep('levels'));
 await page.click('#levelList .lvl-sog[data-soglevel="2"]');
 ok(await page.evaluate(() => levelOnGrade(state.levels[2])), 'click marks SOG');
-ok(await page.$eval('#levelList', e => /SOG/.test(e.querySelector('.sb-item[data-level="2"] .lvl-sog-badge')?.textContent || '')), 'badge replaces the capacity control');
+ok(await page.$eval('#levelList', e => e.querySelector('.sb-item[data-level="2"] .lvl-sog').checked), 'the SOG box reads ticked (UI-33)');
 ok(await page.$eval('#levelList', e => !e.querySelector('.sb-item[data-level="2"] .lvl-edit[data-f="cap"]')), 'no PSF input on a grade level');
 ok(await page.$eval('#levelList .sb-item[data-level="2"] .lvl-meta', e => /slab on grade/.test(e.textContent)), 'meta says slab on grade');
 await page.evaluate(() => history.undo());

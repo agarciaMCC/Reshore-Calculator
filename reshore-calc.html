@@ -333,6 +333,19 @@ button{color:inherit}
 .range-row{display:flex;align-items:center;gap:6px}
 .range-row input{width:100%;min-width:0}
 .range-row span{font-size:var(--fs-sm);color:var(--text-tertiary)}
+/* ── THE TABLE SYSTEM (UI-33) ── one grid vocabulary for every list in the
+   pane: a container sets --cols, the head and every row lay out on it, so
+   headers sit over their fields and nothing shifts when a value changes. */
+.tbl-head,.tbl-row{display:grid;grid-template-columns:var(--cols,1fr);column-gap:6px;align-items:center;min-width:0}
+.tbl-head{font-size:var(--fs-sm);color:var(--text-tertiary);padding:0 8px 4px;border-bottom:1px solid var(--border);margin-bottom:3px;line-height:1.15}
+.tbl-head>span{min-width:0;white-space:normal;overflow:hidden;align-self:end}
+.tbl-head>span.num,.tbl-row>.num{text-align:right}
+.tbl-head>span.c,.tbl-row>.c{text-align:center}
+.tbl-row>*{min-width:0}
+.tbl-in{width:100%;box-sizing:border-box;font-family:var(--font-mono);font-size:var(--fs-sm);padding:3px 5px;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--text-primary)}
+.tbl-in.num{text-align:right}
+.tbl-chk{width:15px;height:15px;margin:0;vertical-align:middle;accent-color:var(--mcc-red,#CF0A2C);cursor:pointer}
+.tbl-chk:disabled{cursor:default;opacity:.4}
 .lvl-badge{font-family:var(--font-mono);font-size:var(--fs-sm);padding:1px 4px;border-radius:3px;background:var(--accent);color:var(--accent-text);flex-shrink:0}
 .sb-item.active .lvl-badge{background:var(--accent);color:var(--accent-text)}
 .range-warn{background:var(--warn-bg);border-left:3px solid var(--warn);padding:6px 9px;border-radius:4px;font-size:var(--fs-sm);margin:6px 0;line-height:1.45}
@@ -533,8 +546,13 @@ input[readonly],input.derived{background:var(--derived-bg);color:var(--text-seco
 .sb-item:hover .del-btn,.sb-item.active .del-btn{opacity:.65}
 .sb-item .del-btn:hover{opacity:1;background:var(--danger);color:#fff}
 /* level rows carry four numbers now, so they get their own second line */
+#levelList{--cols:minmax(78px,1fr) 88px 74px 44px 62px 52px 22px}
 .sb-item.lvl{flex-direction:column;align-items:stretch;gap:1px;padding:5px 8px 6px}
-.sb-item.lvl .lvl-main{display:flex;align-items:center;gap:6px;min-width:0}
+.sb-item.lvl .lvl-main{min-width:0}
+.sb-item.lvl .lvl-namecell{display:flex;align-items:center;gap:5px;min-width:0}
+.sb-item.lvl .lvl-name{font-weight:600}
+.sb-item.lvl .lvl-show{padding:2px 7px;font-size:var(--fs-sm);line-height:1.3}
+.sb-item.lvl .del-btn{opacity:.35}
 .sb-item.lvl .lvl-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sb-item.lvl .align-btn{margin-left:auto}
 .lvl-edit-wrap{display:flex;align-items:center;gap:3px;font-size:var(--fs-sm);color:var(--text-tertiary);font-family:var(--font-mono)}
@@ -542,16 +560,18 @@ input[readonly],input.derived{background:var(--derived-bg);color:var(--text-seco
 .lvl-edit{width:58px;font-family:var(--font-mono);font-size:var(--fs-sm);padding:2px 4px;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--text-primary);text-align:right}
 .lvl-edit[data-f="slab"]{width:38px}
 .lvl-edit[data-f="cap"]{width:44px}
+.lvl-main .lvl-edit.tbl-in{width:100%}
 .lvl-sel{width:auto;min-width:40px;padding:1px 2px;text-align:left}
-.lvl-edit.lvl-name-in{width:auto;min-width:70px;flex:1 1 70px;text-align:left;font-weight:600}
+.lvl-edit.lvl-name-in{width:100%;min-width:0;text-align:left;font-weight:600}
 .lvl-cols{position:relative;height:15px;font-size:var(--fs-sm);color:var(--text-tertiary);padding:0 0 3px;font-family:var(--font-mono)}
 .lvl-cols span{position:absolute;top:0;white-space:nowrap}
 .lvl-cols span[data-col="name"]{padding-left:5px}
 #propsHead.editing h3{color:var(--accent)}
 .lvl-more{border:none;background:transparent;color:var(--text-tertiary);cursor:pointer;font-size:var(--fs-lg);line-height:1;padding:0 3px}
 .lvl-more.on{color:var(--mcc-red,#CF0A2C)}
-.lvl-range{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:var(--fs-sm);color:var(--text-secondary);padding:3px 0 2px 4px}
+.lvl-range{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:var(--fs-sm);color:var(--text-secondary);padding:4px 0 2px 2px}
 .lvl-range .lvl-edit{width:44px;text-align:right}
+.lvl-range .lvl-edit.lvl-wide{width:74px}
 .lvl-more:hover{color:var(--text-primary)}
 .lvl-sog{border:none;background:transparent;color:var(--text-tertiary);cursor:pointer;font-size:var(--fs-md);line-height:1;padding:0 3px;opacity:.55}
 .lvl-sog:hover{color:var(--text-primary);opacity:1}
@@ -7296,7 +7316,17 @@ function renderLevelList(){
     if(typeof renderLevelsConfirm==='function')renderLevelsConfirm();
     return;
   }
-  el.innerHTML=`<div class="lvl-cols" title="Type straight into the rows. Elevations are top of slab; floor-to-floor and shore height are worked out from the floor below."><span data-col="name">Level</span><span data-col="elevation" title="Top of slab elevation, feet and inches">TOS Elev</span><span data-col="slab" title="Slab thickness, inches">slab</span></div>`
+  // THE LEVELS TABLE (UI-33, Adolfo Sep 23 2026): one grid, fixed columns —
+  // Level · TOS Elev · Slab Thickness (in) · SOG · Typical Floor? · Show —
+  // headers over their fields (UI-13), nothing shifting as values change.
+  el.innerHTML=`<div class="tbl-head" title="Type straight into the rows. Elevations are top of slab; floor-to-floor and shore height are worked out from the floor below.">
+      <span data-col="name">Level</span>
+      <span data-col="elevation" class="num" title="Top of slab elevation, feet and inches">TOS Elev</span>
+      <span data-col="slab" class="num" title="Slab thickness, inches">Slab Thickness (in)</span>
+      <span data-col="sog" class="c" title="Slab on grade — the lowest floor; it absorbs all remaining load and nothing is shored below it">SOG</span>
+      <span data-col="typ" class="c" title="One row standing for a run of identical floors">Typical Floor?</span>
+      <span data-col="show" class="c" title="Open this level's sheet on the plan">Sheet</span>
+      <span data-col="del"></span></div>`
   +state.levels.map((l,i)=>{
     const below=state.levels[i+1];
     const f2f=floorToFloorBelow(i);
@@ -7322,7 +7352,6 @@ function renderLevelList(){
     tipParts.push('slab '+inchStr(l.slabThickness));
     if(f2f!=null&&!isNaN(f2f))tipParts.push('floor-to-floor '+feetToStr(f2f));
     if(sog)tipParts.push('slab on grade: soil-supported, absorbs whatever load reaches it; nothing is shored below it and no floor may sit under it');
-    else tipParts.push(levelDefaultCapacity(l)>0?'default capacity '+(levelDefaultCode(l)?levelDefaultCode(l)+' = ':'')+levelDefaultCapacity(l)+' PSF':'no default capacity');
     if(l.alignment){
       tipParts.push(l.alignment.ftPerInch!=null
         ? (levelSheets(l).length>1?`${levelSheets(l).length} sheets · `:'')+'aligned: '+alignQualityText(l.alignment)
@@ -7330,29 +7359,39 @@ function renderLevelList(){
     }
     if(rng)tipParts.push(rangeFloorCount(l)+' identical floors, '+rangeLabel(l)+', typical F2F '+feetToStr(l.floorToFloor));
     if(hr!=null&&!isNaN(hr))tipParts.push('shore clear height '+feetToStr(hr)+(rng?' (typical within the range)':' (from '+below.name+' T.O.S. to the underside of this slab)'));
-    else if(!rng)tipParts.push('bottom level \u2014 nothing below it to stand a shore on');
-    const tip=tipParts.join(' \u2014 ');
+    else if(!rng)tipParts.push('bottom level — nothing below it to stand a shore on');
+    const tip=tipParts.join(' — ');
+    const typOpen=rng||state.ui.rangeOpen===i;
+    const sheets=levelSheets(l);
+    const pg=sheets.length?sheets[0].page:l.pdfPage;
+    // the range line: floors from · to, then the shore height and the F2F it
+    // comes to — type either (UI-28); the shore height is what the field
+    // crews ask for, the F2F is what the drawings state
+    const shoreRng=(l.floorToFloor>0&&l.slabThickness)?l.floorToFloor-l.slabThickness/12:null;
     return `
     <div class="sb-item lvl${i===state.activeLevelIdx?' active':''}" data-level="${i}">
-      <div class="lvl-main">
-        ${rng?`<span class="lvl-name" title="Double-click to edit the range">${esc(rangeLabel(l))}</span>`
-             :`<input class="lvl-edit lvl-name-in" data-li="${i}" data-f="name" value="${esc(l.name||'')}" placeholder="Level name" title="Level name">`}${rng?`<span class="lvl-badge" title="${rangeFloorCount(l)} identical floors">&times;${rangeFloorCount(l)}</span>`:''}${l.alignment?`<span class="aligned-dot"${levelFullyMatched(l)?'':' style="opacity:.4"'} title="${esc((levelFullyMatched(l)?'':`sheet${levelSheetsUnmatched(l).length>1?'s':''} ${levelSheetsUnmatched(l).join(', ')} still to match · `)+(l.alignment.ftPerInch!=null?alignQualityText(l.alignment):'Matched'))}"></span>`:''}
-        <label class="lvl-edit-wrap" title="Top of slab elevation, feet and inches (25'-4 3/8&quot;, 25-4 3/8 or 25.36 all read)">EL <input class="lvl-edit" data-li="${i}" data-f="elevation" value="${hasElev(l)?esc(ftInStr(l.elevation)):''}" placeholder="ft-in"></label>
-        <label class="lvl-edit-wrap" title="Slab thickness (in)"><input class="lvl-edit" data-li="${i}" data-f="slab" value="${l.slabThickness!=null?l.slabThickness:''}" placeholder="in">"</label>
-        ${sog?`<span class="lvl-badge lvl-sog-badge" title="Slab on grade — the lowest floor; it absorbs all remaining load">SOG</span>`:''}
-        ${rng?'':`<button class="lvl-sog${sog?' on':''}" data-soglevel="${i}" tabindex="-1" title="${sog?'Marked as slab on grade. Click to make it a suspended floor again.':'Mark as slab on grade — the lowest floor; it absorbs all remaining load and nothing is shored below it'}">&#9640;</button>`}
-        <button class="lvl-more${rng||state.ui.rangeOpen===i?' on':''}" data-morelevel="${i}" tabindex="-1" title="${rng?'Edit the typical range':'Make this a typical range (one definition for a run of identical floors)'}">&#8943;</button>
+      <div class="tbl-row lvl-main">
+        <span class="lvl-namecell">${rng?`<span class="lvl-name" title="A typical range — untick Typical Floor? to make it one floor">${esc(rangeLabel(l))}</span><span class="lvl-badge" title="${rangeFloorCount(l)} identical floors">&times;${rangeFloorCount(l)}</span>`
+             :`<input class="lvl-edit tbl-in lvl-name-in" data-li="${i}" data-f="name" value="${esc(l.name||'')}" placeholder="Level name" title="Level name">`}${l.alignment?`<span class="aligned-dot"${levelFullyMatched(l)?'':' style="opacity:.35"'} title="${levelFullyMatched(l)?'matched to the building grid':'not every sheet matched yet'}"></span>`:''}</span>
+        <input class="lvl-edit tbl-in num" data-li="${i}" data-f="elevation" value="${hasElev(l)?esc(ftInStr(l.elevation)):''}" placeholder="ft-in" title="Top of slab elevation, feet and inches (25'-4 3/8&quot;, 25-4 3/8 or 25.36 all read)">
+        <input class="lvl-edit tbl-in num" data-li="${i}" data-f="slab" value="${l.slabThickness!=null?l.slabThickness:''}" placeholder="in" title="Slab thickness (in)">
+        <span class="c">${rng?'<span class="lm-dim" title="A typical range is never on grade">—</span>':`<input type="checkbox" class="tbl-chk lvl-sog" data-soglevel="${i}"${sog?' checked':''} title="${sog?'Slab on grade. Untick to make it a suspended floor again.':'Tick if this floor is slab on grade — the lowest floor; it absorbs all remaining load and nothing is shored below it'}">`}</span>
+        <span class="c"><input type="checkbox" class="tbl-chk lvl-typ" data-morelevel="${i}"${typOpen?' checked':''} title="${rng?'A typical range — untick to make it a single floor':'Tick to make this row stand for a run of identical floors'}"></span>
+        <span class="c">${pg?`<button class="btn btn-sm lvl-show" data-showlevel="${i}" tabindex="-1" title="Open sheet ${pg} on the plan, fitted to the window">Show</button>`:'<span class="lm-dim" title="No sheet assigned yet — the Sheets section does that">—</span>'}</span>
+        <span class="c"><button class="del-btn" data-dellevel="${i}" tabindex="-1" title="Delete ${esc(rng?rangeLabel(l):l.name)}">&times;</button></span>
         <button class="align-btn" data-alignlevel="${i}" tabindex="-1" title="Match this floor" style="display:none">Match</button>
-        <button class="del-btn" data-dellevel="${i}" tabindex="-1" title="Delete ${esc(rng?rangeLabel(l):l.name)}">&times;</button>
       </div>
       <div class="meta lvl-meta" title="${esc(tip)}">${meta}</div>
-      ${(rng||state.ui.rangeOpen===i)?`<div class="lvl-range" title="One definition standing for a run of identical floors. Elevation above is the TOP floor's T.O.S.; the floors below it are spaced by the floor-to-floor.">
-        <span>Typical range: floors</span>
-        <input class="lvl-edit" data-li="${i}" data-f="rangeFrom" value="${l.rangeFrom!=null?l.rangeFrom:''}" placeholder="from" title="Lowest floor number in the run">
+      ${typOpen?`<div class="lvl-range" title="One definition standing for a run of identical floors. Elevation above is the TOP floor's T.O.S.; the floors below it are spaced by the floor-to-floor.">
+        <span>Floors</span>
+        <input class="lvl-edit tbl-in num" data-li="${i}" data-f="rangeFrom" value="${l.rangeFrom!=null?l.rangeFrom:''}" placeholder="from" title="Lowest floor number in the run">
         <span>to</span>
-        <input class="lvl-edit" data-li="${i}" data-f="rangeTo" value="${l.rangeTo!=null?l.rangeTo:''}" placeholder="to" title="Highest floor number in the run">
-        <span>· F2F</span>
-        <input class="lvl-edit" data-li="${i}" data-f="f2f" value="${l.floorToFloor!=null?esc(ftInStr(l.floorToFloor)):''}" placeholder="ft-in" title="Floor-to-floor within the run, feet and inches">
+        <input class="lvl-edit tbl-in num" data-li="${i}" data-f="rangeTo" value="${l.rangeTo!=null?l.rangeTo:''}" placeholder="to" title="Highest floor number in the run">
+        <span class="lvl-sep">·</span>
+        <span>shore height</span>
+        <input class="lvl-edit tbl-in num lvl-wide" data-li="${i}" data-f="shore" value="${shoreRng!=null?esc(ftInStr(shoreRng)):''}" placeholder="ft-in" title="Shore height under each floor of the run — T.O.S. of the floor below to the underside of this slab. Type this or the F2F; the other follows.">
+        <span>or F2F</span>
+        <input class="lvl-edit tbl-in num lvl-wide" data-li="${i}" data-f="f2f" value="${l.floorToFloor!=null?esc(ftInStr(l.floorToFloor)):''}" placeholder="ft-in" title="Floor-to-floor within the run, feet and inches">
         <span class="lm-dim">${rng?`${rangeFloorCount(l)} floors, ${esc(rangeLabel(l))}`:'blank = a single floor'}</span>
       </div>`:''}
     </div>`;
@@ -7369,27 +7408,45 @@ function renderLevelList(){
       deleteLevel(parseInt(btn.dataset.dellevel));
     });
   });
-  // "…" opens the range fields under the row; the level modal is gone
-  el.querySelectorAll('.lvl-more').forEach(btn=>{
-    btn.addEventListener('click',e=>{
-      e.stopPropagation();
-      const i=parseInt(btn.dataset.morelevel);
-      state.ui.rangeOpen=state.ui.rangeOpen===i?null:i;
+  // Typical Floor? opens the range fields under the row; unticking a real
+  // range makes it one floor again (the level modal is gone, UI-19)
+  el.querySelectorAll('.lvl-typ').forEach(cb=>{
+    cb.addEventListener('click',e=>e.stopPropagation());
+    cb.addEventListener('change',e=>{
+      const i=parseInt(cb.dataset.morelevel),l=state.levels[i];
+      if(!l)return;
+      if(isRange(l)&&!cb.checked){
+        history.record('Make a single floor');
+        l.rangeFrom=null;l.rangeTo=null;l.floorToFloor=null;state.ui.rangeOpen=null;state.results=null;
+        sortLevelsByElevation();renderSidebar();renderCanvas();persist();
+        toast(`${l.name} is a single floor again.`,2600);return;
+      }
+      state.ui.rangeOpen=cb.checked?i:null;
       renderLevelList();
       const inp=document.querySelector(`#levelList .sb-item[data-level="${i}"] .lvl-edit[data-f="rangeFrom"]`);
       if(inp&&state.ui.rangeOpen===i)inp.focus();
     });
   });
-  el.querySelectorAll('.lvl-sog').forEach(btn=>{
-    btn.addEventListener('click',e=>{
+  el.querySelectorAll('.lvl-sog').forEach(cb=>{
+    cb.addEventListener('click',e=>e.stopPropagation());
+    cb.addEventListener('change',()=>toggleLevelOnGrade(parseInt(cb.dataset.soglevel)));
+  });
+  // Show: the level's sheet on the plan, fitted, so the elevations and slab
+  // can be checked against the drawing without hunting for the page
+  el.querySelectorAll('.lvl-show').forEach(btn=>{
+    btn.addEventListener('click',async e=>{
       e.stopPropagation();
-      toggleLevelOnGrade(parseInt(btn.dataset.soglevel));
+      const i=parseInt(btn.dataset.showlevel),lv=state.levels[i];
+      if(!lv)return;
+      state.activeLevelIdx=i;state.activeZoneIdx=null;state.drawing.points=[];
+      const sh=levelSheets(lv);const pg=sh.length?sh[0].page:lv.pdfPage;
+      if(pg&&state.pdf.pages>0){await goToPage(pg);fitView()}
+      renderSidebar();renderCanvas();
     });
   });
   if(typeof bindInlineLevelEdits==='function')bindInlineLevelEdits();
   bindCapacityLinks(el);
   if(typeof renderLevelsConfirm==='function')renderLevelsConfirm();
-  alignLevelCols();
   el.querySelectorAll('.sb-item').forEach(item=>{
     item.addEventListener('click',()=>{
       state.activeLevelIdx=parseInt(item.dataset.level);
@@ -10017,6 +10074,39 @@ function readSheetTitleStrip(items){
   const mode=modeOf(abs.map(v=>v.f));
   return{tosFt:(mode&&mode.n===abs.length)?mode.value:null,thickIn,onGrade,n:abs.length};
 }
+// ── THE ELEVATION TAG (BLD-22, Adolfo Sep 23 2026) ─────────────────────
+// "Sometimes slab on grade / foundation plans will have a different type of
+// plan annotation to mark elevation": the elevation alone — 197'-4" — in a
+// rounded box, with a leader running to a dot on the slab. No T/SLAB word,
+// no strip. What tells it from a dimension string (which reads exactly the
+// same) is the box drawn round it: one closed piece of dark linework (a pill
+// walked from its curves, or a small rectangle) hugging the text, with
+// nothing else written inside it.
+const ELEV_TAG_RE=/^(?:EL\.?\s*)?(\d{1,3})'\s*-?\s*(\d{1,2})?(?:\s+(\d)\/(\d))?"?$/;
+function readSheetElevationTags(items,strokes){
+  const out=[];
+  if(!strokes)return out;
+  const norm=t=>String(t||'').replace(/[\u2033\u201d]/g,'"').replace(/[\u2032\u2019]/g,"'").trim();
+  const frames=[].concat(strokes.pills||[],strokes.boxes||[]);
+  if(!frames.length)return out;
+  for(const it of items){
+    if(it.v)continue;
+    const m=ELEV_TAG_RE.exec(norm(it.s));
+    if(!m)continue;
+    const ft=(+m[1])+((+m[2]||0)+(m[3]?(+m[3])/(+m[4]):0))/12;
+    const h=Math.max(6,it.h||8),w=Math.max(it.w||0,h*3);
+    const x0=it.x,x1=it.x+w,y0=it.y-h,y1=it.y;
+    // the frame that holds it: closed linework round the text, hugging it —
+    // no wider than the text plus five heights, no taller than four
+    const fr=frames.find(f=>f.x0<=x0+1&&f.x1>=x1-1&&f.y0<=y0+h*0.4&&f.y1>=y1-h*0.4
+      &&(f.x1-f.x0)<=w+h*5&&(f.y1-f.y0)<=h*4);
+    if(!fr)continue;
+    // nothing else written in the frame
+    if(items.some(o=>o!==it&&o.x>fr.x0&&o.x<fr.x1&&o.y>fr.y0&&o.y<fr.y1+2))continue;
+    out.push({f:ft,x:it.x,y:it.y,raw:it.s});
+  }
+  return out;
+}
 function readSheetElevations(items){
   const norm=t=>String(t||'').replace(/[″”]/g,'"').replace(/[′’]/g,"'").trim();
   const grab=re=>{
@@ -10197,11 +10287,18 @@ async function proposeLevelsFromDrawings(){
     // BLD-15: the title strip fills what the callouts did not say. The
     // callouts win wherever they spoke — they are drawn on the slab itself.
     const strip=readSheetTitleStrip(items);
-    const sElev=r.tos?null:strip.tosFt;
+    let sElev=r.tos?null:strip.tosFt,sN=sElev!=null?1:0,sTotal=sN,fromTag=false;
+    // BLD-22: no callouts and no strip — look for the elevation tags
+    if(!r.tos&&sElev==null){
+      let tags=[];
+      try{tags=readSheetElevationTags(items,await pageStrokes(n))}catch(e){tags=[]}
+      const mode=modeOf(tags.map(t=>t.f));
+      if(mode){sElev=mode.value;sN=mode.n;sTotal=mode.total;fromTag=true}
+    }
     const sThick=(r.thickIn!=null&&r.thickN>=3)?null:strip.thickIn;
     out.push({page:n,title,name:named.name,onGrade:named.onGrade||strip.onGrade,
-      elev:r.tos?r.tos.value:sElev,elevN:r.tos?r.tos.n:(sElev!=null?1:0),elevTotal:r.tos?r.tos.total:(sElev!=null?1:0),
-      fromStrip:!r.tos&&sElev!=null,thickStrip:sThick!=null,
+      elev:r.tos?r.tos.value:sElev,elevN:r.tos?r.tos.n:sN,elevTotal:r.tos?r.tos.total:sTotal,
+      fromStrip:!r.tos&&sElev!=null&&!fromTag,fromTag,thickStrip:sThick!=null,
       thickIn:sThick!=null?sThick:r.thickIn,thickN:r.thickN,
       clrFt:r.clr?r.clr.value:null,clrN:r.clr?r.clr.n:0,
       steps:r.steps});
@@ -10959,7 +11056,7 @@ function renderLevelsConfirm(){
     return;
   }
   const why=levelsConfirmable();
-  host.innerHTML=`<button class="btn btn-sm btn-wide btn-primary" id="btnConfirmLevels"${why?' disabled':''} title="${esc(why||'Names, elevations and slab thickness are what you are confirming. Capacities come with the loads.')}">Confirm levels</button>${why?`<span class="lm-dim">${esc(why)}</span>`:''}`;
+  host.innerHTML=`<button class="btn btn-sm btn-wide btn-go" id="btnConfirmLevels"${why?' disabled':''} title="${esc(why||'Names, elevations and slab thickness are what you are confirming. Capacities come with the loads.')}">Confirm levels</button>${why?`<span class="lm-dim">${esc(why)}</span>`:''}`;
   const b=host.querySelector('#btnConfirmLevels');
   if(b)b.addEventListener('click',confirmLevels);
 }
@@ -11430,7 +11527,7 @@ async function renderElevProposal(showAll){
       <div class="ep-vals">
         <span class="lm-dim">${esc(p.title||'')}</span>
         <span${dE?' class="ep-change"':''}>${p.elev!=null
-          ? `T.O.S. ${esc(feetToStr(p.elev))}${dE?(p.curElev==null?'':` <span class="lm-dim">(now ${esc(feetToStr(p.curElev))})</span>`):' <span class="lm-dim">— unchanged</span>'} <span class="lm-dim">${p.elevN} of ${p.elevTotal} callouts</span>`
+          ? `T.O.S. ${esc(feetToStr(p.elev))}${dE?(p.curElev==null?'':` <span class="lm-dim">(now ${esc(feetToStr(p.curElev))})</span>`):' <span class="lm-dim">— unchanged</span>'} <span class="lm-dim">${p.fromTag?`${p.elevN} of ${p.elevTotal} elevation tag${p.elevTotal===1?'':'s'}`:p.fromStrip?'from the title strip':`${p.elevN} of ${p.elevTotal} callouts`}</span>`
           : '<span class="lm-warn">no elevation callouts on this sheet — type it in</span>'}</span>
         <span${dT?' class="ep-change"':''}>${(p.thickIn!=null&&p.thickN>=3)
           ? `slab ${inchStr(p.thickIn)}${dT?(p.curThick==null?'':` <span class="lm-dim">(now ${esc(inchStr(p.curThick))})</span>`):' <span class="lm-dim">— unchanged</span>'} <span class="lm-dim">${p.thickN} of ${p.thickPairs||p.thickN} callouts</span>`
@@ -17295,7 +17392,7 @@ function mountFlow(){
   // list · add a level · what a re-read found · Confirm · read again
   {const host=document.getElementById('p-levels');
    for(const id of ['levelsConfirm','elevProposal','levelList']){const n=document.getElementById(id);if(n)host.appendChild(n)}
-   const bh=byHandBox('levels'),bb=bh.querySelector('.by-hand-body');
+   const bh=byHandBox('levels','or add by hand / read again / import'),bb=bh.querySelector('.by-hand-body');
    for(const id of ['btnAddLevel','btnReadElev']){const n=document.getElementById(id);if(n)bb.appendChild(n)}
    host.appendChild(bh)}
   // 3 Loads — lift the load-map modal's body into the panel
@@ -18070,9 +18167,11 @@ function initLevelsStep(){
     <button class="btn btn-sm" id="lvImportBtn">Import from Excel / CSV…</button>
     <input type="file" id="lvImportFile" accept=".xlsx,.csv,.tsv,.txt" style="display:none">
     <span class="lv-hint">Columns: Level · Elevation · Slab (any order, any heading wording)</span>`;
-  p.insertBefore(bar,p.firstChild);
+  // UI-31: the import sits with the other hand tools under the list
+  const bb=document.querySelector('#byhand-levels .by-hand-body');
   const prev=document.createElement('div');prev.id='lvImportPreview';prev.className='lv-preview';prev.style.display='none';
-  p.insertBefore(prev,bar.nextSibling);
+  if(bb){bb.appendChild(bar);bb.appendChild(prev)}
+  else{p.insertBefore(bar,p.firstChild);p.insertBefore(prev,bar.nextSibling)}
   document.getElementById('lvImportBtn').addEventListener('click',()=>document.getElementById('lvImportFile').click());
   document.getElementById('lvImportFile').addEventListener('change',async e=>{
     const f=e.target.files[0];e.target.value='';
@@ -18207,6 +18306,14 @@ function bindInlineLevelEdits(){
         if(raw!==''&&(v==null||v<=0)){toast('Enter the floor-to-floor in feet and inches, e.g. 10\'-6"');renderLevelList();return}
         if((l.floorToFloor==null?null:l.floorToFloor)===v){renderLevelList();return}
         history.record('Edit floor-to-floor');l.floorToFloor=v;
+      }else if(f==='shore'){
+        // the shore height under each floor of the run; F2F follows (UI-28)
+        const v=raw===''?null:parseFeet(raw);
+        if(raw!==''&&(v==null||v<=0)){toast('Enter the shore height in feet and inches, e.g. 9\'-9"');renderLevelList();return}
+        if(v!=null&&!(l.slabThickness>0)){toast('Give the row a slab thickness first — the floor-to-floor is the shore height plus the slab.');renderLevelList();return}
+        const f2fNew=v==null?null:v+l.slabThickness/12;
+        if((l.floorToFloor==null?null:l.floorToFloor)===f2fNew||(f2fNew!=null&&l.floorToFloor!=null&&Math.abs(f2fNew-l.floorToFloor)<1e-9)){renderLevelList();return}
+        history.record('Edit shore height');l.floorToFloor=f2fNew;
       }
       sortLevelsByElevation();state.results=null;
       renderSidebar();renderCanvas();persist();
@@ -18367,7 +18474,7 @@ async function pageStrokes(num){
   const opList=await page.getOperatorList();
   const O=pdfjsLib.OPS;
   let ctm=vp.transform.slice();const stack=[];let lw=1,col='0,0,0';
-  const heavy=[],thin=[],boxes=[],mid=[];
+  const heavy=[],thin=[],boxes=[],mid=[],pills=[];
   const fn=opList.fnArray,ar=opList.argsArray;
   for(let k=0;k<fn.length;k++){
     const op=fn[k];
@@ -18386,9 +18493,12 @@ async function pageStrokes(num){
     const dest=w>=HEAVY_PX?(dark?heavy:null):(dark?thin:null);
     const isMid=dark&&w<HEAVY_PX&&w>=MID_PX;
     let cx=null,cy=null,sx=0,sy=0,subStart=null,subN=0;
+    // the bbox of the current subpath, in image px (for BLD-22's pills)
+    let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;
+    const grow=(x,y)=>{const q=matApply(ctm,x,y);if(q[0]<bx0)bx0=q[0];if(q[0]>bx1)bx1=q[0];if(q[1]<by0)by0=q[1];if(q[1]>by1)by1=q[1]};
     const line=(x,y)=>{
       if(cx!=null&&dest){const a=matApply(ctm,cx,cy),b=matApply(ctm,x,y);dest.push(a[0],a[1],b[0],b[1]);if(isMid)mid.push(a[0],a[1],b[0],b[1])}
-      cx=x;cy=y;subN++;
+      cx=x;cy=y;subN++;grow(x,y);
     };
     for(let i=0,j=0;i<ops.length;i++){
       switch(ops[i]|0){
@@ -18400,7 +18510,7 @@ async function pageStrokes(num){
             if(bw>12&&bh>12&&bw<160&&bh<120)boxes.push({x0:Math.min(a[0],b[0]),y0:Math.min(a[1],b[1]),x1:Math.max(a[0],b[0]),y1:Math.max(a[1],b[1])});}
           cx=null;break;
         }
-        case O.moveTo:cx=co[j++];cy=co[j++];sx=cx;sy=cy;subStart=[cx,cy];subN=0;break;
+        case O.moveTo:cx=co[j++];cy=co[j++];sx=cx;sy=cy;subStart=[cx,cy];subN=0;bx0=by0=Infinity;bx1=by1=-Infinity;grow(cx,cy);break;
         case O.lineTo:line(co[j++],co[j++]);break;
         case O.curveTo:{const X0=cx,Y0=cy;if(X0!=null)cubicWalk(ctm,X0,Y0,co[j],co[j+1],co[j+2],co[j+3],co[j+4],co[j+5],line);else line(co[j+4],co[j+5]);j+=6;break}
         case O.curveTo2:{const X0=cx,Y0=cy;if(X0!=null)cubicWalk(ctm,X0,Y0,X0,Y0,co[j],co[j+1],co[j+2],co[j+3],line);else line(co[j+2],co[j+3]);j+=4;break}
@@ -18413,6 +18523,12 @@ async function pageStrokes(num){
               const bw=Math.abs(b[0]-a[0]),bh=Math.abs(b[1]-a[1]);
               if(bw>12&&bh>12&&bw<160&&bh<120)boxes.push({x0:Math.min(a[0],b[0]),y0:Math.min(a[1],b[1]),x1:Math.max(a[0],b[0]),y1:Math.max(a[1],b[1])});
             }
+            // a closed many-piece dark subpath the size of a label, wider than
+            // tall, is a PILL — the rounded box an elevation tag sits in (BLD-22)
+            if(dark&&subN>=8&&subStart&&isFinite(bx0)){
+              const bw=bx1-bx0,bh=by1-by0;
+              if(bw>=30&&bw<=600&&bh>=10&&bh<=90&&bw>=bh*1.5)pills.push({x0:bx0,y0:by0,x1:bx1,y1:by1});
+            }
             line(sx,sy);
           }
           cx=null;break;
@@ -18420,7 +18536,7 @@ async function pageStrokes(num){
       }
     }
   }
-  const rec={W:vp.width,H:vp.height,heavy:new Float32Array(heavy),thin:new Float32Array(thin),mid:new Float32Array(mid),boxes};
+  const rec={W:vp.width,H:vp.height,heavy:new Float32Array(heavy),thin:new Float32Array(thin),mid:new Float32Array(mid),boxes,pills};
   strokeCache[num]=rec;
   return rec;
 }
