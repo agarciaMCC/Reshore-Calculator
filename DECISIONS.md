@@ -188,7 +188,7 @@ the system; this file holds the rules and is versioned with the code.
 | ID | Rule | Decided |
 |---|---|---|
 | UI-01 | Escape backs out of any command, everywhere. | Sep |
-| UI-02 | Shift+click removes a vertex — of the SELECTED shape only (UI-30). Right-click undoes the last point placed while drawing. | Sep, Sep 17, Sep 23 |
+| UI-02 | Shift+click removes a vertex — of the SELECTED shape only (UI-30). Right-click, Backspace or Ctrl+Z undoes the last point placed while drawing; Ctrl+Z with no point placed is the ordinary undo of the last change, and Ctrl+Shift+Z / Ctrl+Y redo as before. | Sep, Sep 17, Sep 23, Sep 24 |
 | UI-03 | Corner removal by Shift+drag eraser sweep, Shift+Alt+drag box, and hover+Delete — all on the SELECTED shape only (UI-30) — plus a Simplify slider with a live corner count that must not flatten curves. | Sep 9, Sep 23 |
 | UI-04 | Ortho is Shift-held only, no sticky mode, with a dashed blue tracking line and a perpendicular lock on drawing lines AND on other vertices' alignment — on Shift and as a toolbar toggle. | Sep 8 |
 | UI-05 | Closing a polygon focuses the properties panel, Enter/Tab advancing fields. Tab never leaves the pane by itself; Escape is the way back to the plan (UI-29). | Sep, Sep 23 |

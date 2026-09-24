@@ -6596,7 +6596,12 @@ document.addEventListener('keydown',e=>{
   const t=e.target;
   if(t&&(t.tagName==='INPUT'||t.tagName==='SELECT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
   const mod=e.ctrlKey||e.metaKey;
-  if(mod&&(e.key==='z'||e.key==='Z')){e.preventDefault();e.shiftKey?history.redo():history.undo();return}
+  if(mod&&(e.key==='z'||e.key==='Z')){e.preventDefault();
+    // UI-02: while a shape is being drawn, Ctrl+Z takes back the last corner
+    // placed (same as right-click / Backspace); with no corners down it is
+    // the ordinary undo of the last change
+    if(!e.shiftKey&&undoLastDrawnPoint())return;
+    e.shiftKey?history.redo():history.undo();return}
   if(mod&&(e.key==='y'||e.key==='Y')){e.preventDefault();history.redo();return}
   if(mod)return;
 

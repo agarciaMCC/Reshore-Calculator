@@ -8,7 +8,7 @@
 //    the tool
 //  - a right-DRAG still pans, and keeps every corner
 //  - the browser's own context menu never opens over the plan
-//  - Backspace still does the same thing, and still falls through to
+//  - Backspace and Ctrl+Z do the same thing (Ctrl+Z from Sep 24), and still falls through to
 //    delete when nothing is being drawn
 import { createRequire } from 'node:module';
 const { chromium } = await (async () => {
@@ -83,6 +83,24 @@ ok(await N() === 1, 'Backspace still walks a point back: ' + await N());
 // and Backspace outside a draw still reaches deletion
 ok(await page.evaluate(()=>{ state.drawing.points=[]; setTool('select'); return undoLastDrawnPoint()===false }),
   'with nothing being drawn it declines, so Backspace falls through to delete');
+
+// Ctrl+Z takes back a corner too (Sep 24 2026: "if the user accidentally
+// draws a point incorrectly, allow the user to either right click or ctrl-z")
+await page.evaluate(()=>{ setTool('polygon'); state.drawing.points=[{x:1,y:1},{x:2,y:2},{x:3,y:3}]; });
+const hist0 = await page.evaluate(()=>JSON.stringify(state.levels.map(l=>(l.slabZones||[]).length+(l.zones||[]).length)));
+await page.keyboard.press('Control+z');
+ok(await N() === 2, 'Ctrl+Z walks a point back: ' + await N());
+await page.keyboard.press('Control+z');
+ok(await N() === 1, 'and keeps walking back: ' + await N());
+ok(await page.evaluate(()=>state.tool)==='polygon', 'without dropping the tool');
+ok(await page.evaluate(()=>JSON.stringify(state.levels.map(l=>(l.slabZones||[]).length+(l.zones||[]).length)))===hist0,
+  'and without undoing any drawn shape');
+// with nothing being drawn, Ctrl+Z is the ordinary undo
+const undone = await page.evaluate(()=>{ state.drawing.points=[]; setTool('select');
+  let called=false; const u=history.undo; history.undo=function(){called=true;return u.apply(this,arguments)};
+  document.dispatchEvent(new KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true}));
+  history.undo=u; return called; });
+ok(undone, 'with nothing being drawn Ctrl+Z reaches the ordinary undo');
 
 await browser.close();
 console.log(`\n${pass} passed, ${fail} failed`);
