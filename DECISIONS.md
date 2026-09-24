@@ -67,6 +67,7 @@ the system; this file holds the rules and is versioned with the code.
 | BEM-06 | Beams share a row when width x depth, stem, PLF, slab region key and the conditions on every carrying floor agree; heights cluster within 1 inch and the row shows the tallest. One shore pick, effective width and shores-per-cluster apply to every member. A broken-out member stays out until regrouped. | Sep 18 |
 | BEM-07 | Anything named BM or BEAM is a beam whatever its category. Columns are ignored by auto-detect. | Sep 15, Sep 18 |
 | BEM-08 | Auto-detected beams are proposed all, none ticked, sizes read from the nearby BM label, uncertain matches flagged. | Sep 15 |
+| BEM-09 | A BEAM'S STEM IS WHAT HANGS BELOW THE SLAB, from where both really are: the union of the beam's depth (from its own top) and the slab's thickness (from the slab's top), less the slab. A beam riding on its slab is depth − slab, as before; a beam whose top is set lower carries the extra concrete below the slab soffit (a 20" beam topped 6" down under a 9" slab: 17", not 11"). The shore under it meets the lowest concrete. Pieces of one beam with different stems are separate items (BEM-03). | Sep 24 |
 
 ## EDG — Floor edge
 
@@ -173,6 +174,7 @@ the system; this file holds the rules and is versioned with the code.
 | RES-09 | Region titles carry no pour-slab loading mark; each reshore row carries the CARRYING floor's mark. | Sep |
 | RES-10 | The selected region is a TEAL GLOW on its outline with a light tint inside — no dashes, nothing animated — so the drawing under the edge stays readable. While one region is selected the others step back. The same teal marks the lit row in the schedule. | Sep 21 |
 | RES-11 | RESULTS READ TOP-DOWN LIKE A FIELD SHEET: one context row (pour · area · print); real warnings stay in view, explanatory notes fold into "Notes & assumptions"; the pane opens on the pour's own sheet; tabs read "All floors / Under 3" and chips "under 3" (a floor called 3 must never read as a count); the install row leads with the floor and its pattern at the title size; "Next pick" is the pane's one primary button. | Sep 21 |
+| RES-12 | A beam row on Results lights only the part of the beam it covers, as the solver cut it — a beam over two conditions is two rows and each highlights its own length; a group row lights every member's piece. | Sep 24 |
 | RES-10 | Print refuses results that no longer match the inputs. | Sep 15 |
 
 ## PRT — The printed sheet

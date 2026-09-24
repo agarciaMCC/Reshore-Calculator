@@ -2636,20 +2636,39 @@ function offsetStr(inches){
 // What the slab looks like at one point of a level, given the slab-layer
 // shape found there (or null for the level baseline).
 function isBeam(z){return z&&z.kind==='beam'}
-// Beam stem below the slab, per foot of beam: width x (depth - slab) x 150 pcf.
+// Beam stem below the slab, per foot of beam: width x stem x 150 pcf.
 // The slab over the beam is already in the placement load, so only the stem
 // is new load.
-function beamStemPlf(z,slabIn){
+// THE STEM IS WHAT HANGS BELOW THE SLAB (BEM-11, Adolfo, Sep 24 2026). It
+// used to be depth − slab, which assumes the beam's top is the slab's top. A
+// beam whose top is set lower (a dropped beam under a 9" slab, Kalae) hangs
+// that much further below the slab's soffit, and that concrete was not
+// counted. The concrete in the section is the beam's depth and the slab's
+// thickness, each where it really is; what is below the slab is their union
+// less the slab.
+function beamStemIn(depthIn,slabIn,slabOffIn,beamOffIn){
+  const d=+depthIn||0,t=+slabIn||0,so=+slabOffIn||0,bo=beamOffIn==null?so:+beamOffIn;
+  const bTop=bo,bBot=bo-d,sTop=so,sBot=so-t;
+  const union=(bBot<=sTop&&sBot<=bTop)?Math.max(bTop,sTop)-Math.min(bBot,sBot):d+t;
+  return Math.max(0,Math.round((union-t)*1000)/1000);
+}
+function beamStemPlf(z,slabIn,slabOffIn,beamOffIn){
   if(!isBeam(z))return 0;
-  const w=+z.widthIn||0,d=+z.depthIn||0;
-  const stem=Math.max(0,d-(slabIn||0));
+  const w=+z.widthIn||0;
+  const bo=beamOffIn!==undefined?beamOffIn:(z.offsetIn!=null&&z.offsetIn!==''&&!isNaN(z.offsetIn)?+z.offsetIn:null);
+  const stem=beamStemIn(z.depthIn,slabIn,slabOffIn||0,bo);
   return Math.round((w/12)*(stem/12)*150*10)/10;
+}
+// how far below a beam's own top its lowest concrete is (the soffit a shore meets)
+function beamSoffitIn(depthIn,slabIn,slabOffIn,beamOffIn){
+  const d=+depthIn||slabIn,bo=beamOffIn==null?slabOffIn:beamOffIn;
+  return Math.max(d,bo-(slabOffIn-slabIn));
 }
 function slabAt(lv,z){
   if(z&&isOpening(z))return{open:true,thick:0,off:0,soffitIn:0,beam:null,zone:z};
   if(isBeam(z)){
     const t=slabThicknessOf(lv,null);
-    return{open:false,thick:t,off:beamOffsetOf(z,0),offLow:beamOffsetOf(z,0),sloped:false,soffitIn:Math.max(t,+z.depthIn||t),beam:z,zone:z,grade:levelOnGrade(lv)};
+    return{open:false,thick:t,off:beamOffsetOf(z,0),offLow:beamOffsetOf(z,0),slabOff:0,sloped:false,soffitIn:beamSoffitIn(+z.depthIn||t,t,0,beamOffsetOf(z,0)),beam:z,zone:z,grade:levelOnGrade(lv)};
   }
   const t=slabThicknessOf(lv,z);
   return{open:false,thick:t,off:slabOffsetOf(z),offLow:slabOffsetLowOf(z),sloped:isSlopedZone(z),
@@ -2675,9 +2694,10 @@ function slabStateAt(lv,list,x,y){
   // the beam's own T.O.S. offset wins when given; otherwise it rides on the
   // slab area it sits in (or the level baseline)
   // a beam is flat even where the slab it sits in falls
-  return{...base,off:beamOffsetOf(beamE.zone,base.off),offLow:beamOffsetOf(beamE.zone,base.offLow),
+  const bOff=beamOffsetOf(beamE.zone,base.off);
+  return{...base,off:bOff,offLow:beamOffsetOf(beamE.zone,base.offLow),slabOff:base.off,
          sloped:base.sloped&&(beamE.zone.offsetIn==null||beamE.zone.offsetIn===''),
-         soffitIn:Math.max(base.thick,d),beam:beamE.zone};
+         soffitIn:beamSoffitIn(d,base.thick,base.off,bOff),beam:beamE.zone};
 }
 // Color follows the loading condition, not the draw order, so the same
 // condition reads the same on every level.
@@ -8153,6 +8173,21 @@ function drawRegionMap(lv,zoom,F_MONO){
   });
   drawCtx.restore();
 }
+// Which beam row a highlight names: the beam, the region it is over, and —
+// where one beam has pieces with different stems — which stem.
+function beamHlKey(b){return 'beam:'+b.beamId+'|'+b.regionKey+(b.stemSplit?'|s'+b.stemIn:'')}
+// The part of the beam a result row covers, as the solver cut it (RES-11):
+// a beam over two conditions is two rows, and each lights only its own
+// length. A group row lights every member's piece.
+function beamHighlightMp(h){
+  if(!h||!/^beam:/.test(String(h.regionKey||''))||typeof schedSolve==='undefined'||!schedSolve)return null;
+  const P=(schedSolve.levels||[]).find(L=>L.pour&&L.pour.name===h.pour)||schedSolve.levels[schedPourIdx];
+  const bs=P&&P.solve&&P.solve.beams;if(!bs)return null;
+  const b=bs.find(x=>beamHlKey(x)===h.regionKey);if(!b)return null;
+  const parts=(b.group&&b.members?b.members:[b]).map(m=>m.mp).filter(Boolean);
+  if(!parts.length)return null;
+  return parts.reduce((u,m)=>u?mpUnion(u,m):m,null);
+}
 // The drawn footprint of a beam in building feet, by its zone id.
 function beamDrawnPoly(L,key){
   if(!L||!L.pour)return null;
@@ -8172,7 +8207,7 @@ function drawResultHighlight(lv,zoom,F_MONO){
   // A beam block is the beam's own footprint, not a patch of slab, so it is
   // neither grown nor clipped to the loading areas.
   const isBeam=/^beam:/.test(String(h.regionKey||''));
-  const rmp=sameP?highlightMp(h):null;
+  const rmp=sameP?(isBeam?beamHighlightMp(h):highlightMp(h)):null;
   const clip=(sameP&&!isBeam&&!rmp)?pourOutlinePath(lv,L):null;
   const occ=sameP?placementCellSet(L):new Set();
   const mine=new Set();
@@ -8288,7 +8323,7 @@ function pickResultAtPoint(cp){
   const label=hit.kind==='beam'?beamLabel(r,hit.i):regionLabel(r,hit.i,L);
   state.ui.regionMapPour=L.pour.name;
   setResultHighlight({cells:r.cells,step:r.cellStep,bb:r.bb,label,_scroll:true,
-    regionKey:hit.kind==='beam'?'beam:'+r.beamId+'|'+r.regionKey:r.key,pour:L.pour.name});
+    regionKey:hit.kind==='beam'?beamHlKey(r):r.key,pour:L.pour.name});
   renderSchedule();
   return true;
 }
@@ -14034,12 +14069,13 @@ function solvePourLevel(stack,pourIdx,opts){
 
     // a beam on the pour here: its own item, over this slab region
     if(beam){
-      const bkey=beam.id+'|'+key;
+      const stemHere=beamStemIn(beam.depthIn,thick,pourSlab.slabOff!=null?pourSlab.slabOff:pourSlab.off,pourSlab.off);
+      const bkey=beam.id+'|'+key+'|'+stemHere;
       let item=beamItems.get(bkey);
       if(!item){
         item={beamId:beam.id,zone:beam,region:reg,regionKey:key,
               widthIn:+beam.widthIn||0,depthIn:+beam.depthIn||0,widthFt:(+beam.widthIn||12)/12,
-              stemIn:Math.max(0,(+beam.depthIn||0)-thick),plf:beamStemPlf(beam,thick),label:beam.label||'',
+              stemIn:stemHere,plf:Math.round((+beam.widthIn||0)/12*(stemHere/12)*150*10)/10,label:beam.label||'',
               thicknessIn:thick,profile:beamProfileAt(belowLevels,0,reg.steps,shores),
               samples:0,cells:[],cellStep:step,mp:null,areaSF:0,
               bb:{minX:Infinity,minY:Infinity,maxX:-Infinity,maxY:-Infinity}};
@@ -15028,7 +15064,7 @@ function goOutstanding(L,dir){
   const obj=it.kind==='beam'?it.beam:it.region;
   openCards.add(it.kind==='beam'?beamCardKey(L,it.beam):cardKey(L,it.region));
   state.ui.highlight={cells:obj.cells,step:obj.cellStep,bb:obj.bb,label:it.label,_scroll:true,
-    regionKey:it.kind==='beam'?'beam:'+obj.beamId+'|'+obj.regionKey:obj.key,pour:L.pour.name,focusKey:it.key};
+    regionKey:it.kind==='beam'?beamHlKey(obj):obj.key,pour:L.pour.name,focusKey:it.key};
   state.ui.regionMapPour=L.pour.name;
   startAnts();
   const li=state.levels.findIndex(l=>l.id===(it.level.defId||it.level.id));
@@ -15037,7 +15073,7 @@ function goOutstanding(L,dir){
   // the render that lasts
   if(li>=0)showRegionOn(li,obj,it.label).then(()=>{
     const h=state.ui.highlight;
-    if(h&&h.regionKey===(it.kind==='beam'?'beam:'+obj.beamId+'|'+obj.regionKey:obj.key)){h.focusKey=it.key;h._scroll=true}
+    if(h&&h.regionKey===(it.kind==='beam'?beamHlKey(obj):obj.key)){h.focusKey=it.key;h._scroll=true}
     renderSchedule();
   });
 }
@@ -15217,7 +15253,7 @@ function renderSchedule(){
       const obj=it.beam?it.b:it.r;
       openCards.add(it.beam?beamCardKey(L,it.b):cardKey(L,it.r));
       const lbl=it.beam?beamLabel(it.b,it.bi):regionLabel(it.r,it.ri,L);
-      state.ui.highlight={cells:obj.cells,step:obj.cellStep,bb:obj.bb,label:lbl,_scroll:true,regionKey:it.beam?'beam:'+obj.beamId+'|'+obj.regionKey:obj.key,pour:L.pour.name};
+      state.ui.highlight={cells:obj.cells,step:obj.cellStep,bb:obj.bb,label:lbl,_scroll:true,regionKey:it.beam?beamHlKey(obj):obj.key,pour:L.pour.name};
       state.ui.regionMapPour=L.pour.name;startAnts();
       const lvl=it.beam?it.row.level:it.st.level;
       const li=state.levels.findIndex(l=>l.id===(lvl.defId||lvl.id));
@@ -15412,7 +15448,7 @@ function renderSchedule(){
       const card=el.closest('.sched-region');
       if(card&&card.dataset.card)openCards.add(card.dataset.card);
       const lbl=isBeam?beamLabel(r,+el.dataset.bi):regionLabel(r,+el.dataset.ri,L);
-      state.ui.highlight={cells:r.cells,step:r.cellStep,bb:r.bb,label:lbl,regionKey:isBeam?'beam:'+r.beamId+'|'+r.regionKey:r.key,pour:L.pour.name};
+      state.ui.highlight={cells:r.cells,step:r.cellStep,bb:r.bb,label:lbl,regionKey:isBeam?beamHlKey(r):r.key,pour:L.pour.name};
       state.ui.regionMapPour=L.pour.name;
       startAnts();
       showRegionOn(li,r,lbl).then(()=>renderSchedule());
@@ -15616,7 +15652,7 @@ function beamBlock(b,bi,L,hl){
       <td class="sched-num"><b>${r.beamSpacingFt!=null?feetToStr(r.beamSpacingFt)+' o.c.':'—'}</b></td></tr>${
       beamNeedsPad(r)?`<tr class="sched-pad-row sched-go" ${rowAttr}><td colspan="8"><div class="ra-pad">\u26a0 <b>Wood pad required under every ${esc(r.beamChosen.shore.name)} base</b> \u2014 ${esc(padText(r.beamChosen.shore.name,r.supportLevel&&r.supportLevel.name))}</div></td></tr>`:''}`;
   }).join('');
-  const lit=hl&&hl.regionKey==='beam:'+b.beamId+'|'+b.regionKey&&hl.pour===L.pour.name;
+  const lit=hl&&hl.regionKey===beamHlKey(b)&&hl.pour===L.pour.name;
   const ck=beamCardKey(L,b);
   const open=lit||openCards.has(ck);
   const tabF=resultsFloor(L);
