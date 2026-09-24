@@ -134,6 +134,28 @@ await setup();
   ok(await page.$eval('#propOffEl', e => e.readOnly && /no elevation/.test(e.placeholder)), 'with no level elevation the field says so and cannot be typed into');
 }
 
+console.log('E2. a commit inside an inline properties panel keeps the panel where it is (UI-29)');
+await setup();
+{
+  await page.evaluate(() => {
+    const lv = state.levels[0];
+    lv.slabZones.push({ id: sid(), polygon: [{ x: 100, y: 100 }, { x: 300, y: 100 }, { x: 300, y: 300 }, { x: 100, y: 300 }], kind: 'slab', thicknessIn: 10, offsetIn: 0, label: '' });
+    setStep('areas'); setLayer('slab'); state.activeZoneIdx = 0; renderSidebar();
+  });
+  const where = () => page.evaluate(() => { const p = document.getElementById('propsContent'); const row = p.closest('#zoneList') ? 'row' : p.closest('#beamPanel') ? 'card' : 'home'; return { where: row, active: document.activeElement.id }; });
+  const w0 = await where();
+  eq(w0.where, 'row', 'the properties open inline under the area\'s row');
+  await page.focus('#propThick'); await page.keyboard.press('Control+A'); await page.keyboard.type('11'); await page.keyboard.press('Enter');
+  await page.waitForTimeout(150);
+  const w1 = await where();
+  ok(w1.where === 'row' && w1.active === 'propOff', 'Enter commits, the panel stays under the row and focus moves to the next field: ' + JSON.stringify(w1));
+  await page.keyboard.type('2'); await page.keyboard.press('Tab');
+  await page.waitForTimeout(150);
+  const w2 = await where();
+  ok(w2.where === 'row' && w2.active === 'propOffEl', 'Tab commits and walks on, the panel still under the row: ' + JSON.stringify(w2));
+  eq(await page.evaluate(() => [state.levels[0].slabZones[0].thicknessIn, state.levels[0].slabZones[0].offsetIn].join(',')), '11,2', 'both values landed');
+}
+
 console.log('F. corners come off the selected shape only (UI-30)');
 await setup();
 {

@@ -1,4 +1,4 @@
-// @rules UI-33, UI-34, BLD-18  (see DECISIONS.md)
+// @rules UI-33, UI-34, UI-36, BLD-18  (see DECISIONS.md)
 // Batch 3 of the Sep 23 2026 list: the Sheets table on the table system with
 // nothing back-of-house in the rows, and Match floors as one list where a
 // proposed fit is confirmed on its own row.
@@ -81,6 +81,15 @@ console.log('B. Match floors is one list: the proposed fit is confirmed on its r
   eq(r.secondConfirm, 0, 'and nothing asks to be confirmed twice');
   ok(/^Confirm all \d+ proposed matches$/.test((r.primary || '').trim()), 'one primary confirms them all: ' + r.primary);
   ok(r.lists, 'the list is the sheet list itself, one row per sheet');
+  // UI-36: the grid shows itself — the sheet on screen draws its proposed fit with no button pressed,
+  // and clicking a proposed row previews it rather than asking for two crossings
+  const auto = await page.evaluate(async () => { const r = matchProposal.rows.find(x => x.fit); await goToPage(r.page); return { preview: !!state.ui.matchPreview && state.ui.matchPreview.page === state.pdf.current, align: state.align.active }; });
+  ok(auto.preview && !auto.align, 'paging to a proposed sheet on Match floors draws its proposed fit, and asks for no points: ' + JSON.stringify(auto));
+  const other = await page.evaluate(() => { const rows = [...document.querySelectorAll('#matchList .match-row.proposed')]; const r = rows.find(x => +x.dataset.reviewpage !== state.pdf.current); r.click(); return { page: +r.dataset.reviewpage }; });
+  await page.waitForFunction(pg => state.pdf.current === pg && state.ui.matchPreview && state.ui.matchPreview.page === pg, other.page, { timeout: 20000 });
+  ok(await page.evaluate(() => !state.align.active && !!state.ui.matchPreview), 'clicking another proposed row opens that sheet with its proposed grid drawn, no pick-two-points prompt');
+  const toasts = await page.evaluate(() => [...document.querySelectorAll('.toast')].map(t => t.textContent).filter(t => /two grid crossings/.test(t)).length);
+  eq(toasts, 0, 'and no "click two grid crossings" toast');
   await page.click('#matchList button[data-mpuse]');
   await page.waitForTimeout(300);
   const one = await page.evaluate(() => ({ matched: matchSheetRows().filter(x => x.matched).length, confirmed: matchSheetRows().filter(x => x.confirmed).length, scale: !!(state.project.planScale && state.project.planScale.confirmed) }));
@@ -90,6 +99,9 @@ console.log('B. Match floors is one list: the proposed fit is confirmed on its r
   await page.waitForTimeout(300);
   const all = await page.evaluate(() => ({ st: stepStatus('match'), proposal: !!matchProposal, confirmed: matchSheetRows().filter(x => x.confirmed).length, total: matchSheetRows().length }));
   ok(all.confirmed === all.total && all.st.done && !all.proposal, 'Confirm all finishes the step: ' + JSON.stringify(all));
+  // once written, paging to a sheet draws its fitted grid by itself
+  await page.evaluate(async () => { state.ui.gridReview = null; state.ui.matchPreview = null; const r = matchSheetRows().find(x => x.page !== state.pdf.current); await goToPage(r.page); });
+  ok(await page.evaluate(() => !!state.ui.gridReview && state.ui.gridReview.page === state.pdf.current), 'paging to a matched sheet on Match floors draws its grid without pressing Show grid');
 }
 
 await browser.close();

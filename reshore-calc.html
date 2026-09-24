@@ -2077,7 +2077,46 @@ function clearSheetMatch(levelIdx,page){
 }
 // Open a sheet and draw the fit that was made for it: the grid it implies and
 // the crossings it was fitted from. Escape peels it, like every other review.
-function reviewSheetMatch(levelIdx,page){
+// THE GRID SHOWS ITSELF ON MATCH FLOORS (UI-36, Adolfo Sep 24 2026: "the
+// matching floors portion should show the grid match without having to click
+// the button … when the user clicks through the levels to verify grid match,
+// it prompts the user to pick points even though a grid match was done in
+// the background"). Opening a sheet on the Match step — by its row, by paging,
+// on arrival — draws whatever the app has for it: the confirmed or written
+// fit's grid, or the fit the arrival read PROPOSED and is waiting for a
+// Confirm on. Only a sheet with neither is asked for two crossings, and only
+// by its own Match by hand button.
+function matchFitFor(levelIdx,page){
+  const lv=state.levels[levelIdx];if(!lv)return{kind:'none'};
+  const a=levelAlignmentFor(lv,page)||(lv.pdfPage===page?lv.alignment:null);
+  if(a&&a.transform)return{kind:'match',a};
+  const pi=(typeof matchProposal!=='undefined'&&matchProposal)?matchProposal.rows.findIndex(r=>r.levelIdx===levelIdx&&r.page===page&&r.fit):-1;
+  if(pi>=0)return{kind:'proposal',pi};
+  return{kind:'none'};
+}
+function matchShowSheet(levelIdx,page,opts){
+  const lv=state.levels[levelIdx];
+  if(!lv)return;
+  const f=matchFitFor(levelIdx,page);
+  if(f.kind==='proposal'){state.ui.gridReview=null;previewMatchRow(f.pi);return}
+  state.ui.matchPreview=null;
+  reviewSheetMatch(levelIdx,page,opts);
+}
+// the sheet on screen, with nothing drawn for it yet: draw its fit
+function matchAutoShow(){
+  if(typeof curStep==='undefined'||curStep!=='match'||state.align.active||!state.pdf.pages)return;
+  const pg=state.pdf.current;
+  if(state.ui.gridReview&&state.ui.gridReview.page===pg)return;
+  if(state.ui.matchPreview&&state.ui.matchPreview.page===pg)return;
+  const rows=matchSheetRows().filter(r=>r.page===pg);
+  const li=rows.length?(rows.find(r=>r.levelIdx===state.activeLevelIdx)||rows[0]).levelIdx:-1;
+  if(li<0)return;
+  const f=matchFitFor(li,pg);
+  if(f.kind==='none')return;
+  if(f.kind==='proposal'){state.ui.gridReview=null;state.activeLevelIdx=li;const r=matchProposal.rows[f.pi];state.ui.matchPreview={page:r.page,transform:r.fit.transform,pts:r.keep,idx:f.pi};renderCanvas();return}
+  state.ui.matchPreview=null;state.ui.gridReview={levelIdx:li,page:pg};renderCanvas();
+}
+function reviewSheetMatch(levelIdx,page,opts){
   const lv=state.levels[levelIdx];
   if(!lv)return;
   state.activeLevelIdx=levelIdx;
@@ -2087,7 +2126,7 @@ function reviewSheetMatch(levelIdx,page){
   go.then(()=>{
     renderMatchPanel();renderSidebar();renderCanvas();renderPageBar();
     const a=levelAlignmentFor(lv,page)||lv.alignment;
-    if(!a||!a.transform)toast(`${lv.name}${sheetZoneName(lv,page)?' · '+sheetZoneName(lv,page):''} has no match yet — click two grid crossings to make one.`,4200);
+    if((!a||!a.transform)&&!(opts&&opts.quiet))toast(`${lv.name}${sheetZoneName(lv,page)?' · '+sheetZoneName(lv,page):''} has no match yet — Match by hand on its row: click two grid crossings.`,4200);
   });
 }
 // The crossings a stored fit was made from, drawn where the fit puts them
@@ -3139,6 +3178,7 @@ async function goToPage(num){
   ensurePageGeometry(num);
   updateSnapGeomInfo();
   updatePageInfo();renderPageBar();renderCanvas();
+  if(typeof matchAutoShow==='function')matchAutoShow();
 }
 
 function updatePageInfo(){
@@ -9940,6 +9980,7 @@ async function proposeMatchAll(){
   }
   matchProposal={rows,when:Date.now()};
   renderMatchPanel();
+  if(typeof matchAutoShow==='function')matchAutoShow();   // UI-36: the sheet on screen shows its proposed fit at once
   return matchProposal;
 }
 // ONE LIST, ONE CONFIRM (UI-34, Adolfo Sep 23 2026: the proposed matches
@@ -17012,6 +17053,7 @@ function setStep(id){
   // review, Next — the buttons stay as "run again".
   if(id==='edge'&&typeof proposeOnGrade==='function')proposeOnGrade();
   if(id==='edge'&&typeof autoDetectEdges==='function')autoDetectEdges();
+  if(id==='match'&&typeof matchAutoShow==='function')matchAutoShow();
   if(grp.id==='areas'&&typeof autoScanAreas==='function')autoScanAreas();
   if(grp.id==='areas'&&typeof beamScan!=='undefined'&&beamScan&&typeof renderBeamPanel==='function')renderBeamPanel();   // a paused review comes back
   if(typeof renderPageBar==='function')renderPageBar();
@@ -17449,7 +17491,7 @@ function renderMatchPanel(){
   bindByHand(el);
   el.querySelectorAll('[data-reviewpage]').forEach(row=>row.addEventListener('click',ev=>{
     if(ev.target.closest('button,input,select'))return;
-    reviewSheetMatch(+row.dataset.reviewlevel,+row.dataset.reviewpage);
+    matchShowSheet(+row.dataset.reviewlevel,+row.dataset.reviewpage,{quiet:true});
   }));
   el.querySelectorAll('button[data-reviewbtn]').forEach(b=>b.addEventListener('click',ev=>{
     ev.stopPropagation();
@@ -23609,7 +23651,7 @@ function init(){
   renderNow();
 }
 // UI-29: every pane renderer keeps the focused field across a rebuild
-for(const n of ['renderLevelList','renderTypicalBlock','renderSheetTable','renderEdgeSection','renderMatchPanel','renderZoneList','renderProperties','renderSplitTables','renderLoadStart','renderDrawingsPanel','renderLevelsConfirm','renderPageBar','renderSchedule','renderSequence','renderStepPanel','renderLoadActions','renderLoadMapTable','renderLoadImportPanel','renderGridList','renderRemapPanel','renderEdgePanel','renderBeamPanel','renderAutoTracePanel','renderStepper','renderShoreTable','renderCascade','renderInstallSummary']){
+for(const n of ['renderLevelList','renderTypicalBlock','renderSheetTable','renderEdgeSection','renderMatchPanel','renderZoneList','renderProperties','placePropsPanel','renderSplitTables','renderLoadStart','renderDrawingsPanel','renderLevelsConfirm','renderPageBar','renderSchedule','renderSequence','renderStepPanel','renderLoadActions','renderLoadMapTable','renderLoadImportPanel','renderGridList','renderRemapPanel','renderEdgePanel','renderBeamPanel','renderAutoTracePanel','renderStepper','renderShoreTable','renderCascade','renderInstallSummary']){
   if(typeof window[n]==='function')window[n]=inPlace(window[n]);
 }
 init();
