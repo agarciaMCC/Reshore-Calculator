@@ -1,4 +1,4 @@
-// @rules UI-11, UI-12  (see DECISIONS.md)
+// @rules UI-11, UI-12, UI-37  (see DECISIONS.md)
 // DO THE FLOORS LINE UP? (Kinect, Sep 17 2026)
 // Adolfo: "The calculator is not recognizing a floor below when it does in
 // fact exist... we need to be able to line up the floors and loading areas.
@@ -114,10 +114,11 @@ const P = await page.evaluate(async () => {
   const rows = [...host.querySelectorAll('.ss-row')];
   const bad = rows.filter(r => r.classList.contains('bad')).length;
   return { shown: host.style.display !== 'none', rows: rows.length, bad,
-           warnHead: !!host.querySelector('.ss-head.warn'), ghostBox: !!host.querySelector('#ssGhost') };
+           warnHead: !!host.querySelector('.ss-caption.warn'), ghostBox: !!host.querySelector('#ssGhost'), inMatch: !!host.closest('.step-panel[data-step="match"]'), ghostOn: host.querySelector('#ssGhost').checked, noToggle: !host.querySelector('.ss-head, details') };
 });
 ok(P.shown && P.rows === 6, 'the panel lists every floor-sheet: ' + JSON.stringify(P));
 ok(P.bad >= 1 && P.warnHead, 'the ones to look at are marked, and the header says so: ' + JSON.stringify(P));
+ok(P.inMatch && P.ghostOn && P.noToggle, 'the check lives under Match floors on the Building step, open, with the ghost on by default (UI-37): ' + JSON.stringify(P));
 ok(P.ghostBox, 'with the ghost switch on it');
 const jumped = await page.evaluate(async () => {
   const rows = sheetStackRows();
@@ -142,15 +143,17 @@ const G = await page.evaluate(() => {
     c.fillText = function (t) { texts.push(String(t)); return t0.apply(c, arguments) };
     renderNow();
     c.stroke = s0; c.fillText = t0;
-    return { strokes, ghosted: texts.some(t => /FLOOR BELOW/.test(t)) };
+    return { strokes, ghosted: texts.some(t => /FLOOR BELOW/.test(t)), above: texts.some(t => /FLOOR ABOVE/.test(t)) };
   };
   state.ui.ghostBelow = false; const off = count();
   state.ui.ghostBelow = true;  const on = count();
   const below = levelBelowOf(state.levels[i]);
-  return { off, on, below: below && below.name };
+  delete state.ui.ghostBelow; const dflt = count();
+  return { off, on, dflt, below: below && below.name, above: levelAboveOf(state.levels[i]) && levelAboveOf(state.levels[i]).name };
 });
 ok(G.below === '2', 'the floor below Level 3 is Level 2: ' + G.below);
-ok(!G.off.ghosted && G.on.ghosted, 'the ghost is off until asked for, then labelled: ' + JSON.stringify(G));
+ok(!G.off.ghosted && G.on.ghosted, 'the ghost can be switched off, and is labelled when on: ' + JSON.stringify(G));
+ok(G.dflt.ghosted && G.dflt.above && G.above === '4', 'by default it is ON, and draws the floor above as well as the floor below (UI-37): ' + JSON.stringify([G.dflt, G.above]));
 ok(G.on.strokes > G.off.strokes, 'and it actually draws: ' + JSON.stringify([G.off.strokes, G.on.strokes]));
 ok(await page.evaluate(() => { setStep('loads'); state.ui.ghostBelow = true;
   const c = document.getElementById('drawCanvas').getContext('2d'); let t = [];

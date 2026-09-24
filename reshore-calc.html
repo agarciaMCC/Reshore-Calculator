@@ -713,7 +713,11 @@ input[readonly],input.derived{background:var(--derived-bg);color:var(--text-seco
 .ec-main b{font-size:var(--fs-md)}
 .ec-main .lm-dim{display:block}
 .ec-why{grid-column:2/3;color:var(--accent)}
-.ss-panel{margin:6px 0 10px}
+.ss-panel{margin:14px 0 10px;padding-top:8px;border-top:1px solid var(--border)}
+.ss-caption{display:flex;align-items:center;gap:8px;padding:2px 2px 4px;font-size:var(--fs-md)}
+.ss-caption .lm-dim{margin-left:auto;font-size:var(--fs-sm)}
+.ss-caption.warn .lm-dim{color:var(--accent)}
+.ss-sw{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle;margin:0 2px}
 .ss-head{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:6px 8px;border-radius:4px;cursor:pointer;
   background:var(--panel-2,rgba(127,127,127,.10));border:1px solid transparent;color:var(--text);font-size:var(--fs-md)}
 .ss-head.warn{border-color:var(--accent);background:rgba(207,10,44,.10)}
@@ -6918,42 +6922,61 @@ function levelGroundFt(lv){
   const edges=all.filter(e=>isEdgeZone(e.zone));
   return edges.length?edges:all.filter(e=>typeof isSlabExtentZone==='function'&&isSlabExtentZone(e.zone));
 }
+function levelAboveOf(lv){
+  if(!lv||lv.elevation==null)return null;
+  let best=null;
+  for(const o of state.levels){
+    if(o===lv||o.elevation==null||o.elevation<=lv.elevation)continue;
+    if(!best||o.elevation<best.elevation)best=o;
+  }
+  return best;
+}
+// The ghost is on unless switched off (UI-37, Adolfo Sep 24 2026: "should
+// default to ghost on the plan and it should show the floor above and below
+// in different colors").
+function ghostOn(){return state.ui.ghostBelow!==false}
+const GHOST_BELOW_RGB='120,120,255',GHOST_ABOVE_RGB='230,120,20';
 function drawFloorBelowGhost(lv,zoom,F_MONO){
-  if(!state.ui.ghostBelow)return;
+  if(!ghostOn())return;
   if(typeof curGroup==='function'&&curGroup().id!=='areas'&&curGroup().id!=='building')return;
   const T=screenTransform(lv);
   if(!T||!lv)return;
-  const below=levelBelowOf(lv);
-  if(!below)return;
   // EVERY sheet of the floor below, together: its North and South edges land
   // in building feet through their own matches and make one complete floor,
   // which is what the sheet above stands on. (Adolfo, Sep 17 2026: "its not
   // combining the floor edges from north and south to make one complete
   // floor edge.") A sheet below that is unmatched, or has no edge, is simply
   // missing from the ghost — and the stacking check below says which.
-  const ground=levelGroundFt(below);
-  if(!ground.length)return;
-  drawCtx.save();
-  drawCtx.strokeStyle='rgba(120,120,255,.75)';
-  drawCtx.fillStyle='rgba(120,120,255,.07)';
-  drawCtx.lineWidth=2/zoom;
-  drawCtx.setLineDash([16/zoom,8/zoom]);
-  for(const e of ground){
-    const px=e.bPoly.map(b=>buildingToPixel(b.x,b.y,T)).filter(Boolean);
-    if(px.length<3)continue;
-    drawCtx.beginPath();
-    px.forEach((q,i)=>i?drawCtx.lineTo(q.px,q.py):drawCtx.moveTo(q.px,q.py));
-    drawCtx.closePath();drawCtx.fill();drawCtx.stroke();
-  }
-  drawCtx.setLineDash([]);
-  const p0=ground[0]&&buildingToPixel(ground[0].bPoly[0].x,ground[0].bPoly[0].y,T);
-  if(p0){
-    drawCtx.font=`700 ${Math.max(11,13/zoom)}px ${F_MONO}`;
-    drawCtx.fillStyle='rgba(90,90,220,.95)';
-    drawCtx.textAlign='left';drawCtx.textBaseline='top';
-    drawCtx.fillText(`FLOOR BELOW: ${String(below.name).toUpperCase()}`,p0.px+6/zoom,p0.py+6/zoom);
-  }
-  drawCtx.restore();
+  // The floor above is drawn too, in its own colour, so what will stand on
+  // this floor can be checked against it.
+  const draw=(other,rgb,label,dash,dy)=>{
+    if(!other)return;
+    const ground=levelGroundFt(other);
+    if(!ground.length)return;
+    drawCtx.save();
+    drawCtx.strokeStyle=`rgba(${rgb},.75)`;
+    drawCtx.fillStyle=`rgba(${rgb},.07)`;
+    drawCtx.lineWidth=2/zoom;
+    drawCtx.setLineDash(dash.map(v=>v/zoom));
+    for(const e of ground){
+      const px=e.bPoly.map(b=>buildingToPixel(b.x,b.y,T)).filter(Boolean);
+      if(px.length<3)continue;
+      drawCtx.beginPath();
+      px.forEach((q,i)=>i?drawCtx.lineTo(q.px,q.py):drawCtx.moveTo(q.px,q.py));
+      drawCtx.closePath();drawCtx.fill();drawCtx.stroke();
+    }
+    drawCtx.setLineDash([]);
+    const p0=ground[0]&&buildingToPixel(ground[0].bPoly[0].x,ground[0].bPoly[0].y,T);
+    if(p0){
+      drawCtx.font=`700 ${Math.max(11,13/zoom)}px ${F_MONO}`;
+      drawCtx.fillStyle=`rgba(${rgb},.95)`;
+      drawCtx.textAlign='left';drawCtx.textBaseline='top';
+      drawCtx.fillText(`${label}: ${String(other.name).toUpperCase()}`,p0.px+6/zoom,p0.py+dy/zoom);
+    }
+    drawCtx.restore();
+  };
+  draw(levelBelowOf(lv),GHOST_BELOW_RGB,'FLOOR BELOW',[16,8],6);
+  draw(levelAboveOf(lv),GHOST_ABOVE_RGB,'FLOOR ABOVE',[4,6],24);
 }
 // One row per floor per sheet: is it matched, does it say where its slab is,
 // and what ground does it land on.
@@ -7130,25 +7153,24 @@ function renderSheetStack(){
   const open=!!state.ui.stackOpen;
   const ft=v=>Math.round(v);
   host.style.display='block';
-  host.innerHTML=`<button type="button" class="ss-head${bad?' warn':''}" id="ssToggle">
-      <span>${open?'\u25be':'\u25b8'}</span><b>Do the floors line up?</b>
-      <span class="lm-dim">${bad?`${bad} to look at`:'every sheet accounted for'}</span></button>`
-    +(open?`<div class="ss-body">
-      <p class="step-help dim">One row per floor per sheet: whether it is matched, whether it says where its slab is, and the ground it lands on in building feet. A floor the solver cannot see below a pour is a floor that says nothing here.</p>
-      <label class="ss-ghost"><input type="checkbox" id="ssGhost"${state.ui.ghostBelow?' checked':''}> Draw the floor below as a ghost on the plan</label>
+  // UI-37: a plain block under the Match floors list — not folded away — with
+  // the ghost on by default, the floor below in blue and the floor above in orange
+  host.innerHTML=`<div class="ss-caption${bad?' warn':''}"><b>Do the floors line up?</b>
+      <span class="lm-dim">${bad?`${bad} to look at`:'every sheet accounted for'}</span></div>
+    <div class="ss-body">
+      <p class="step-help dim">One row per floor per sheet: whether it is matched, whether it says where its slab is, and the ground it lands on in building feet. On the plan the <span class="ss-sw" style="background:rgb(${GHOST_BELOW_RGB})"></span> floor below and the <span class="ss-sw" style="background:rgb(${GHOST_ABOVE_RGB})"></span> floor above are drawn as ghosts over the sheet on screen. A floor the solver cannot see below a pour is a floor that says nothing here.</p>
+      <label class="ss-ghost"><input type="checkbox" id="ssGhost"${ghostOn()?' checked':''}> Ghost the floors below and above on the plan</label>
       ${rows.map((r,i)=>`<div class="ss-row${r.issues.length?' bad':''}${r.page===state.pdf.current&&r.levelIdx===state.activeLevelIdx?' here':''}" data-ss="${i}">
          <span class="ss-lv">${esc(r.level)}</span>
          <span class="ss-sh">${esc(r.page==null?'no sheet':(r.zone||('sheet '+r.page)))}${r.zone?` <span class="lm-dim">sheet ${r.page}</span>`:''}</span>
          <span class="ss-st">${r.matched?'matched':'<b>unmatched</b>'} \u00b7 ${r.nEdges?`${r.nEdges} floor edge${r.nEdges>1?'s':''}`:(r.bb?'slab areas only':'nothing drawn')}</span>
          <span class="ss-ft">${r.bb?`x ${ft(r.bb.minX)}\u2013${ft(r.bb.maxX)} \u00b7 y ${ft(r.bb.minY)}\u2013${ft(r.bb.maxY)} ft \u00b7 ${Math.round(r.sf).toLocaleString()} SF`:'\u2014'}</span>
          ${r.issues.length?`<span class="ss-why">${r.issues.map(esc).join(' \u00b7 ')}${r.over&&!r.overOnGrade&&!r.overAccepted
-              ?` <button type="button" class="btn btn-sm ss-ok" data-ssok="${i}" title="The slab there is on grade \u2014 it bears on soil and needs nothing under it. Accepts this overshoot; the warning returns if it grows or a new side appears.">OK \u2014 that\u2019s slab on grade</button>`:''}</span>`:''}
+              ?` <button type="button" class="btn btn-sm ss-ok" data-ssok="${i}" title="The slab there is on grade \u2014 it bears on soil and needs nothing under it. Accepts this overshoot; the warning returns if it grows or a new side appears.">OK \u2014 that's slab on grade</button>`:''}</span>`:''}
          ${r.notes.length?`<span class="ss-note">${r.notes.map(esc).join(' \u00b7 ')}${r.over&&r.overAccepted
               ?` <button type="button" class="ss-undo" data-ssundo="${i}" title="Take the confirmation back and warn about this overshoot again">recheck</button>`:''}</span>`:''}
        </div>`).join('')}
-    </div>`:'');
-  const t=host.querySelector('#ssToggle');
-  if(t)t.addEventListener('click',()=>{state.ui.stackOpen=!state.ui.stackOpen;renderSheetStack()});
+    </div>`;
   const g=host.querySelector('#ssGhost');
   if(g)g.addEventListener('change',()=>{state.ui.ghostBelow=g.checked;renderCanvas()});
   host.querySelectorAll('button[data-ssok]').forEach(b=>b.addEventListener('click',ev=>{
@@ -17717,8 +17739,9 @@ function mountFlow(){
   // ARE-12: the trace review lives on the Loading tab, at the top like the beam scan
   const atp=document.createElement('div');atp.id='autoTracePanel';atp.className='at-panel';atp.style.display='none';
   host5.insertBefore(atp,bmp.nextSibling);
+  // UI-37: the stacking check lives on the Building step, after Match floors
   {const ss=document.createElement('div');ss.id='sheetStack';ss.className='ss-panel';ss.style.display='none';
-   document.getElementById('p-areas').appendChild(ss)}
+   const pm=document.getElementById('p-match');(pm||document.getElementById('p-areas')).appendChild(ss)}
   mv('#zoneList','p-areas');
   {const ls=document.querySelector('#p-areas .layer-switch');if(ls&&bh5)ls.parentNode.insertBefore(bh5,ls.nextSibling)}
   const props=document.getElementById('propsContent');
