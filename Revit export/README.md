@@ -1,65 +1,73 @@
-# ifc2reshore — Revit scope model → McClone Reshore Calculator
+# ifc2reshore — Revit scope model → Reshore Calculator job
 
-Turns an IFC export of McClone's own Revit scope model into a ready-made calculator job:
+Turns an IFC export of McClone's Revit scope model into a calculator job. Outputs:
 
-* `<job>-revit-plans.pdf` — one plan sheet per level, drawn from the model geometry (slab, openings, beams, columns, CIP walls, gridlines with bubbles, title strip with level name and T.O.S.). This is the "drawing set" the calculator stands on.
-* `<job>-revit.reshore.json` — the job file: levels with T.O.S. elevations and typical slab thickness, every sheet assigned and matched (exact transform, confirmed), the floor edge per level (confirmed), openings, slab areas where thickness or top differs from the typical, slab-on-grade, beams with width / full depth / T.O.S. offset, and the primary project grid. The Building step is complete when it opens.
-* `<job>-revit-export-log.txt` — what was read and skipped, per level.
+| File | What it is |
+|---|---|
+| `<job>-revit-plans.pdf` | One plan sheet per level, drawn from the model: slab, openings, beams, columns, CIP walls, gridlines with bubbles, and a title strip with the level name and T.O.S. This is the drawing set. |
+| `<job>-revit.reshore.json` | The job. It has levels with T.O.S. and typical slab thickness, every sheet assigned and matched (exact, confirmed), a confirmed floor edge per level, openings, slab areas where thickness or top differs from typical, slab on grade, beams (width, full depth, T.O.S. offset) and the primary project grid. The Building step is complete when it opens. |
+| `<job>-revit-export-log.txt` | What was read and skipped, per level. |
 
-Loading marks are **not** exported. They are drawn in the calculator over this geometry, as decided Sep 18 2026. Placements are one per level for now.
+Loading marks are **not** exported; they are drawn in the calculator (decided Sep 18, 2026). There is one placement per level.
 
 ## Running it
 
-Needs Python 3.10+ with `ifcopenshell`, `shapely`, `numpy`, `matplotlib`:
+Python 3.10+ with `ifcopenshell`, `shapely`, `numpy`, `matplotlib`:
 
     pip install ifcopenshell shapely numpy matplotlib
     python ifc2reshore.py "HI_KALAE_MCC_ST.ifc" --out "Revit export" --name "1268 KALAE" --rotate auto
 
-The first run on a model reads all the geometry (about 2 minutes for Kalae) and caches it beside the outputs; later runs with different options take seconds. Re-export the IFC and delete the `extract-*.json` cache when the model changes.
+- The first run reads all geometry (about 2 min for Kalae) and caches it beside the outputs, so later runs take seconds.
+- Delete the `extract-*.json` cache when the model changes.
 
-Options:
+| Option | Effect |
+|---|---|
+| `--rotate auto` / `--rotate 21.87` | `auto` turns the plain-number gridlines vertical; a number rotates by that many degrees counter-clockwise. With neither, the IFC's shared coordinates are kept. Kalae has two grids 30° apart (tower and podium). |
+| `--scale 16` | Sheet scale in feet per inch. The default is the smallest standard scale that fits. |
+| `--sheet 36x24` | Sheet size in inches. |
+| `--levels 2,3,4` | Export only these levels. |
+| `--grid primary\|all` | Which gridlines name the bays. The default, `primary`, uses plain numbers and letters. |
+| `--min-opening 10`, `--min-area 15` | Ignore holes and slab pieces under that many SF. |
 
-* `--rotate auto` rotates so the plain-number gridlines run vertical; `--rotate 21.87` (degrees, counter-clockwise) rotates by a fixed amount; no flag keeps the IFC's shared-coordinate orientation. Kalae has two grid orientations 30° apart (tower vs podium), so pick whichever reads better for the floors you are working on.
-* `--scale 16` sets the sheet scale in feet per inch (16 = 1/16" = 1'-0"). Default: the smallest standard scale that fits the building on the sheet.
-* `--sheet 36x24` sheet size in inches.
-* `--levels 2,3,4` export only some levels.
-* `--grid primary|all` which gridlines name the bays (default primary: plain numbers and letters only).
-* `--min-opening 10`, `--min-area 15` ignore holes / slab pieces under that many SF.
-
-Gridlines on the sheets: only clean tags are drawn — uppercase letters, digits and dots (1, 8, AA, A2.2). Anything with an apostrophe or a lowercase letter (1', 6w, L5-8a, bbw) and the mechanical M-numbers are working lines and are left off. Lines run across the building extents and every bubble sits outside those extents, so bubbles never lie over the slab where areas are drawn.
+**Gridlines:**
+- Only clean tags are drawn: uppercase letters, digits and dots (1, 8, AA, A2.2).
+- Working lines (1', 6w, L5-8a, M-numbers) are left off.
+- Lines span the building, and every bubble sits outside it.
 
 ## Loading it in the calculator
 
-1. Open `reshore-calc.html`, upload `<job>-revit-plans.pdf` as the drawing set.
+1. Open `reshore-calc.html` and upload `<job>-revit-plans.pdf`.
 2. Open job → `<job>-revit.reshore.json`.
-3. Building shows complete. Go to Loads, enter or import the capacity chart, then draw the loading areas on the Areas step. Everything else (edges, openings, beams, slab steps, grid) is already there.
+3. Enter or import the capacity chart on Loads, then draw loading areas on Areas.
 
 ## Revit export settings
 
-File → Export → IFC, setup **IFC4 Reference View** (IFC 2x3 Coordination View 2.0 also works), Property Sets tab: "Export Revit property sets" ticked. Whole model, not a single view.
+- File → Export → IFC, setup **IFC4 Reference View** (IFC 2x3 CV 2.0 also works).
+- Tick "Export Revit property sets".
+- Export the whole model, not a view.
 
-## Modeling conventions the exporter relies on
+## Modeling conventions it relies on (Kalae, Sep 18, 2026)
 
-Confirmed against the Kalae model, Sep 18 2026:
-
-* Floors carry their thickness and kind in the type name: `7 1/2" PT SLAB`, `9" MS SLAB`, `5" SOG`. Thickness is read from the name, falling back to the geometry.
-* Floors named `FILL`, `PAD`, `CURB`, `PEDESTAL`, `PLINTH`, `TOS SLOPE` are toppings/fixtures and are never slab. Piles, pile caps and foundation slabs are ignored.
-* Anything whose type name contains `BM` or `BEAM` is a beam, whether it is Structural Framing or a Floor (`Floor:90x12 3/4 BM`).
-* Beams are modeled **full depth from top of slab**; the `WxD` in the type name is width × total depth in inches and is exported as-is (the calculator takes the slab out itself). A beam whose top sits below the slab gets a negative T.O.S. offset; one whose top is above it (upturned) is skipped and listed in the log.
-* Grade beams and steel (L-angles, HSS, W) are ignored.
-* Floors joined to framing come through IFC with a slot where every beam runs; the exporter closes those slots (floors ∪ beams) before taking the floor edge and openings, so the edge is the real slab outline and the openings are the real openings.
-* The level's T.O.S. is the top of its largest floor element, snapped to 1/8". Where that differs from the Revit level (Kalae L5: 143'-10" vs 144'-0") the log says so.
-* A level whose slab is ≥ 90 % slab-on-grade is exported as on grade (`level.onGrade`); SOG areas on a suspended level become partial on-grade areas.
+- **Floors:** the type name carries thickness and kind (`7 1/2" PT SLAB`, `9" MS SLAB`, `5" SOG`). The name wins over the geometry.
+- **Never slab:** floors named `FILL`, `PAD`, `CURB`, `PEDESTAL`, `PLINTH` or `TOS SLOPE`. Piles, pile caps and foundation slabs are ignored.
+- **Beams:** anything with `BM` or `BEAM` in the type name, as Structural Framing or as a Floor (`Floor:90x12 3/4 BM`).
+  - `WxD` is width × full depth from the beam's own top, in inches, exported as-is.
+  - A beam topped below the slab gets a negative T.O.S. offset, and the calculator counts everything below the slab soffit as stem (BEM-09).
+  - Upturned beams are skipped and logged.
+- **Ignored:** grade beams and steel (L, HSS, W).
+- **Slots:** the IFC slots floors where framing joins them. The exporter closes those slots (floors ∪ beams) before taking the edge and openings.
+- **Level T.O.S.:** the top of the largest floor element, snapped to 1/8". Differences from the Revit level are logged (Kalae L5: 143'-10" vs 144'-0").
+- **On grade:** a level that is ≥ 90% SOG is exported whole-level on grade. SOG on a suspended level becomes a partial on-grade area.
 
 ## Checking an export
 
-`tests/load-in-calc.mjs` drives `reshore-calc.html` headlessly (Playwright): uploads the PDF, opens the job, checks every Building gate, reads back edge areas, then gives every level a flat 54 psf capacity and solves the L8 pour — expecting 70 psf on L7 at 9'-1" and 16 psf on L6, as in the Kalae workbook.
+`tests/load-in-calc.mjs` opens the PDF and job headlessly, checks every Building gate and the edge areas, then solves the L8 pour at a flat 54 PSF. It expects 70 PSF on L7 at 9'-1" and 16 PSF on L6, matching the Kalae workbook.
 
     node tests/load-in-calc.mjs ../reshore-calc.html "Revit export/1268_KALAE-revit-plans.pdf" "Revit export/1268_KALAE-revit.reshore.json"
 
-## Known limits / later
+## Limits
 
-* One level = one placement. Pour zones per level are a later option (the model would need floors split by pour, or the zones drawn in the calculator).
-* Non-orthogonal gridlines after rotation are drawn on the sheets but cannot be in the project grid (it is x/y lists), so bays on the second grid system are unnamed.
-* Sloped slabs (ramps) are exported flat at their top elevation with the name as label; check them by hand.
-* The pyRevit button that writes the job straight from the open model, without the IFC step, is the planned next form of this tool.
+- One placement per level. Pour zones would need floors split by pour in the model, or zones drawn in the calculator.
+- Gridlines that are not orthogonal after rotation are drawn but can't join the project grid (it is x/y lists), so bays on the second system are unnamed.
+- Ramps export flat at their top elevation, labeled; check them by hand.
+- Next form of the tool: a pyRevit button that writes the job straight from the open model.

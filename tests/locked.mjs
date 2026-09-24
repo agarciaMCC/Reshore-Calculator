@@ -1,4 +1,4 @@
-// @rules ARE-11  (see DECISIONS.md)
+// @rules ARE-27  (see DECISIONS.md)
 // THE MARKUP IS LOCKED ON RESULTS AND SEQUENCE (Adolfo, Sep 10, 2026):
 // "loading/slab areas should not be editable in the results/sequence tabs.
 // they should be locked."

@@ -1,4 +1,4 @@
-// @rules MDL-03, RES-10  (see DECISIONS.md)
+// @rules MDL-03, RES-13  (see DECISIONS.md)
 // Regression on Adolfo's saved test job (tests/fixtures/test-job.reshore.json):
 // Level 1 is half suspended (B2 area, east) and half on grade (west). The
 // pour on Level 3 must see Level 1 as GRADE over the west half, not "no slab".
@@ -49,6 +49,18 @@ ok(!r.unresolved, 'nothing unresolved');
 // the 31 ft rows should only remain where Level 1 really has an opening under Level 2 slab
 const tall = r.rows.filter(x => x.steps.some(s => s.h != null && s.h > 30));
 ok(tall.every(x => x.steps.some(s => s.lv === '1' && s.open && !s.noSlab)), 'any 31 ft shore is over a real Level 1 opening, not a missing slab: ' + JSON.stringify(tall.map(x => x.label)));
+
+// RES-13: the print refuses a result the inputs have moved on from
+const pr = await page.evaluate(() => {
+  // the fixture has no drawing set, so the Results gate stops runSchedule; solve as it would
+  schedSolve = solveAll(); calculatedInputKey = calculationKey();
+  const fresh = resultsCurrent() && checkPrintFreshness(false);
+  state.project.constructionDL = (state.project.constructionDL || 30) + 5;   // an input changes
+  const stale = checkPrintFreshness(false);
+  return { fresh, stale, cleared: !schedSolve || !resultsCurrent() };
+});
+ok(pr.fresh, 'a current result may print');
+ok(!pr.stale && pr.cleared, 'after an input change the print is refused and the old result cleared: ' + JSON.stringify(pr));
 
 await browser.close();
 console.log(`\n${pass} passed, ${fail} failed`);
