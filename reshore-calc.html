@@ -2491,7 +2491,44 @@ function isGradeZone(z){return slabKind(z)==='grade'}
 // outline itself, and a beam sits under whatever slab covers it.
 function isSlabExtentZone(z){const k=slabKind(z);return k==='slab'||k==='grade'}
 function newSlabKind(){const k=state.ui.slabKind;return (k==='opening'||k==='beam'||k==='grade'||k==='edge')?k:'slab'}
-function levelOnGrade(l){return !!(l&&l.onGrade&&!isRange(l))}
+// THE SOG AREA IS DRAWN FROM THE FLOOR EDGE (ARE-13, Adolfo Sep 24 2026):
+// a floor ticked SOG on the Levels list gets an on-grade area matching its
+// confirmed floor edge, so nobody draws it by hand; adjusting that area
+// makes the floor PARTLY on grade — inside it the slab bears on soil,
+// outside it the floor is suspended and the cascade goes on below.
+function levelGradeFlag(l){return !!(l&&l.onGrade&&!isRange(l))}
+function levelGradePartial(l){return !!(l&&(l.slabZones||[]).some(z=>isGradeZone(z)&&z.fromEdge&&z.edited))}
+function levelOnGrade(l){return levelGradeFlag(l)&&!levelGradePartial(l)}
+function gradeAreaFromEdge(lv,page){
+  if(!lv||!levelGradeFlag(lv))return null;
+  const e=typeof edgeOf==='function'?edgeOf(lv,page):null;
+  if(!e||!e.confirmed||!e.polygon||e.polygon.length<3)return null;
+  const arr=zonesOf(lv,'slab');
+  let g=arr.find(z=>isGradeZone(z)&&z.fromEdge&&zonePage(lv,z)===page);
+  if(g){
+    // an untouched one follows the edge; an adjusted one is the user's
+    if(!g.edited){g.polygon=e.polygon.map(p=>({x:p.x,y:p.y}));g.edgeId=e.id}
+    return g;
+  }
+  if(arr.some(z=>isGradeZone(z)&&zonePage(lv,z)===page))return null;   // one drawn by hand already
+  g={id:sid(),polygon:e.polygon.map(p=>({x:p.x,y:p.y})),kind:'grade',thicknessIn:lv.slabThickness,offsetIn:0,label:'Slab on grade',fromEdge:true,edgeId:e.id};
+  if(state.pdf.pages)g.page=page;
+  arr.push(g);
+  return g;
+}
+// every confirmed edge of an SOG floor gets its area; an unticked floor loses the untouched ones
+function syncGradeAreas(lv){
+  if(!lv)return 0;
+  let n=0;
+  if(levelGradeFlag(lv)){
+    for(const sh of levelSheets(lv)){if(sh.page!=null&&gradeAreaFromEdge(lv,sh.page))n++}
+    if(!levelSheets(lv).length&&lv.pdfPage==null&&gradeAreaFromEdge(lv,null))n++;
+  }else{
+    const arr=zonesOf(lv,'slab');
+    for(let i=arr.length-1;i>=0;i--)if(isGradeZone(arr[i])&&arr[i].fromEdge&&!arr[i].edited){arr.splice(i,1);n++}
+  }
+  return n;
+}
 function gradeLevels(){return state.levels.filter(levelOnGrade)}
 // EVERY FLOOR MATCHES, INCLUDING THE ONE ON GRADE. A slab on grade used to
 // be exempt on the grounds that the cascade only needs it to stop — but
@@ -6105,6 +6142,7 @@ function removeCorners(hits){
       z.polygon.splice(vi,1);n++;
     }
     if(autoTraceEditing())autoTraceFillEdited(z);
+    if(n&&typeof edgeEdited==='function')edgeEdited(z);
   }
   if(floored)toast('A polygon needs at least 3 corners — delete the whole area instead.',2600);
   if(n){state.ui.vertexIdx=null;state.results=null}
@@ -6413,6 +6451,7 @@ function removeHoveredCorner(){
   if(z.polygon.length<=3){toast('A polygon needs at least 3 corners — delete the whole area instead.',2600);return true}
   history.record('Delete corner');
   z.polygon.splice(h.vi,1);
+  if(typeof edgeEdited==='function')edgeEdited(z);
   state.activeZoneIdx=h.zi;state.ui.vertexIdx=null;state.results=null;
   state.ui.hover=null;state.ui.hoverKey='';
   if(autoTraceEditing())autoTraceFillEdited(z);
@@ -6698,6 +6737,7 @@ function simplifyCommit(){
   history.record('Simplify outline');
   z.polygon=now;
   state.results=null;
+  if(typeof edgeEdited==='function')edgeEdited(z);
   if(autoTraceEditing())autoTraceFillEdited(z);
   persist();
   const removed=was.length-now.length;
@@ -7439,8 +7479,9 @@ function renderLevelList(){
     if(f2f!=null&&!isNaN(f2f))bits.push(kv('F2F',feetToStr(f2f)));
     const hr=rng?((l.floorToFloor>0&&l.slabThickness)?l.floorToFloor-l.slabThickness/12:null):h;
     if(hr!=null&&!isNaN(hr))bits.push(kv('shore',feetToStr(hr)));
-    const sog=levelOnGrade(l);
-    if(sog)bits.push(esc('slab on grade — absorbs all load'));
+    const sog=levelGradeFlag(l);
+    if(sog&&levelGradePartial(l))bits.push(esc('slab on grade in part — the SOG area on the Areas step says where'));
+    else if(sog)bits.push(esc('slab on grade — absorbs all load'));
     else if(!below&&!rng)bits.push(esc('bottom level'));
     // BLD-14: the Building step describes geometry only — the typical capacity is the Loads step's business and is not shown here
     const meta=bits.join(' <span class="lvl-sep">·</span> ');
@@ -8919,16 +8960,18 @@ function edgeGradeToggle(li){
 function toggleLevelOnGrade(i){
   const l=state.levels[i];
   if(!l||isRange(l))return;
-  const on=!levelOnGrade(l);
+  const on=!levelGradeFlag(l);
   history.record(on?'Mark slab on grade':'Unmark slab on grade');
   l.onGrade=on;
+  // ARE-13: the SOG area follows the tick where the floor edge is confirmed
+  const drew=syncGradeAreas(l);
   state.results=null;
   renderSidebar();renderCanvas();persist();
   if(on){
     const ex=expandLevels();const gi=ex.findIndex(x=>x.defId===l.id);
     const under=gi>=0?ex.slice(gi+1):[];
     if(under.length)toast(`${l.name} is slab on grade — ${under.map(x=>x.name).join(', ')} below it will be ignored by the cascade. Delete or fix those floors.`,4200);
-    else toast(`${l.name} is slab on grade: it absorbs whatever load reaches it, nothing is shored below it.`,3200);
+    else toast(`${l.name} is slab on grade: it absorbs whatever load reaches it, nothing is shored below it.${drew?' An SOG area matching its floor edge is on the Areas step — adjust it if part of the floor is elevated.':''}`,4200);
   }
 }
 function addLevelInline(){
@@ -11328,6 +11371,7 @@ function edgeConfirm(li,pg){
   if(z.confirmed)return true;
   history.record('Confirm floor edge');
   z.confirmed=true;
+  gradeAreaFromEdge(lv,pg);
   persist();refreshFlow();renderSidebar();renderCanvas();
   return true;
 }
@@ -11335,7 +11379,7 @@ function edgeConfirmAll(){
   const rows=planSheetRows().filter(r=>r.edge&&!r.confirmed);
   if(!rows.length){toast('Every drawn edge is already confirmed.');return 0}
   history.record('Confirm floor edges');
-  for(const r of rows)r.edge.confirmed=true;
+  for(const r of rows){r.edge.confirmed=true;gradeAreaFromEdge(state.levels[r.levelIdx],r.page)}
   persist();refreshFlow();renderSidebar();renderCanvas();
   toast(`${rows.length} floor edge${rows.length>1?'s':''} confirmed.`,3200);
   return rows.length;
@@ -11362,9 +11406,10 @@ function edgeRemove(li,pg){
 // are an assumed confirmation."
 function editingOnBuildingStep(){return typeof curGroup==='function'&&curGroup()&&curGroup().id==='building'}
 function edgeEdited(z){
+  if(z&&isGradeZone(z)&&z.fromEdge&&!z.edited){z.edited=true;state.results=null;if(typeof refreshFlow==='function')refreshFlow()}
   if(!z||!isEdgeZone(z))return;
   if(editingOnBuildingStep()){if(z.confirmed){delete z.confirmed;if(typeof refreshFlow==='function')refreshFlow()}}
-  else if(!z.confirmed){z.confirmed=true;if(typeof refreshFlow==='function')refreshFlow()}
+  else if(!z.confirmed){z.confirmed=true;{const lv=getActiveLevel();if(lv)gradeAreaFromEdge(lv,zonePage(lv,z))}if(typeof refreshFlow==='function')refreshFlow()}
 }
 function edgeEditedActive(){const z=typeof getActiveZone==='function'?getActiveZone():null;edgeEdited(z)}
 function renderEdgeSection(){
@@ -11485,7 +11530,7 @@ function edgeQueueConfirmGood(){
   for(const r of picks){
     if(!state.levels[r.levelIdx])continue;
     writeEdgeFromRow(r);
-    const z=edgeOf(state.levels[r.levelIdx],r.page);if(z)z.confirmed=true;
+    const z=edgeOf(state.levels[r.levelIdx],r.page);if(z){z.confirmed=true;gradeAreaFromEdge(state.levels[r.levelIdx],r.page)}
   }
   state.results=null;
   for(const r of picks)edgeSweepForget(r.levelIdx,r.page);
@@ -16924,7 +16969,7 @@ function edgeQueueConfirm(){
   if(!r.polygon){toast('Nothing was read on this sheet — draw it by hand or skip it.',3200);return}
   history.record('Confirm floor edge');
   writeEdgeFromRow(r);
-  const lv=state.levels[r.levelIdx];const z=edgeOf(lv,r.page);if(z)z.confirmed=true;
+  const lv=state.levels[r.levelIdx];const z=edgeOf(lv,r.page);if(z){z.confirmed=true;gradeAreaFromEdge(lv,r.page)}
   state.results=null;
   edgeSweepForget(r.levelIdx,r.page);
   persist();refreshFlow();
@@ -16954,7 +16999,7 @@ function edgeQueueDone(){
   const r=edgeQueueRow();if(!r)return;
   const lv=state.levels[r.levelIdx];const z=edgeOf(lv,r.page);
   if(!z){toast('No floor edge on this sheet yet — draw it, or skip.',3200);return}
-  if(!z.confirmed){history.record('Confirm floor edge');z.confirmed=true;persist();refreshFlow()}
+  if(!z.confirmed){history.record('Confirm floor edge');z.confirmed=true;gradeAreaFromEdge(lv,r.page);persist();refreshFlow()}
   state.activeZoneIdx=null;state.ui.vertexIdx=null;
   edgeQueueNext();
 }
