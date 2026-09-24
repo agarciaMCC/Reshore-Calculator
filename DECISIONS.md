@@ -168,6 +168,7 @@ What the calculator must do. Canonical, versioned with the code; the project doc
 | RES-11 | RESULTS READ TOP-DOWN LIKE A FIELD SHEET: one context row (pour · area · print); real warnings visible, explanations folded into "Notes & assumptions"; opens on the pour's sheet; tabs "All floors / Under 3", chips "under 3" (a floor named 3 must not read as a count); install row leads with floor and pattern at title size; "Next pick" is the one primary button. | Sep 21 |
 | RES-12 | A beam row lights only the part of the beam it covers, as the solver cut it (a beam over two conditions is two rows); a group row lights every member's piece. | Sep 24 |
 | RES-13 | Print refuses results that no longer match the inputs. | Sep 15 |
+| RES-14 | Results needs a drawing set: with none loaded the Results gate blocks the solve, whatever else is entered by hand. Test fixtures without a PDF use a stand-in sheet. | Sep 24 |
 
 ## PRT — The printed sheet
 
@@ -275,7 +276,6 @@ What the calculator must do. Canonical, versioned with the code; the project doc
 
 ## Open questions — not yet decided
 
-- A job with no drawing set cannot be solved (runSchedule() returns early at the results gate; seven fixtures use a stand-in sheet). Intended, or does the gate need an exception?
 - Where the beam shore height on B4 48x20 over R3 came from (13'-10" vs B3's 9'-10"); points to a 4'-0" T.O.S. offset on L2 or 1B, not yet checked.
 - Field-plan tab: simplification per floor or one job setting; cost as shore count or shore-days.
 

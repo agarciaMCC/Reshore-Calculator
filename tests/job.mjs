@@ -1,4 +1,4 @@
-// @rules MDL-03, RES-13  (see DECISIONS.md)
+// @rules MDL-03, RES-13, RES-14  (see DECISIONS.md)
 // Regression on Adolfo's saved test job (tests/fixtures/test-job.reshore.json):
 // Level 1 is half suspended (B2 area, east) and half on grade (west). The
 // pour on Level 3 must see Level 1 as GRADE over the west half, not "no slab".
@@ -49,6 +49,18 @@ ok(!r.unresolved, 'nothing unresolved');
 // the 31 ft rows should only remain where Level 1 really has an opening under Level 2 slab
 const tall = r.rows.filter(x => x.steps.some(s => s.h != null && s.h > 30));
 ok(tall.every(x => x.steps.some(s => s.lv === '1' && s.open && !s.noSlab)), 'any 31 ft shore is over a real Level 1 opening, not a missing slab: ' + JSON.stringify(tall.map(x => x.label)));
+
+// RES-14: with no drawing set, Results does not solve
+const nd = await page.evaluate(() => {
+  const keep = { pages: state.pdf.pages, doc: state.pdf.doc };
+  state.pdf.pages = 0; state.pdf.doc = null; schedSolve = null;
+  const blockers = stepBlockers('results').map(b => b.label);
+  runSchedule();
+  const solved = !!schedSolve;
+  state.pdf.pages = keep.pages; state.pdf.doc = keep.doc;
+  return { blockers, solved };
+});
+ok(!nd.solved && nd.blockers.some(b => /drawing set/i.test(b)), 'no drawing set: the gate names it and nothing is solved: ' + JSON.stringify(nd));
 
 // RES-13: the print refuses a result the inputs have moved on from
 const pr = await page.evaluate(() => {
