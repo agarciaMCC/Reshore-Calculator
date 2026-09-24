@@ -48,7 +48,9 @@ console.log('A. the walk starts at the bottom floor, fitted, in cyan');
   ok(r.page === r.want && r.zoom < 0.5, 'its sheet is on screen, fitted: ' + JSON.stringify([r.page, r.zoom]));
   ok(r.cyan >= 1 && r.orange === 0, 'the proposal is drawn in cyan, and nothing in the old orange: ' + JSON.stringify([r.cyan, r.orange]));
   eq(r.grade, 0, 'no on-grade column on the rows — the SOG box on Levels has it');
-  eq(r.head.join('|'), 'Level · sheet|Floor edge|', 'the rows sit on the table system');
+  ok(/^Level · sheet/.test(r.head[0]) && r.head.includes('Floor edge'), 'the rows sit on the table system: ' + r.head.join('|'));
+  const order = await page.evaluate(() => [...document.querySelectorAll('#edgeRows .ed-row')].map(el => state.levels[+el.dataset.edgo.split(':')[0]].elevation));
+  ok(order.every((e, i) => i === 0 || e >= order[i - 1]), 'the list runs bottom floor first, top floor last, like the walk: ' + JSON.stringify(order));
 }
 
 console.log('B. Try the next outline cycles what the detector found; a click on the outline confirms');

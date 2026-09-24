@@ -11382,7 +11382,7 @@ function renderEdgeSection(){
         :(drawn?`<button class="btn btn-sm btn-wide btn-go" id="edgeConfirmAll" title="Confirm every edge that is drawn but not yet confirmed">Confirm all ${drawn} drawn</button>`
         :(none&&none===rows.length?`<span class="lm-dim">The plan sheets are read when you arrive here and walked one by one in the bar over the plan.</span>`:'')))}
     </div>
-    <div class="ed-list"><div class="tbl-head"><span>Level · sheet</span><span>Floor edge</span><span></span></div>${rows.map(row).join('')}</div>
+    <div class="ed-list"><div class="tbl-head"><span>Level · sheet <span class="lm-dim">(bottom floor first)</span></span><span>Floor edge</span><span></span></div>${edgeQueueOrder(rows).map(row).join('')}</div>
     ${byHandHtml('edge',`<div class="lm-acts"><button class="btn btn-sm" id="edgeDetectThis"${busy||!rows.some(r=>r.page===state.pdf.current)?' disabled':''} title="Read the sheet on screen again and review its outline">Detect again on this sheet</button><button class="btn btn-sm" id="edgeDetectAll"${busy?' disabled':''} title="Read every plan sheet again and walk them from the bottom floor up">${busy?'Reading…':'Detect again on every sheet'}</button></div><span class="lm-dim">Each row has <b>Draw by hand</b>, <b>Adjust</b> and <b>Redo</b> for one sheet at a time.</span>`,'or detect again / draw by hand')}`;
   bindByHand(host);
   const pair=v=>{const [a,b]=String(v).split(':');return[+a,+b]};
