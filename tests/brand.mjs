@@ -20,7 +20,7 @@ const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 
-const RED = '#CF0A2C', GREY = '#8A8A8D';
+const RED = '#CF0A2C', GRAY = '#8A8A8D';
 const rgb = h => `rgb(${parseInt(h.slice(1,3),16)}, ${parseInt(h.slice(3,5),16)}, ${parseInt(h.slice(5,7),16)})`;
 
 const browser = await chromium.launch();
@@ -33,13 +33,13 @@ await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
 console.log('A. the palette is the guide\'s');
 let r = await page.evaluate(() => {
   const v = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-  return { red: v('--mcc-red'), grey: v('--mcc-grey'), accent: v('--accent'),
+  return { red: v('--mcc-red'), gray: v('--mcc-gray'), accent: v('--accent'),
     ground: v('--ground'), surface: v('--surface'), border: v('--border'),
     text: v('--text'), sec: v('--text-secondary'), ter: v('--text-tertiary'),
     accentText: v('--accent-text') };
 });
 ok(r.red.toUpperCase() === RED, 'MCC Red is on the root: ' + r.red);
-ok(r.grey.toUpperCase() === GREY, 'MCC Grey is on the root: ' + r.grey);
+ok(r.gray.toUpperCase() === GRAY, 'MCC Grey is on the root: ' + r.gray);
 ok(r.accent.toUpperCase() === RED, 'and red is the accent: ' + r.accent);
 ok(r.ground.toUpperCase() === '#F2F2F2', 'ground is the guide\'s light fill: ' + r.ground);
 ok(r.surface.toUpperCase() === '#FFFFFF', 'surfaces are white: ' + r.surface);
@@ -47,18 +47,18 @@ ok(r.border.toUpperCase() === '#D9D9D9', 'rules are the guide\'s border tint: ' 
 ok(r.text === '#000000', 'body copy is black, per the guide: ' + r.text);
 ok(r.accentText.toUpperCase() === '#FFFFFF', 'white on red, never red on red: ' + r.accentText);
 
-console.log('B. grey is not used where the guide says it fails');
+console.log('B. gray is not used where the guide says it fails');
 // "MCC Grey on white falls just below the WCAG AA minimum for small text.
-// Use grey only for large or secondary text — use black for anything small."
+// Use gray only for large or secondary text — use black for anything small."
 const lum = h => { const c = [1,3,5].map(i => { const s = parseInt(h.slice(i,i+2),16)/255;
   return s <= 0.03928 ? s/12.92 : Math.pow((s+0.055)/1.055, 2.4); });
   return 0.2126*c[0] + 0.7152*c[1] + 0.0722*c[2]; };
 const ratio = (a,b) => { const [x,y] = [lum(a), lum(b)].sort((p,q) => q-p); return (x+0.05)/(y+0.05); };
-ok(ratio(GREY, '#FFFFFF') < 4.5, 'the guide is right — MCC Grey on white is '
-   + ratio(GREY,'#FFFFFF').toFixed(2) + ':1, under AA');
+ok(ratio(GRAY, '#FFFFFF') < 4.5, 'the guide is right — MCC Grey on white is '
+   + ratio(GRAY,'#FFFFFF').toFixed(2) + ':1, under AA');
 ok(ratio(r.sec, '#FFFFFF') >= 4.5, 'so the small secondary text clears AA: '
    + r.sec + ' at ' + ratio(r.sec,'#FFFFFF').toFixed(2) + ':1');
-ok(r.ter.toUpperCase() === GREY, 'and MCC Grey itself is kept for large / secondary only: ' + r.ter);
+ok(r.ter.toUpperCase() === GRAY, 'and MCC Grey itself is kept for large / secondary only: ' + r.ter);
 ok(ratio(RED, '#FFFFFF') >= 4.5, 'white on MCC Red clears AA for button labels: '
    + ratio(RED,'#FFFFFF').toFixed(2) + ':1');
 
@@ -100,7 +100,7 @@ r = await page.evaluate(() => {
 ok(r.snap.toUpperCase() === '#E85D26', 'the snap marker is untouched: ' + r.snap);
 ok(/43,\s*87,\s*151/.test(r.stroke), 'the default area outline is untouched: ' + r.stroke);
 ok(r.safe.toUpperCase() === '#2E7D52' && r.warn.toUpperCase() === '#C4582E',
-   'and so are the status colours: ' + r.safe + ' / ' + r.warn);
+   'and so are the status colors: ' + r.safe + ' / ' + r.warn);
 ok(r.marks === 6, 'the per-mark palette still tells marks apart: ' + r.marks + ' distinct');
 ok(r.regions === 5, 'and the region palette still tells regions apart: ' + r.regions + ' distinct');
 
@@ -179,10 +179,10 @@ ok(/h1\{font:700 18pt\/1\.15 Calibri/.test(printed), 'Heading 1 is Calibri Bold 
 ok(new RegExp('mcc-head\\{border-bottom:1pt solid ' + RED).test(printed),
    'with the guide\'s red 1 pt rule beneath it');
 ok(/h3\{font:700 14pt/.test(printed), 'Heading 2 is Calibri Bold 14 pt');
-ok(new RegExp('th\\{background:#F2F2F2[\\s\\S]{0,200}color:' + GREY).test(printed),
+ok(new RegExp('th\\{background:#F2F2F2[\\s\\S]{0,200}color:' + GRAY).test(printed),
    'minor headings are bold caps in MCC Grey on the light fill');
 ok(/\.note\{font:italic 9pt/.test(printed) && printed.includes('.note{font:italic 9pt/1.4 Calibri'),
-   'captions and legal are 9 pt grey italic');
+   'captions and legal are 9 pt gray italic');
 ok(!/-apple-system|Roboto/.test(printed.split('</style>')[0]),
    'and no system-font stack is left in the print CSS');
 ok(new RegExp('border:1px solid #D9D9D9').test(printed), 'table rules are the guide\'s #D9D9D9');

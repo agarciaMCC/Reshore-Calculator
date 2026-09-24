@@ -4,11 +4,11 @@
 // He looked at the plan and said of a corner patch: "this area is incorrectly
 // reading a slab below when there is not one that exists." It was 176 SF with
 // no slab under it for two floors, under the 200 SF minimum region size, so
-// mergeSlivers folded it into the neighbour it shared the most boundary with
+// mergeSlivers folded it into the neighbor it shared the most boundary with
 // and it inherited that region's 13'-9" shore on the floor below. Four rows
 // where no shore in the catalog reaches were hidden that way.
 //
-// Now a sliver merges only into a neighbour whose cascade has the same SHAPE
+// Now a sliver merges only into a neighbor whose cascade has the same SHAPE
 // — bearing where it bears, no slab where it has none, an opening where it
 // has one, grade where it ends. Capacity and shore-height differences still
 // merge; a structural one never does.

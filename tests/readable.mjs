@@ -4,8 +4,8 @@
 // where you're expected to type. we need more contrast. also, In match floors,
 // we need to be able to click the sheets to review the grid matches"
 //
-//  A. every dropdown and text field carries its own surface and text colour,
-//     in both themes — the rule used to set the colour and leave the
+//  A. every dropdown and text field carries its own surface and text color,
+//     in both themes — the rule used to set the color and leave the
 //     background to the browser, which paints it white
 //  B. a sheet in Match floors is clickable: it opens that sheet, draws the
 //     fit that was made for it and the crossings it was made from, says what
@@ -62,7 +62,7 @@ const CONTRAST = `(() => {
   for (const el of document.querySelectorAll('select, input[type="text"], input[type="number"], input:not([type]), textarea')) {
     if (!el.offsetParent && el.type !== 'hidden') continue;
     const cs = getComputedStyle(el);
-    // a field may sit transparent on a panel that already carries the colour,
+    // a field may sit transparent on a panel that already carries the color,
     // so take the first real background up the tree
     let bg = cs.backgroundColor, n = el;
     while (bg === 'rgba(0, 0, 0, 0)' && n.parentElement) { n = n.parentElement; bg = getComputedStyle(n).backgroundColor; }
@@ -76,7 +76,7 @@ for (const scheme of ['dark', 'light']) {
   const R = await page.evaluate(CONTRAST);
   const worst = R.fields.reduce((m, f) => f.r < m.r ? f : m, { r: 99, id: '—' });
   console.log(`   ${scheme}: ${R.fields.length} fields on screen, worst ${worst.r}:1 (${worst.id})`);
-  ok(R.scheme === scheme, `the page declares its colour scheme so the browser draws its own widgets to match: ${R.scheme}`);
+  ok(R.scheme === scheme, `the page declares its color scheme so the browser draws its own widgets to match: ${R.scheme}`);
   ok(R.fields.length >= 8, `there are fields to check: ${R.fields.length}`);
   ok(R.fields.every(f => f.r >= 7), `every one clears AAA (7:1) in ${scheme}: ` + JSON.stringify(R.fields.filter(f => f.r < 7)));
   if (scheme === 'dark') {
@@ -85,7 +85,7 @@ for (const scheme of ['dark', 'light']) {
       const o = document.querySelector('#sheetTable select option');
       const cs = getComputedStyle(o);
       return cs.color !== '' && cs.backgroundColor !== 'rgba(0, 0, 0, 0)';
-    }), 'the dropdown list itself is coloured, not left to the browser');
+    }), 'the dropdown list itself is colored, not left to the browser');
   }
   await page.close();
 }
@@ -128,7 +128,7 @@ const fitShown = R.texts.some(t => /1" = 10\./.test(t)) || /1" = 10\./.test(R.do
 const whichShown = R.texts.some(t => /^3\b/.test(t) || /South/.test(t)) || /South|\b3\b/.test(R.dom);
 ok(fitShown && whichShown,
   'with the fit stated on the sheet or its row: ' + JSON.stringify(R.texts.filter(t => /=|South/.test(t))) + ' | ' + (R.dom.match(/1" = [\d.]+'?/) || ['(not in the panel either)'])[0]);
-ok(R.texts.some(t => /,/.test(t)), 'and each crossing labelled: ' + JSON.stringify(R.texts.filter(t => /,/.test(t)).slice(0, 4)));
+ok(R.texts.some(t => /,/.test(t)), 'and each crossing labeled: ' + JSON.stringify(R.texts.filter(t => /,/.test(t)).slice(0, 4)));
 // Escape peels it; leaving the step drops it
 ok(await page.evaluate(() => { escapeOnce({}); return !state.ui.gridReview; }), 'Escape peels the review');
 ok(await page.evaluate(() => { reviewSheetMatch(state.levels.findIndex(l => l.name === '2'), 7); setStep('loads'); return !state.ui.gridReview; }),

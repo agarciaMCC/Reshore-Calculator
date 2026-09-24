@@ -55,7 +55,7 @@ console.log('A. the Sheets table is one grid with nothing back-of-house in it (U
   eq(r.notPlanText, 0, '"not a floor plan" is the picker\'s value, not a second line');
   ok(/read as a/.test(r.tip), 'the reader\'s verdict lives in the row tooltip: ' + r.tip);
   ok(r.flagged.length > 0 && r.flagged.every(f => f.oneLine), 'a row to check carries its flag and Looks right on one line: ' + JSON.stringify(r.flagged));
-  ok(r.loadmap && r.loadmap.skipped && !r.loadmap.unsure, 'the load-map sheet is recognised from its title and set not a floor plan, unflagged (BLD-18): ' + JSON.stringify(r.loadmap));
+  ok(r.loadmap && r.loadmap.skipped && !r.loadmap.unsure, 'the load-map sheet is recognized from its title and set not a floor plan, unflagged (BLD-18): ' + JSON.stringify(r.loadmap));
 }
 
 console.log('B. Match floors is one list: the proposed fit is confirmed on its row (UI-34)');

@@ -252,8 +252,8 @@ const at = await page.evaluate((i) => {
   const L = schedSolve.levels[schedPourIdx], r = L.solve.regions[i];
   const T = screenTransform(levelOnScreen() || getActiveLevel());
   // A point INSIDE the region, not the middle of its bounding box: regions
-  // are exact polygons now and an L-shaped one does not contain the centre of
-  // its own box — clicking there lands in the neighbour, which is the right
+  // are exact polygons now and an L-shaped one does not contain the center of
+  // its own box — clicking there lands in the neighbor, which is the right
   // answer to the wrong question.
   const p = (typeof mpInnerPoint === 'function' && r.mp && mpInnerPoint(r.mp))
     || { x: (r.bb.minX + r.bb.maxX) / 2, y: (r.bb.minY + r.bb.maxY) / 2 };

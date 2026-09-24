@@ -84,11 +84,11 @@ const B = await page.evaluate(async () => {
 });
 console.log('   ' + JSON.stringify(B));
 ok(B.key === `tighten:${B.fl}|0`, 'the highlight is the tighter patch: ' + B.key);
-ok(/^tighten to \d+×\d+ under /.test(B.label || ''), 'labelled for what it is: ' + B.label);
+ok(/^tighten to \d+×\d+ under /.test(B.label || ''), 'labeled for what it is: ' + B.label);
 ok(B.onFloorSheet && B.active === B.fl, `the plan is on the sheet of the floor it sits under (${B.fl}, sheet ${B.page})`);
 ok(B.fills > 0 && B.inside, 'the patch is painted on that sheet');
 ok(B.ants, 'with the glow on the plan');
-// the same floor is spelt out twice on the tab (in the placement row and in
+// the same floor is spelled out twice on the tab (in the placement row and in
 // "each floor's reshoring"), so its patch lights in both places
 ok(B.lit.length >= 1 && new Set(B.lit).size === 1, 'and the button you pressed is lit wherever that patch is listed: ' + JSON.stringify(B.lit));
 ok(B.step === 'sequence', 'without leaving the Sequence tab');

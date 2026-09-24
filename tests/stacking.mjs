@@ -152,7 +152,7 @@ const G = await page.evaluate(() => {
   return { off, on, dflt, below: below && below.name, above: levelAboveOf(state.levels[i]) && levelAboveOf(state.levels[i]).name };
 });
 ok(G.below === '2', 'the floor below Level 3 is Level 2: ' + G.below);
-ok(!G.off.ghosted && G.on.ghosted, 'the ghost can be switched off, and is labelled when on: ' + JSON.stringify(G));
+ok(!G.off.ghosted && G.on.ghosted, 'the ghost can be switched off, and is labeled when on: ' + JSON.stringify(G));
 ok(G.dflt.ghosted && G.dflt.above && G.above === '4', 'by default it is ON, and draws the floor above as well as the floor below (UI-37): ' + JSON.stringify([G.dflt, G.above]));
 ok(G.on.strokes > G.off.strokes, 'and it actually draws: ' + JSON.stringify([G.off.strokes, G.on.strokes]));
 ok(await page.evaluate(() => { const out = {}; for (const s of ['loads', 'areas', 'edge', 'levels']) { setStep(s); state.ui.ghostBelow = true;

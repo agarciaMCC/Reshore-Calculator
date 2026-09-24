@@ -38,7 +38,7 @@ const setup = shape => page.evaluate(shape => {
   return scheduleShape();
 }, shape);
 
-console.log('A. split schedules: Add buttons at the top of their own tables, coloured; Notes on both, editable (UI-38)');
+console.log('A. split schedules: Add buttons at the top of their own tables, colored; Notes on both, editable (UI-38)');
 {
   eq(await setup('split'), 'split', 'a split schedule is up');
   const r = await page.evaluate(() => {
@@ -50,7 +50,7 @@ console.log('A. split schedules: Add buttons at the top of their own tables, col
     return {
       llAdd: !!ll.querySelector('#lmAddLL'), sdlAdd: !!sdl.querySelector('#lmAddSDL'),
       llAbove: pos(ll, '#lmAddLL') < pos(ll, 'tbody tr'), sdlAbove: pos(sdl, '#lmAddSDL') < pos(sdl, 'tbody tr'),
-      coloured: col !== 'rgba(0, 0, 0, 0)' && col !== 'rgb(255, 255, 255)' && !/^rgb\(2[45]\d, 2[45]\d, 2[45]\d\)$/.test(col), col,
+      colored: col !== 'rgba(0, 0, 0, 0)' && col !== 'rgb(255, 255, 255)' && !/^rgb\(2[45]\d, 2[45]\d, 2[45]\d\)$/.test(col), col,
       heads, notesInputs: document.querySelectorAll('#lmSplit input[data-lnote], #lmSplit input[data-snote]').length,
       bar: (document.getElementById('lmActions') || {}).style ? document.getElementById('lmActions').style.display : null,
       combinedHidden: getComputedStyle(document.getElementById('lmCombined')).display === 'none',
@@ -59,7 +59,7 @@ console.log('A. split schedules: Add buttons at the top of their own tables, col
   });
   ok(r.llAdd && r.sdlAdd, 'each table carries its own Add button');
   ok(r.llAbove && r.sdlAbove, 'and it sits above the rows, not under them');
-  ok(r.coloured, 'the Add buttons are coloured so they read as actions: ' + r.col);
+  ok(r.colored, 'the Add buttons are colored so they read as actions: ' + r.col);
   ok(r.heads.filter(h => h === 'Notes').length === 2 && !r.heads.includes('Comments'), 'both tables head the column "Notes": ' + JSON.stringify(r.heads));
   eq(r.notesInputs, 4, 'the notes are inputs, one per mark');
   eq(r.bar, 'none', 'the old buttons bar under the chart is gone for a split schedule');
@@ -106,7 +106,7 @@ console.log('C. the combined chart keeps one Add, above the chart');
     return { shown: bar.style.display !== 'none', add: !!bar.querySelector('#lmAdd.btn-add'), above: kids.indexOf(bar) < kids.indexOf(scroll),
       head: [...document.querySelectorAll('#lmTypical .tbl-head span')].map(s => s.textContent.trim()).join('|') };
   });
-  ok(r.shown && r.add && r.above, '+ Add a mark sits above the chart, coloured: ' + JSON.stringify(r));
+  ok(r.shown && r.add && r.above, '+ Add a mark sits above the chart, colored: ' + JSON.stringify(r));
   eq(r.head, 'Floor|Mark|PSF|', 'the typical block heads Floor · Mark · PSF for a combined chart');
 }
 

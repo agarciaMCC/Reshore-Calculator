@@ -2,7 +2,7 @@
 // A FLOOR DRAWN ACROSS SEVERAL SHEETS.
 // Big plans are split by area — grids 1-8 on one sheet, 8-15 on the next, the
 // grid running through the match line. Each sheet is matched on its own; the
-// project grid is labelled positions in BUILDING feet, so two sheets of one
+// project grid is labeled positions in BUILDING feet, so two sheets of one
 // floor land in the same frame and the solver never learns there was a split.
 import { createRequire } from 'node:module';
 const { chromium } = await (async () => {

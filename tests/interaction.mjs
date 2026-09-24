@@ -1,7 +1,7 @@
 // @rules UI-01, UI-02, UI-04, UI-05, UI-07, UI-09, UI-10, BEM-02  (see DECISIONS.md)
 // Interaction update (Sep 4, evening): Slab wording + beam offset, unified
 // Escape, Shift+click vertex delete / Alt+click insert, Shift ortho, copy
-// markups between floors, slab-condition colours, entry flow.
+// markups between floors, slab-condition colors, entry flow.
 import { createRequire } from 'node:module';
 const { chromium } = await (async () => {
   try { return await import('playwright'); }
@@ -44,7 +44,7 @@ const setupIn = () => page.evaluate(() => {
 
 console.log('1. Slab wording, beam offset');
 await setup();
-ok(await page.$eval('#drawSlabPop', e => [...e.querySelectorAll('button[data-newkind]')].map(b => b.firstChild.textContent.trim()).join(',')) === 'Slab,Opening,Beam,Floor edge', 'the draw menu reads Slab');
+ok(await page.evaluate(() => AD_TYPES.map(t => AD_TYPE_LABEL[t]).join(',')) === 'Slab,Slab on grade,Opening,Beam,Floor edge', 'the drawing bar reads Slab');
 ok(await page.evaluate(() => { state.activeZoneIdx = 0; renderProperties(); return document.getElementById('propKind').options[0].text; }) === 'Slab — different thickness or T.O.S. offset', 'Type option wording');
 ok(await page.evaluate(() => { state.levels[0].slabZones[0].label = ''; renderZoneList(); const t = document.getElementById('zoneList').textContent; state.levels[0].slabZones[0].label = 'drop'; renderZoneList(); return /Slab areas/.test(t) && /" Slab/.test(t) && !/Slab step/.test(t); }), 'zone list says Slab, named from its thickness');
 let st = await page.evaluate(() => {
@@ -95,14 +95,14 @@ await page.evaluate(() => document.getElementById('copyModal').classList.add('op
 ok(await page.evaluate(() => escapeOnce({}) === 'modal' && !document.getElementById('copyModal').classList.contains('open')), 'modal closes');
 // alignment
 await page.evaluate(() => { state.drawing.imgW = 1000; startAlignment(0); });
-ok(await page.evaluate(() => state.align.active && escapeOnce({}) === 'align' && !state.align.active), 'alignment cancelled');
+ok(await page.evaluate(() => state.align.active && escapeOnce({}) === 'align' && !state.align.active), 'alignment canceled');
 // drag in progress: undo the move
 await page.evaluate(() => {
   state.activeZoneIdx = 0; history.record('Move vertex');
   state.levels[0].slabZones[0].polygon[0] = { x: 999, y: 999 };
   ptr.down = true; ptr.mode = 'vertex'; ptr.hit = { kind: 'vertex', zi: 0, vi: 0 }; ptr.didDrag = true;
 });
-ok(await page.evaluate(() => { const r = escapeOnce({}); const p = state.levels[0].slabZones[0].polygon[0]; return r === 'drag' && p.x === 120 && p.y === 120 && !ptr.down; }), 'drag cancelled and undone');
+ok(await page.evaluate(() => { const r = escapeOnce({}); const p = state.levels[0].slabZones[0].polygon[0]; return r === 'drag' && p.x === 120 && p.y === 120 && !ptr.down; }), 'drag canceled and undone');
 // real keyboard Escape while a field is focused reaches the router (capture)
 await page.evaluate(() => { setTool('polygon'); state.drawing.points = [{ x: 1, y: 1 }]; state.activeZoneIdx = 0; renderProperties(); });
 await page.focus('#propLabel');
@@ -165,7 +165,7 @@ await page.evaluate(() => {
   const s = canvasToScreen(184, 200); updateDrag(s);
 });
 poly = await page.evaluate(() => ({ p: state.levels[0].slabZones[0].polygon[2], g: (state.drawing.guides || []).length, t: state.drawing.snapPt && state.drawing.snapPt.type }));
-ok(poly.p.x === 180 && poly.p.y === 200 && poly.g >= 1, 'Shift drag squares to the neighbour: ' + JSON.stringify(poly));
+ok(poly.p.x === 180 && poly.p.y === 200 && poly.g >= 1, 'Shift drag squares to the neighbor: ' + JSON.stringify(poly));
 await page.evaluate(() => { ptr.down = false; ptr.mode = null; state.ui.shift = false; state.drawing.guides = null; state.snap = true; });
 
 console.log('4. Copy markups between floors');
@@ -189,7 +189,7 @@ r = await page.evaluate(() => copyMarkupsBetweenFloors(0, 1, { loading: true, sl
 ok(await page.evaluate(() => state.levels[1].zones.length === 2 && state.levels[1].slabZones.length === 2), 'append adds');
 r = await page.evaluate(() => copyMarkupsBetweenFloors(0, 1, { loading: true, slab: false, replace: true }));
 ok(await page.evaluate(() => state.levels[1].zones.length === 1 && state.levels[1].slabZones.length === 2), 'replace only touches the copied layer');
-// unmatched target: pending, then materialise on match
+// unmatched target: pending, then materialize on match
 await page.evaluate(() => { state.levels[2].alignment = null; });
 r = await page.evaluate(() => copyMarkupsBetweenFloors(0, 2, { loading: true, slab: true, replace: false }));
 ok(r.copied === 3 && r.pending === 3, 'unmatched target: pending ' + JSON.stringify(r));
@@ -202,32 +202,45 @@ ok(await page.$eval('#cpSource', e => [...e.options].map(o => o.text).join(',') 
 ok(await page.$eval('#cpTarget', e => e.value === 'L1'), 'target shown');
 await page.evaluate(() => { document.getElementById('cpSlab').checked = false; document.querySelector('input[name="cpMode"][value="replace"]').checked = true; });
 await page.click('#cpGo');
-ok(await page.evaluate(() => !document.getElementById('copyModal').classList.contains('open') && state.levels[1].zones.length === 1 && state.levels[1].slabZones.length === 2), 'dialog copy honours options');
+ok(await page.evaluate(() => !document.getElementById('copyModal').classList.contains('open') && state.levels[1].zones.length === 1 && state.levels[1].slabZones.length === 2), 'dialog copy honors options');
 ok(await page.$$eval('#btnCopyFrom', b => b.length === 1), 'button on the Areas step');
 // no source: toast, no dialog
 await page.evaluate(() => { state.levels.forEach(l => { l.zones = []; l.slabZones = []; }); openCopyFrom(); });
 ok(await page.$eval('#copyModal', e => !e.classList.contains('open')), 'no markups anywhere: dialog stays closed');
 
-console.log('5. Colours');
+console.log('5. Colors');
 await setup();
 ok(await page.evaluate(() => slabInkHex(state.levels[0].slabZones[0]) === '#465f82' && slabInkHex(state.levels[0].slabZones[1]) === '#785528'), 'kind defaults');
 await page.evaluate(() => { state.project.slabKindColors = { beam: '#e65100' }; });
-ok(await page.evaluate(() => slabInkHex(state.levels[0].slabZones[1]) === '#e65100'), 'per-kind project colour');
+ok(await page.evaluate(() => slabInkHex(state.levels[0].slabZones[1]) === '#e65100'), 'per-kind project color');
 await page.evaluate(() => { state.levels[0].slabZones[1].color = '#2e7d32'; });
 ok(await page.evaluate(() => slabInkHex(state.levels[0].slabZones[1]) === '#2e7d32' && hexToRgbStr('#2e7d32') === '46,125,50'), 'per-shape override wins');
 await page.evaluate(() => { state.activeZoneIdx = 0; renderSidebar(); });
-ok(await page.$$eval('#propsContent .swatch[data-color]', b => b.length === 9), '8 swatches + default on the panel');
-await page.evaluate(() => document.querySelector('#propsContent .swatch[data-color="#6a1b9a"]').click());
-ok(await page.evaluate(() => state.levels[0].slabZones[0].color === '#6a1b9a'), 'swatch click sets colour');
-ok(await page.$eval('#zoneList .slab-dot', e => e.style.getPropertyValue('--c') === '#6a1b9a'), 'list dot follows');
-await page.evaluate(() => document.querySelector('#propsContent .swatch-def').click());
-ok(await page.evaluate(() => !('color' in state.levels[0].slabZones[0])), 'default swatch clears override');
+// ARE-20: the panel's color row is the style editor — one shape alone, or its whole group on the floor
+ok(await page.$$eval('#propsContent [data-adsc]', b => b.length >= 8), 'color swatches on the panel');
+ok(await page.$$eval('#propsContent [data-adsh]', b => b.length === 7), 'hatch choices on the panel');
+await page.evaluate(() => document.querySelector('#propsContent [data-adsc="#6a1b9a"]').click());
+// one shape in its group: applied straight away, to the group
+ok(await page.evaluate(() => !('color' in state.levels[0].slabZones[0]) && slabInkHex(state.levels[0].slabZones[0]) === '#6a1b9a'), 'swatch click sets the color (a group of one: no question)');
+ok(await page.$eval('#zoneList .ad-sw', e => e.style.getPropertyValue('--c') === '#6a1b9a'), 'list swatch follows');
 await page.evaluate(() => history.undo());
-ok(await page.evaluate(() => state.levels[0].slabZones[0].color === '#6a1b9a'), 'undo restores colour');
+ok(await page.evaluate(() => slabInkHex(state.levels[0].slabZones[0]) === '#465f82'), 'undo restores the color');
+// a second slab with the same values: now it asks
+await page.evaluate(() => { const z = JSON.parse(JSON.stringify(state.levels[0].slabZones[0])); z.id = 'twin'; z.polygon = z.polygon.map(p => ({ x: p.x + 400, y: p.y })); state.levels[0].slabZones.push(z); state.activeZoneIdx = 0; renderSidebar(); });
+await page.evaluate(() => document.querySelector('#propsContent [data-adsc="#6a1b9a"]').click());
+ok(await page.$$eval('#propsContent [data-adask]', b => b.length === 3), 'two alike: asks All / Just this one / Cancel');
+await page.evaluate(() => document.querySelector('#propsContent [data-adask="one"]').click());
+ok(await page.evaluate(() => state.levels[0].slabZones[0].color === '#6a1b9a' && slabInkHex(state.levels[0].slabZones.find(z => z.id === 'twin')) !== '#6a1b9a'), 'just this one: the other keeps its color');
+ok(await page.evaluate(() => { const tw = state.levels[0].slabZones.findIndex(z => z.id === 'twin'); return !!document.querySelector('#zoneList .sb-item[data-zone="0"] .ad-own') && !document.querySelector(`#zoneList .sb-item[data-zone="${tw}"] .ad-own`); }), 'the hand-styled one is marked in the list, its twin is not');
+await page.evaluate(() => { history.undo(); renderSidebar(); });
+await page.evaluate(() => document.querySelector('#propsContent [data-adsc="#6a1b9a"]').click());
+await page.evaluate(() => document.querySelector('#propsContent [data-adask="all"]').click());
+ok(await page.evaluate(() => state.levels[0].slabZones.filter(z => z.kind !== 'beam' && z.kind !== 'edge').every(z => slabInkHex(z) === '#6a1b9a')), 'all: every slab like it on the floor takes it');
+await page.evaluate(() => { state.levels[0].slabZones = state.levels[0].slabZones.filter(z => z.id !== 'twin'); state.levels[0].slabZones[0].color = '#6a1b9a'; renderSidebar(); });
 ok(await page.$$eval('#advSlabColors .adv-kind-row', r => r.length === 5), 'Advanced has 5 kind rows');
 await page.evaluate(() => document.querySelector('#advSlabColors .swatch[data-kind="opening"][data-kind-color="#00838f"]').click());
-ok(await page.evaluate(() => state.project.slabKindColors.opening === '#00838f'), 'Advanced sets a kind colour');
-ok(await page.evaluate(() => JSON.parse(JSON.stringify(serializeDoc())).project.slabKindColors.opening === '#00838f' && JSON.parse(JSON.stringify(serializeDoc())).levels[0].slabZones[0].color === '#6a1b9a'), 'colours persist');
+ok(await page.evaluate(() => state.project.slabKindColors.opening === '#00838f'), 'Advanced sets a kind color');
+ok(await page.evaluate(() => JSON.parse(JSON.stringify(serializeDoc())).project.slabKindColors.opening === '#00838f' && JSON.parse(JSON.stringify(serializeDoc())).levels[0].slabZones[0].color === '#6a1b9a'), 'colors persist');
 await page.evaluate(() => renderCanvas());
 
 console.log('6. Entry flow');
@@ -335,7 +348,7 @@ let tol = await page.evaluate(() => {
   pullBack(state.levels[1].zones[state.levels[1].zones.length - 1].polygon);
   pullBack(state.levels[1].slabZones[state.levels[1].slabZones.length - 1].polygon);
   const far = run();
-  // a tolerance saved in an older job must be ignored, not honoured
+  // a tolerance saved in an older job must be ignored, not honored
   state.project.edgeTolFt = 1;
   const ignored = edgeToleranceFt();
   delete state.project.edgeTolFt; delete state.project.minRegionSF;
@@ -370,7 +383,7 @@ let sl = await page.evaluate(() => {
   return { off, on, low };
 });
 ok(sl.off.n === 3 && sl.off.areas.includes(60), 'without merging the 60 SF drop strip is its own region: ' + JSON.stringify(sl.off));
-ok(sl.on.n === 2 && sl.on.total === 60 && sl.on.sliver.some(v => v === 60), 'default 200 SF: merged into a neighbour, noted: ' + JSON.stringify(sl.on));
+ok(sl.on.n === 2 && sl.on.total === 60 && sl.on.sliver.some(v => v === 60), 'default 200 SF: merged into a neighbor, noted: ' + JSON.stringify(sl.on));
 ok(sl.on.areas.reduce((a, b) => a + b, 0) === 10000, 'no area lost in the merge');
 ok(sl.on.areas.includes(4900) && sl.on.areas.includes(5100), 'merged into the region it shares the most boundary with (the 125 half, back to 49×100): ' + JSON.stringify(sl.on.areas));
 ok(sl.low.n === 3, 'threshold below the sliver keeps it');
@@ -460,20 +473,20 @@ await page.evaluate(() => { setStep('areas'); const p = document.getElementById(
 ok(await page.$eval('#btnAdv', e => /Settings/.test(e.textContent) && !/Advanced/.test(e.textContent)), 'the button reads Settings');
 await page.click('#btnAdv');
 ok(await page.$eval('#advPop', e => e.classList.contains('open')), 'it opens');
-ok(await page.$eval('#advPop', e => /Default slab condition colors/.test(e.textContent)), 'colours heading renamed');
+ok(await page.$eval('#advPop', e => /Default slab condition colors/.test(e.textContent)), 'colors heading renamed');
 // The edge-tolerance setting went with MDL-11 (Sep 18 2026), so the minimum
 // region size is the only solver setting left.
 ok(await page.$eval('#advPop', e => e.querySelectorAll('.adv-note').length === 1), 'the solver setting carries an explanation');
-ok(await page.$eval('#advPop', e => /absorbed by the neighbour/.test(e.textContent)
+ok(await page.$eval('#advPop', e => /absorbed by the neighbor/.test(e.textContent)
    && /same loading marks/.test(e.textContent)), 'the explanation says what it means, marks included');
 ok(await page.$eval('#advPop', e => !/overhang/i.test(e.textContent)) && await page.evaluate(() => !document.getElementById('advEdgeTol')), 'and no edge-tolerance setting survives here');
-// picking colours must not close it — the re-render detaches the clicked node
+// picking colors must not close it — the re-render detaches the clicked node
 for (const i of [1, 2]) {
   await page.evaluate(() => { const b = document.querySelectorAll('#advSlabColors .swatch[data-kind-color]'); b[b.length - 1].click(); });
   await page.waitForTimeout(60);
-  ok(await page.$eval('#advPop', e => e.classList.contains('open')), 'still open after colour pick ' + i);
+  ok(await page.$eval('#advPop', e => e.classList.contains('open')), 'still open after color pick ' + i);
 }
-ok(await page.evaluate(() => Object.keys(state.project.slabKindColors || {}).length > 0), 'the colour was actually applied');
+ok(await page.evaluate(() => Object.keys(state.project.slabKindColors || {}).length > 0), 'the color was actually applied');
 await page.click('#advMinRegion'); await page.waitForTimeout(60);   // was #advEdgeTol, removed with MDL-11
 ok(await page.$eval('#advPop', e => e.classList.contains('open')), 'clicking a field keeps it open');
 await page.keyboard.press('Escape'); await page.waitForTimeout(60);

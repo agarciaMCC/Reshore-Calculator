@@ -62,7 +62,7 @@ ok(B.ll.map(r => r[0]).join('') === 'ABCDEFGH', 'eight live-load marks A-H: ' + 
 ok(JSON.stringify(B.ll.map(r => r[2])) === JSON.stringify([40, 40, 125, 100, 20, 50, 100, 60]), 'live loads 40 40 125 100 20 50 100 60: ' + B.ll.map(r => r[2]));
 ok(B.ll.filter(r => r[3]).map(r => r[0]).join('') === 'ABFH', '(R) reducible on A, B, F, H');
 ok(/PARTITION/i.test(B.ll[5][4]), 'F keeps its "+ 15 PARTITION" as a comment: ' + B.ll[5][4]);
-ok(B.ll[2][1] === 'MECH/ELEC/STORAGE', 'a centred description is not taken as the mark: ' + B.ll[2][1]);
+ok(B.ll[2][1] === 'MECH/ELEC/STORAGE', 'a centered description is not taken as the mark: ' + B.ll[2][1]);
 ok(B.sdl.length === 12 && B.sdl.map(r => r[0]).join(',') === '1,2,3,4,5,6,7,8,9,10,11,12', 'twelve SDL marks: ' + B.sdl.map(r => r[0]));
 ok(JSON.stringify(B.sdl.map(r => r[2])) === JSON.stringify([25, 10, 5, 10, 20, 35, 20, 80, 120, 115, 240, 10]), 'the TOTAL SDL column, not a component: ' + B.sdl.map(r => r[2]));
 ok(B.sdl[4][1] === 'ROOF', 'the TYPE column is the description, not "SPECIAL LOAD DESCRIPTION": ' + B.sdl[4][1]);

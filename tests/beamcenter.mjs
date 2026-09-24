@@ -43,10 +43,10 @@ await page.evaluate(() => {
     state.pdf.pages = 1; state.pdf.current = 1;
     const pour = state.levels[0], below = state.levels[1];
     pour.zones.push({ id: sid(), polygon: SQ(0, 0, 100, 100), capacityPSF: 54, mark: '1', label: '', colorIdx: 0 });
-    // the pour's beam: 30" wide (2.5 ft), 24" deep, 60 ft long, centred on y = 50
+    // the pour's beam: 30" wide (2.5 ft), 24" deep, 60 ft long, centered on y = 50
     const bx0 = o.offsetX ? 20 : 20, cy = o.shiftY != null ? o.shiftY : 50;
     pour.slabZones.push({ id: sid(), polygon: SQ(bx0, cy - 1.25, bx0 + 60, cy + 1.25), kind: 'beam', widthIn: 30, depthIn: 24, label: 'A' });
-    // the beam below: 24" wide (2 ft), 18" deep, centred on y = 50, running the whole beam or stopping short
+    // the beam below: 24" wide (2 ft), 18" deep, centered on y = 50, running the whole beam or stopping short
     const bl1 = o.short ? 60 : 80;
     below.slabZones.push({ id: sid(), polygon: SQ(20, 49, bl1, 51), kind: 'beam', widthIn: 24, depthIn: 18, label: 'B' });
     state.results = null; state.activeLevelIdx = 0;

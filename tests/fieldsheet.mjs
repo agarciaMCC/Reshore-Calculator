@@ -66,7 +66,7 @@ console.log('B. one context row; notes folded into the assumptions box');
   });
   ok(r.rows === 1 && /^Pour\b/.test(r.pourLabel.trim()), 'one context row, led by the pour: ' + JSON.stringify(r.pourLabel));
   ok(!r.current && !r.ms, 'no "Calculated from current inputs" line and no millisecond count');
-  ok(r.dimOutside === 0, 'no grey explanatory note sits outside the assumptions box');
+  ok(r.dimOutside === 0, 'no gray explanatory note sits outside the assumptions box');
   ok(/^Notes & assumptions/.test(r.summary), 'the box is called Notes & assumptions: ' + r.summary);
 }
 

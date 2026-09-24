@@ -237,7 +237,7 @@ const drawn = await page.evaluate(async () => {
   setStep('results');
   return { pourSel, pourMap, lower, isPour, pourAreas };
 });
-ok(drawn.isPour.pour && !drawn.isPour.l3, 'the pour is recognised and a carrying floor is not');
+ok(drawn.isPour.pour && !drawn.isPour.l3, 'the pour is recognized and a carrying floor is not');
 ok(drawn.pourSel.loading === 0, 'with a region selected, the pour draws none of its own loading areas: ' + drawn.pourSel.loading);
 ok(drawn.pourMap.loading === 0, 'and none under the region map either: ' + drawn.pourMap.loading);
 ok(drawn.pourSel.slab >= 1, 'but its slab conditions stay — they set the placement load: ' + drawn.pourSel.slab);

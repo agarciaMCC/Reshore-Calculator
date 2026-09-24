@@ -61,7 +61,7 @@ ok(k(11).kind === 'section', 'page 11 is the shear-wall section: ' + k(11).kind)
 ok([1, 7, 8, 9, 10, 11].every(n => k(n).action === 'skip' || k(n).action === 'ok'),
    'every non-plan is proposed as "not a floor plan"');
 ok([2, 3, 4, 5, 6].every(n => k(n).action === 'ok'),
-   'his own assignments are recognised as already right, so nothing is rewritten');
+   'his own assignments are recognized as already right, so nothing is rewritten');
 ok(L.filter(s => s.action === 'skip').every(s => s.pick), 'the skips come ticked');
 ok(k(7).why.includes('drawing titles'), 'a details sheet says why: ' + k(7).why);
 ok(k(10).why.includes('BUILDING ELEVATION'), 'an elevation sheet quotes its title: ' + k(10).why);
@@ -140,7 +140,7 @@ const rank = await page.evaluate(() => {
 ok(rank.winner === 13, 'the soffit plan is the one bound: page ' + rank.winner + ' (' + rank.winnerKind + ')');
 ok(rank.winnerKind === 'soffit plan', 'and it is named as such: ' + rank.winnerKind);
 ok(JSON.stringify(rank.order) === JSON.stringify([[11, 'dimension plan'], [12, 'framing plan'], [13, 'soffit plan'], [14, 'floor plan']]),
-   'each plan is labelled by what it is: ' + JSON.stringify(rank.order));
+   'each plan is labeled by what it is: ' + JSON.stringify(rank.order));
 ok(rank.altNote && rank.altNote.includes('another plan of 3'), 'the runners-up say why they are left alone: ' + rank.altNote);
 ok(rank.swapped.join(',') === '12', 'the swap makes the framing plan the bound one: ' + rank.swapped.join(','));
 

@@ -144,7 +144,7 @@ const simp = await page.evaluate(() => {
   }
   return { n: poly.length, onCurve, litterFlagged, out };
 });
-ok(simp.onCurve > 40 && simp.onCurve < simp.n, 'the arc is recognised as a curve, the rest is not: ' + simp.onCurve + ' of ' + simp.n);
+ok(simp.onCurve > 40 && simp.onCurve < simp.n, 'the arc is recognized as a curve, the rest is not: ' + simp.onCurve + ' of ' + simp.n);
 ok(simp.litterFlagged === 0, 'litter on a straight run is never called a curve: ' + simp.litterFlagged);
 ok(simp.out[100].plainSag > 100, 'plain simplify at full travel collapses the arc to its chord — ' + simp.out[100].plainSag.toFixed(0) + ' px off the true curve');
 ok(simp.out[100].keptSag < 1, 'the curve-aware one holds the arc to under a pixel at full travel: ' + simp.out[100].keptSag);

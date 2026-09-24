@@ -107,7 +107,7 @@ console.log('D. the running-count morphology matches the old brute force');
 {
   const { browser, page } = await open(1);
   const same = await page.evaluate(() => {
-    // the implementations that were replaced, verbatim in behaviour
+    // the implementations that were replaced, verbatim in behavior
     const oldOpen = (m, W, H, r) => {
       const pass = (src, op) => { const tmp = new Uint8Array(W*H), out = new Uint8Array(W*H);
         for (let y=0;y<H;y++){const row=y*W;for(let x=0;x<W;x++){let v=op===1?0:1;

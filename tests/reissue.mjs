@@ -5,9 +5,9 @@
 //
 // Every binding in a job is a page number, so a sheet inserted mid-set used to
 // shift every page after it while the job kept the old numbers — silently
-// pointing each floor at its neighbour's plan.
+// pointing each floor at its neighbor's plan.
 //
-//  A. a sheet inserted mid-set: every later sheet is recognised by its own
+//  A. a sheet inserted mid-set: every later sheet is recognized by its own
 //     title block and re-numbered, areas travel with it, matches carry over
 //     flagged, one undo puts it all back
 //  B. the genuinely new page is named; the dozens of sheets the job never
@@ -86,7 +86,7 @@ ok(/^4:\d+ 3:[\d,]+ 2:[\d,]+ 1B:[\d,]+$/.test(before) && boundPages.length >= 6,
 const R = await reissue(ins);
 console.log('   ' + R.rows.map(r => `${r.level}${r.zone ? ' ' + r.zone : ''} ${r.from}→${r.to}`).join('  '));
 ok(R.moved === movedN && R.same === sameN && R.missing === 0, `the sheets at or past the insert move, the rest do not, none lost: ${JSON.stringify([R.moved, R.same, R.missing])} want ${JSON.stringify([movedN, sameN, 0])}`);
-ok(R.rows.every(r => r.to != null && r.how === 'its title block'), 'each one recognised by its own title block');
+ok(R.rows.every(r => r.to != null && r.how === 'its title block'), 'each one recognized by its own title block');
 ok(R.rows.every(r => r.to === (r.from >= 7 ? r.from + 1 : r.from)), 'everything after the insert shifts by one: ' + JSON.stringify(R.rows.map(r => [r.from, r.to])));
 ok(await page.$$eval('#remapPanel .rm-row', r => r.length) === boundPages.length, 'the panel shows a row per bound sheet');
 ok(new RegExp('Re-number ' + movedN + ' sheets?').test(await page.$eval('#rmApply', b => b.textContent)), 'and offers to re-number the ones that moved: ' + await page.$eval('#rmApply', b => b.textContent));

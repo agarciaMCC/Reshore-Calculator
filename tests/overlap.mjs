@@ -101,9 +101,9 @@ ok(w && w.area === 400 && w.capsPsf[0] === 90, 'innermost 20x20 keeps its own 90
 ok(e && e.area === 3600 - 400, 'the middle area loses only the nested cutout: ' + JSON.stringify(e));
 ok(r.regions.length === 3, 'three conditions on the floor: ' + JSON.stringify(r.regions.map(x => [x.codes[0], x.area])));
 // A NESTED AREA UNDER THE MINIMUM REGION SIZE KEEPS ITS MARK.
-// It used to be absorbed into the neighbour it shared the most boundary with,
+// It used to be absorbed into the neighbor it shared the most boundary with,
 // which is how a 177 SF C2 patch on the Kalae job came back inside the B2
-// region beside it, labelled "B2 / C2". Adolfo, Sep 15 2026: "do not merge
+// region beside it, labeled "B2 / C2". Adolfo, Sep 15 2026: "do not merge
 // loading conditions." The minimum region size still absorbs a sliver whose
 // capacity or shore height differs by a hair; a different MARK never merges,
 // however small the piece.

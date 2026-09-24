@@ -98,7 +98,7 @@ ok(p[0][0] === 203 && p[0][1] === 204, 'a small move is not swallowed by its own
 console.log('E. and it still snaps when the grab is nowhere near a corner');
 await reset();
 await page.evaluate(() => { state.activeZoneIdx = 0; renderSidebar() });
-// grab dead centre; the nearest corner is the top-left (200,200)
+// grab dead center; the nearest corner is the top-left (200,200)
 await drag(await at(300, 275), await at(742, 597));
 p = await poly();
 ok(p[0][0] === 640 && p[0][1] === 520, 'the nearest corner to the grab is the one that lands: ' + JSON.stringify(p[0]));

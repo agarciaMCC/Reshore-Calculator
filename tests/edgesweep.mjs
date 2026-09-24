@@ -11,7 +11,7 @@
 // area either side, how far the outline moves, and how many drawn areas would
 // fall outside it. Nothing is written until Use this (or Use all N). Show
 // draws that outline over its own sheet with the edge it would replace beside
-// it in grey; Redetect re-reads one sheet — the answer to a re-issued set.
+// it in gray; Redetect re-reads one sheet — the answer to a re-issued set.
 import { createRequire } from 'node:module';
 const { chromium } = await (async () => {
   try { return await import('playwright'); }
@@ -147,7 +147,7 @@ const drew = await page.evaluate(() => {
   drawCtx.stroke = p; drawCtx.fillText = f;
   return calls;
 });
-ok(drew.some(c => c[0] === 'text' && /PROPOSED FLOOR EDGE/.test(c[1])), 'the proposal is labelled on the plan: '
+ok(drew.some(c => c[0] === 'text' && /PROPOSED FLOOR EDGE/.test(c[1])), 'the proposal is labeled on the plan: '
   + JSON.stringify(drew.filter(c => c[0] === 'text').map(c => c[1]).slice(0, 3)));
 ok(drew.some(c => c[0] === 'text' && /nothing there yet/.test(c[1])), 'and says there is nothing under it yet');
 // Esc peels the drawing first, the review second
@@ -223,7 +223,7 @@ ok(await page.evaluate(() => edgeSweep.rows[0].areaAfter > edgeSweep.rows[0].are
 const out0 = await page.evaluate(() => edgeSweep.rows[0].outside);
 ok(out0 > 0 && /\d+ drawn areas? would fall outside it/.test(chg), 'and how many drawn areas it would leave out: '
   + (chg.match(/\d+ drawn areas? would fall outside it/) || [''])[0]);
-ok(/lm-warn/.test(await page.evaluate(() => edgeChangeText(edgeSweep.rows[0]))), 'in the warning colour');
+ok(/lm-warn/.test(await page.evaluate(() => edgeChangeText(edgeSweep.rows[0]))), 'in the warning color');
 // the count itself, on a floor whose every shape is placed by hand: one area
 // inside the new outline, one beyond it
 const counted = await page.evaluate(() => {

@@ -1,6 +1,6 @@
 // @rules BEM-07, BEM-08  (see DECISIONS.md)
 // AUTO-DETECTED BEAMS ARE PROPOSED, NOT WRITTEN (Sep 15 2026)
-// Adolfo: on his structural sets beams are a solid light-grey hatch, and the
+// Adolfo: on his structural sets beams are a solid light-gray hatch, and the
 // size sits in a nearby "BM" label. Chose: propose all of them with NONE
 // ticked, read the size from the BM label, flag uncertain matches, ignore
 // columns. And (BEM-07) anything named BM or BEAM is a beam whatever else the
@@ -8,8 +8,8 @@
 // Run against the 1175 Bothell Stem 4 set (tests/fixtures/test-set.pdf).
 //  A. the size label parser: BM / BEAM / bare size are beams; COL, FOOTING,
 //     a third dimension are not
-//  B. sheet 4: every grey beam is found, sized off its label, and NOT ticked
-//  C. sheet 3: a footing is not offered as a beam; an unlabelled grey run is
+//  B. sheet 4: every gray beam is found, sized off its label, and NOT ticked
+//  C. sheet 3: a footing is not offered as a beam; an unlabelled gray run is
 //     offered with its size blank and the reason stated
 //  D. the review panel: nothing written until Apply; Apply adds only the
 //     ticked shapes, blank depths counted
@@ -64,13 +64,13 @@ await page.evaluate(async b64 => {
   state.activeLevelIdx = 0; renderSidebar();
 }, pdf.toString('base64'));
 
-console.log('B. sheet 4: every grey beam, sized, none ticked');
+console.log('B. sheet 4: every gray beam, sized, none ticked');
 const B = await page.evaluate(async () => {
   const r = await detectGreyShapes(4);
   return { labels: r.labels, items: r.items.map(i => ({ kind: i.kind, w: i.widthIn, d: i.depthIn, label: i.label, why: i.why, sized: i.sized, pick: i.pick, aspect: i.aspect })) };
 });
 console.log('   ' + JSON.stringify(B.items.map(i => [i.kind, i.w, i.d, i.why])));
-ok(B.items.length === 7, 'seven grey shapes on sheet 4: ' + B.items.length);
+ok(B.items.length === 7, 'seven gray shapes on sheet 4: ' + B.items.length);
 ok(B.items.every(i => i.kind === 'beam'), 'all of them beams');
 ok(B.items.every(i => i.sized && i.w > 0 && i.d > 0 && /BM$/.test(i.label)), 'every one sized off a BM label: ' + JSON.stringify(B.items.map(i => i.label)));
 ok(B.items.every(i => i.why === 'from label'), 'and says so');
@@ -85,12 +85,12 @@ const C = await page.evaluate(async () => {
   return r.items.map(i => ({ kind: i.kind, w: i.widthIn, d: i.depthIn, label: i.label, why: i.why, sized: i.sized, pick: i.pick }));
 });
 console.log('   ' + JSON.stringify(C.map(i => [i.kind, i.w, i.d, i.label, i.why])));
-ok(C.length >= 8, 'a sheet full of grey: ' + C.length);
+ok(C.length >= 8, 'a sheet full of gray: ' + C.length);
 ok(C.every(i => i.pick === false), 'none ticked here either');
 const ftg = C.filter(i => /FOOTING/.test(i.label || ''));
 ok(ftg.length >= 1 && ftg.every(i => i.kind !== 'beam' && !i.sized && /not a beam size/.test(i.why)), 'the shape by the "12 X 12 X 33 FOOTING" label is not offered as a beam, and the reason names the label: ' + JSON.stringify(ftg));
 const blank = C.filter(i => i.kind === 'beam' && !i.sized);
-ok(blank.length >= 1 && blank.every(i => i.w === null && i.d === null && /no size label|two labels compete/.test(i.why)), 'a grey run with no BM label along it is offered with its size blank and the reason stated: ' + JSON.stringify(blank.map(i => i.why)));
+ok(blank.length >= 1 && blank.every(i => i.w === null && i.d === null && /no size label|two labels compete/.test(i.why)), 'a gray run with no BM label along it is offered with its size blank and the reason stated: ' + JSON.stringify(blank.map(i => i.why)));
 ok(C.filter(i => i.sized).every(i => /BM$/.test(i.label)), 'everything sized was sized off a BM label');
 
 console.log('D. the review panel writes nothing until Apply, then only what is ticked');

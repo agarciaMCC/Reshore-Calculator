@@ -57,11 +57,17 @@ ok(await page.$eval('#btnDrawLoading',e=>e.style.display==='none'),'loading draw
 ok(await page.$eval('#btnCopyFrom',e=>/Copy slab conditions/.test(e.textContent)),'copy wording follows');
 ok(await page.$('#slabKindSwitch')===null,'the old New: row is gone');
 await page.click('#btnDrawSlab');
-const opts=await page.$$eval('#drawSlabPop button[data-newkind]',b=>b.map(x=>x.dataset.newkind));
-ok(JSON.stringify(opts)===JSON.stringify(['slab','opening','beam','edge']),'four choices, no grade: '+JSON.stringify(opts));
-await page.click('#drawSlabPop button[data-newkind="beam"]');
-ok(await page.evaluate(()=>state.ui.slabKind==='beam'&&state.tool==='polygon'),'picking a kind arms the tool');
-ok(await page.$eval('#drawSlabPop',e=>!e.classList.contains('open')),'menu closes on pick');
+// ARE-14: the drawing bar over the plan replaces the kind menu
+ok(await page.$eval('#adBar',e=>e.classList.contains('visible')),'the drawing bar opens over the plan');
+const opts=await page.$$eval('#adTypes button[data-adk]',b=>b.map(x=>x.dataset.adk));
+ok(JSON.stringify(opts)===JSON.stringify(['slab','grade','opening','beam','edge']),'five types, slab on grade among them: '+JSON.stringify(opts));
+await page.click('#adTypes button[data-adk="beam"]');
+ok(await page.evaluate(()=>state.ui.slabKind==='beam'&&state.tool==='polygon'&&adMode()==='center'),'picking a type keeps the tool armed; a beam starts as a centerline');
+const bw=await page.$eval('#adBar',e=>[e.getBoundingClientRect().width,e.getBoundingClientRect().height]);
+await page.click('#adTypes button[data-adk="edge"]');
+const bw2=await page.$eval('#adBar',e=>[e.getBoundingClientRect().width,e.getBoundingClientRect().height]);
+ok(JSON.stringify(bw)===JSON.stringify(bw2),'the bar keeps its size whatever the type: '+JSON.stringify([bw,bw2]));
+await page.click('#adTypes button[data-adk="beam"]');
 // grade still reachable as a Type
 ok(await page.evaluate(()=>{
   state.activeZoneIdx=zonesOf(getActiveLevel(),'slab').findIndex(z=>slabKind(z)==='slab');
@@ -125,7 +131,7 @@ const firstRow=await page.$eval('#zoneList .sb-item',e=>e.textContent.replace(/\
 ok(/Floor edge/.test(firstRow),'it is the first row under Slab areas: '+firstRow);
 ok(/slab inside this outline/.test(firstRow),'and its note says what the slab is: '+firstRow);
 const order=await page.$$eval('#zoneList > *',n=>n.map(x=>x.className.split(' ')[0]));
-ok(order[0]==='sb-group','the list starts with a group header');
+ok(order[0]==='ad-checks'&&order[1]==='sb-group','the list starts with the checks (ARE-25), then a group header: '+order.slice(0,3));
 ok(await page.evaluate(()=>{setLayer('loading');return document.querySelectorAll('#zoneList .sb-group').length===0}),'the loading list stays flat');
 // copy dialog defaults to the layer
 ok(await page.evaluate(()=>{setLayer('slab');openCopyFrom();const r={l:document.getElementById('cpLoading').checked,s:document.getElementById('cpSlab').checked};document.getElementById('cpCancel').click();return !r.l&&r.s}),'copy dialog ticks the slab layer when you are on it');

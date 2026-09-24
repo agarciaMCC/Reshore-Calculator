@@ -115,7 +115,7 @@ const kinds = {};
 for (const l of levels) for (const z of l.modelZones) kinds[z.kind] = (kinds[z.kind] || 0) + 1;
 ok(kinds.edge === 42 && kinds.beam > 150 && kinds.opening > 150 && kinds.slab > 20 && kinds.grade >= 1, 'edges, beams, openings, slab steps and grade came through: ' + JSON.stringify(kinds));
 const never = /FILL|PAD\b|CURB|PEDESTAL|PLINTH|TOS SLOPE/i;
-ok(levels.every(l => l.modelZones.every(z => !never.test(z.label || ''))), 'RVT-02: nothing labelled FILL / PAD / CURB / PEDESTAL / Plinth / TOS SLOPE is in the job');
+ok(levels.every(l => l.modelZones.every(z => !never.test(z.label || ''))), 'RVT-02: nothing labeled FILL / PAD / CURB / PEDESTAL / Plinth / TOS SLOPE is in the job');
 const beams = levels.flatMap(l => l.modelZones.filter(z => z.kind === 'beam'));
 // Floors that are beams carry the BM in their name; Structural Framing members
 // (the 36x14 TRANSITION beams) are beams by category and need not

@@ -144,7 +144,7 @@ ok(am.every(r => Math.abs(r.ft - 10) < 0.05), 'scale reads 1" = 10\' on every fl
 ok(am.every(r => Math.abs(r.rot) < 0.1), 'no spurious rotation');
 ok(am.every(r => r.offFtVsHand < 1.5),
    'agrees with his hand match to under 1.5 ft across the sheet: ' + JSON.stringify(am.map(r => [r.name, +r.offFtVsHand.toFixed(2)])));
-// bubbles use the circle centre, not the label's text origin
+// bubbles use the circle center, not the label's text origin
 const bias = await page.evaluate(async () => {
   await goToPage(5); await ensurePageGeometry(5);
   const items = await pageTextCached(5);
@@ -155,7 +155,7 @@ const bias = await page.evaluate(async () => {
   return { n: b.length, dx: dx / b.length, dy: dy / b.length };
 });
 ok(bias && bias.n > 20 && bias.dx > 1 && bias.dy < -1,
-   'the circle centre sits up and right of the text origin, and that is what is used: ' + JSON.stringify(bias));
+   'the circle center sits up and right of the text origin, and that is what is used: ' + JSON.stringify(bias));
 // a detail marker with the same number as a grid line must not pose as one
 const clean = await page.evaluate(async () => {
   const items = await pageTextCached(5);

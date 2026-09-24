@@ -1,5 +1,5 @@
 // @rules MDL-02, MDL-03, MDL-04, MDL-16, MDL-18  (see DECISIONS.md)
-// Slab-on-grade behaviour: whole-level flag, per-area kind, warnings,
+// Slab-on-grade behavior: whole-level flag, per-area kind, warnings,
 // schedule rows, persistence, and a Kalae regression check.
 import { createRequire } from 'node:module';
 const { chromium } = await (async () => {
@@ -168,9 +168,8 @@ ok(/on grade — absorbs the remaining 69\.8 PSF; no shores below/.test(body), '
 ok(await page.$$eval('#schedBody tr.sched-grade', t => t.length) === 1, 'one grade row');
 head = await page.$eval('#schedHead', e => e.textContent);
 ok(!/Load still remains/.test(head), 'no unresolved warning');
-// the draw menu offers the four things you can start as; grade is reached
-// through a slab area's Type box instead
-ok(await page.$eval('#drawSlabPop', e => [...e.querySelectorAll('button[data-newkind]')].map(b => b.dataset.newkind).join(',')) === 'slab,opening,beam,edge', 'draw menu options');
+// ARE-14: the drawing bar offers slab on grade as a Type of its own
+ok(await page.evaluate(() => AD_TYPES.join(',')) === 'slab,grade,opening,beam,edge', 'drawing bar types');
 await page.evaluate(() => {
   setLayer('slab'); state.ui.slabKind = 'grade'; state.activeLevelIdx = 1;
   state.drawing.points = [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 30 }, { x: 0, y: 30 }];

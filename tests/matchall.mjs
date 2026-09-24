@@ -106,7 +106,7 @@ ok(drew.page === drew.want, 'Show goes to that row\'s sheet: page ' + drew.page)
 ok(drew.sel, 'the preview is up');
 ok(drew.strokes > 10, 'it strokes the grid it implies and the crossings it used: ' + drew.strokes);
 ok(drew.texts.some(t => /^\d+$/.test(t)) && drew.texts.some(t => /,/.test(t)),
-  'labelled grid lines and labelled crossings: ' + JSON.stringify(drew.texts.slice(0, 6)));
+  'labeled grid lines and labeled crossings: ' + JSON.stringify(drew.texts.slice(0, 6)));
 ok(await page.$eval('#matchList .match-row.sel button[data-mshow]', b => b.textContent.trim() === 'Showing'), 'the row says it is showing');
 // UI-36 (Sep 24 2026): the grid marks and lines belong to Match floors alone —
 // on any other section they are neither kept nor drawn

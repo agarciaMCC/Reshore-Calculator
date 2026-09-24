@@ -264,7 +264,7 @@ const H = await page.evaluate(() => {
   rows.forEach(l => delete l.typicalAssumed);
   renderTypicalBlock();
   const allSet = read();
-  // the two pickers are the live- and dead-load marks: side by side, labelled
+  // the two pickers are the live- and dead-load marks: side by side, labeled
   const sels = [...blk().querySelectorAll('.typ-brow.first .lvl-sel')].map(e => e.getBoundingClientRect());
   const lbls = [...blk().querySelectorAll('.typ-brow.first .tb-lbl')].map(e => e.textContent.trim());
   const picker = { n: sels.length, sameRow: sels.length < 2 || Math.abs(sels[0].top - sels[1].top) < 2, lbls };
@@ -289,7 +289,7 @@ ok(!H.back.needs && /all \d set/.test(H.back.chip), 'put back, the card goes qui
 // what the step does with all this is asserted where a schedule exists:
 // tests/loadentry.mjs, section E
 ok(H.picker.sameRow, 'the live- and dead-load pickers sit side by side, not stacked: ' + JSON.stringify(H.picker));
-ok(H.picker.n < 2 || /LL/.test(H.picker.lbls.join('')), 'each labelled, so B and 2 do not read as one code: ' + JSON.stringify(H.picker.lbls));
+ok(H.picker.n < 2 || /LL/.test(H.picker.lbls.join('')), 'each labeled, so B and 2 do not read as one code: ' + JSON.stringify(H.picker.lbls));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 await browser.close();

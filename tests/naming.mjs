@@ -3,7 +3,7 @@
 // thickness, then each floor below with its capacity (Adolfo, Sep 17 2026:
 // "Slab Thickness - Level below load capacity - Level below that load
 // capacity - and so on"), with marks / grid bays added only where two
-// regions would otherwise read the same; a colour keyed to the region's own
+// regions would otherwise read the same; a color keyed to the region's own
 // signature so neither churns when the list is re-sorted; and a label you
 // can type over the top.
 import { createRequire } from 'node:module';
@@ -82,9 +82,9 @@ ok(east && /\(B2\) · [4-6]-10 \/ A-D$/.test(east.name), 'the east patch reads t
 ok(e2 && /^9" Slab – L3 125 PSF – L2 138 PSF$/.test(e2.name), 'the E2 cutout has its own numbers, so no mark or bays are needed: ' + (e2 && e2.name));
 ok(roof.some(r => /\(C2\)$/.test(r.name)), 'the C2 region, same numbers as B2, carries its mark in brackets: ' + JSON.stringify(roof.map(r => r.name)));
 ok(new Set(roof.map(r => r.name)).size === roof.length, 'names are unique within the placement: ' + JSON.stringify(roof.map(r => r.name)));
-ok(new Set(roof.map(r => r.color)).size === roof.length, 'so are the colours: ' + JSON.stringify(roof.map(r => r.color)));
+ok(new Set(roof.map(r => r.color)).size === roof.length, 'so are the colors: ' + JSON.stringify(roof.map(r => r.color)));
 
-console.log('C. neither the name nor the colour moves when the list does');
+console.log('C. neither the name nor the color moves when the list does');
 const stable = await page.evaluate(() => {
   const before = {};
   for (const L of schedSolve.levels) { if (!L.solve.spatial) continue;
@@ -102,7 +102,7 @@ const stable = await page.evaluate(() => {
   state.project.minRegionSF = null; runSchedule();
   return { same, moved, checked };
 });
-ok(stable.checked >= 10 && stable.moved === 0, `every region kept its name and colour through a re-solve (${stable.same}/${stable.checked})`);
+ok(stable.checked >= 10 && stable.moved === 0, `every region kept its name and color through a re-solve (${stable.same}/${stable.checked})`);
 // and the old scheme would have moved: the tag is no longer the sort index
 ok(await page.evaluate(() => {
   const L = schedSolve.levels.find(x => x.pour.name === 'Roof');
@@ -126,7 +126,7 @@ const lbl = await page.evaluate(() => {
 ok(lbl.named === 'West half', 'a typed label wins');
 ok(lbl.cleared === lbl.derived, 'clearing it brings the derived name back');
 ok(lbl.stored === 'West half', 'and it is saved with the job');
-// the colour does not change when you name it
+// the color does not change when you name it
 ok(await page.evaluate(() => {
   const L = schedSolve.levels.find(x => x.pour.name === 'Roof');
   const before = regionColorIdx(L.solve.regions[0], 0, L);
@@ -134,7 +134,7 @@ ok(await page.evaluate(() => {
   const after = regionColorIdx(L.solve.regions[0], 0, L);
   setRegionLabel('Roof', L.solve.regions[0].key, 'West half');
   return before === after;
-}), 'naming a region does not change its colour');
+}), 'naming a region does not change its color');
 
 console.log('E. in the schedule');
 await page.evaluate(() => { setStep('results'); renderSchedule(); });
@@ -182,8 +182,8 @@ const painted = await page.evaluate(async () => {
            dbg: { curStep, pourIdx: schedPourIdx, onScreen: (levelOnScreen()||{}).name, page: state.pdf.current,
                   want: want.slice(0,2), sample: [...new Set(rec)].slice(0,8) } };
 });
-ok(painted.hits === painted.n, `every region is painted in its own colour (${painted.hits}/${painted.n})`);
-ok(painted.names >= 2, `the big regions carry their names on the plan, one step per line; small patches go by colour (${painted.names}/${painted.n})`);
+ok(painted.hits === painted.n, `every region is painted in its own color (${painted.hits}/${painted.n})`);
+ok(painted.names >= 2, `the big regions carry their names on the plan, one step per line; small patches go by color (${painted.names}/${painted.n})`);
 // with a region selected, the teal selection (RES-10) still goes over the top
 const selPaint = await page.evaluate(() => {
   const L = schedSolve.levels.find(x => x.pour.name === 'Roof');

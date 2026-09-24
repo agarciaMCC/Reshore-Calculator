@@ -133,7 +133,7 @@ ok(B.legend && B.lgItems.some(x => /\d+×\d+/.test(x)), 'a legend of the pattern
 ok(B.nCards > 0 && B.allOnTab, `the cards are the regions over this floor in this zone (${B.nCards})`);
 ok(B.activeChips === B.nCards, 'each card has this floor\'s chip marked active');
 ok(B.rows.length === 1 && new RegExp('under ' + B.name).test(B.rows[0]), 'an opened card shows this floor\'s row alone: ' + JSON.stringify(B.rows));
-ok(B.paintedPat >= 1, 'the plan is shaded in the legend\'s pattern colours: ' + B.paintedPat + ' of ' + B.patColours.length);
+ok(B.paintedPat >= 1, 'the plan is shaded in the legend\'s pattern colors: ' + B.paintedPat + ' of ' + B.patColours.length);
 ok(B.labels > 0, 'with the pattern written on the regions that have room: ' + B.labels);
 
 console.log('D. Next through the outstanding rows');

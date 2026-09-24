@@ -164,7 +164,7 @@ ok(await page.evaluate(() => seqExceptionPct() === 15), 'undo restores the defau
 // button on the step does.
 const prn = await page.evaluate(() => { runSchedule(); runSequence(); let html = ''; const w = { document: { write: s => { html += s; }, close() {} }, print() {} }; const o = window.open; window.open = () => w; try { printSequence(); } finally { window.open = o; } return html; });
 ok(/install \/ strip sequence/i.test(prn) && /<b>INSTALL<\/b> under L1/.test(prn) && /LEAVE under L1/.test(prn), 'print has the sequence with install/leave: ' + prn.replace(/\s+/g, ' ').slice(0, 160));
-ok(/falsework has been stripped/.test(prn) && /dates are not part of this calculation/.test(prn), 'print states the removal rule and that dates are not modelled');
+ok(/falsework has been stripped/.test(prn) && /dates are not part of this calculation/.test(prn), 'print states the removal rule and that dates are not modeled');
 
 // ── the strip line, and one line per floor (Adolfo, Sep 10, 2026) ───────
 // "the can be stripped after section in sequence needs to give information
