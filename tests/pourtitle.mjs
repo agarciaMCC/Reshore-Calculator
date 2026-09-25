@@ -104,6 +104,15 @@ if (fs.existsSync(bothell)) {
     return null;
   });
   ok(b && b.heads.length && b.heads.every(h => h.startsWith(b.tag + ' · ')), 'beam card titles lead with the pour: ' + JSON.stringify(b && b.heads.slice(0, 1)));
+  // "remove the grid range in the pour titles" (Sep 25): patches of one
+  // condition are told apart by the shore height where it differs
+  const r = await p2.evaluate(() => {
+    const k = schedSolve.levels.findIndex(L => L.pour.name === 'Roof');
+    schedPourIdx = k; renderSchedule();
+    return [...document.querySelectorAll('.sched-region:not(.sched-beam) .card-name')].map(e => e.textContent.trim());
+  });
+  ok(r.length && r.every(h => !/ · \d+-\d+ \/ [A-Z]-[A-Z]/.test(h)), 'no card title carries a grid range: ' + JSON.stringify(r.slice(0, 3)));
+  ok(r.some(h => /\(B2\) · 13'-1" under L3$/.test(h)) && r.some(h => /\(B2\) · 13'-9" under L3/.test(h)), 'the B2 patches at different heights are named by the height: ' + JSON.stringify(r.slice(0, 3)));
   await p2.close();
 } else console.log('  (1175 job not in this checkout, skipped)');
 

@@ -169,7 +169,7 @@ What the calculator must do. Canonical, versioned with the code; the project doc
 | RES-12 | A beam row lights only the part of the beam it covers, as the solver cut it (a beam over two conditions is two rows); a group row lights every member's piece. | Sep 24 |
 | RES-13 | Print refuses results that no longer match the inputs. | Sep 15 |
 | RES-14 | Results needs a drawing set: with none loaded the Results gate blocks the solve, whatever else is entered by hand. Test fixtures without a PDF use a stand-in sheet. | Sep 24 |
-| RES-15 | EVERY RESULTS TITLE LEADS WITH THE POUR: region and beam cards, the no-shore alert and the print legend and headings read "Roof · 9" Slab – L3 138 PSF – …" (the pour in its own pill on screen; a floor named 3 reads L3). Plan labels, keys and the plain names underneath are unchanged. | Sep 25 |
+| RES-15 | EVERY RESULTS TITLE LEADS WITH THE POUR: region and beam cards, the no-shore alert and the print legend and headings read "Roof · 9" Slab – L3 138 PSF – L2 138 PSF (B2)" (the pour in its own pill on screen; a floor named 3 reads L3). NO GRID RANGE IN A TITLE: two patches of one condition are told apart by the shore height where it differs ("· 13'-1" under L3"), then by what else differs, then by a number; the bays stay in the row's small print. Plan labels and keys are unchanged. | Sep 25 |
 
 ## PRT — The printed sheet
 
@@ -298,6 +298,7 @@ What the calculator must do. Canonical, versioned with the code; the project doc
 | The Next / Go to button on the foot bar; Tab past the last property field returning to the plan | UI-32, UI-29 | Sep 23 |
 | Elevations as decimal feet (112.50) | UI-28 | Sep 23 |
 | Region names as grid bays plus carrying mark (1-6 / A-D B2) | RGN-07 | Sep 17 |
+| Grid bays in a region's title to tell two patches apart (· 1-6 / A-D) | RES-15 | Sep 25 |
 | Whole-level SOG needs no sheet match | MDL-02 | Sep 15 |
 | Areas list grouped by sheet zone name, sheet on screen first | ARE-03 | Sep 17 |
 | A Slab edge tolerance project setting (default 2 ft) | MDL-11 | Sep 18 |

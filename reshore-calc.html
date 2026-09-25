@@ -14476,7 +14476,7 @@ function setRegionLabel(pourName,key,txt){
 // the floor is. Two regions that come to the same numbers off different
 // marks are told apart by the marks in brackets (a 9" slab over B2 and over
 // C2 stay separate conditions, Sep 8), two patches of one condition by the
-// grid bays each covers, then by what else makes them differ, and failing
+// shore height where it differs (RES-15: not the grid bays), then by what else makes them differ, and failing
 // that by a number — a name is never ambiguous within a placement. Where a region sits (its grid bays) and which marks carry it
 // move to the small print on its row.
 function capText(c){
@@ -14509,9 +14509,23 @@ function regionDerivedNames(L){
   const c2=count(marked);
   // same numbers, same marks: two patches of the same condition in different
   // bays — say which bays, then what else differs, then a number
+  // RES-15 (Sep 25): no grid bays in the title — "remove the grid range in the
+  // pour titles". Two patches of one condition are told apart by the shore
+  // height where that differs (the first floor down whose heights differ),
+  // then by what else differs, then by a number. The bays stay in the row's
+  // small print (regionGridTag).
+  const heightTag=(r,group)=>{
+    const n=Math.max(...group.map(g=>(g.steps||[]).length));
+    for(let k=0;k<n;k++){
+      const hs=group.map(g=>{const st=(g.steps||[])[k];return st&&st.shoreHeightFt!=null?feetToStr(st.shoreHeightFt):''});
+      if(new Set(hs).size>1){const st=(r.steps||[])[k];return st&&st.shoreHeightFt!=null?`${feetToStr(st.shoreHeightFt)} under ${levelTagName(st.level&&st.level.name)}`:''}
+    }
+    return '';
+  };
   const placed=regs.map((r,i)=>{
     if(c2.get(marked[i])<2)return marked[i];
-    const tag=regionGridTag(r);
+    const group=regs.filter((g,j)=>marked[j]===marked[i]);
+    const tag=heightTag(r,group);
     return tag?`${marked[i]} · ${tag}`:marked[i];
   });
   const c3=count(placed);
