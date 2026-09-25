@@ -18519,6 +18519,21 @@ function parseFeet(v){
 // Round-trip partner of parseFeet: 25.3646 -> 25'-4⅜". Used wherever an
 // elevation or height is SHOWN in a field the user can type into.
 function ftInStr(ft){return feetToStr(ft)}
+// An OFFSET keeps its sign: "-6", "−6\"", "-0'-6\"", "+3", "-1'-2 1/2\"". A plain
+// number is inches. (parseInches is for sizes and drops the sign — it was the
+// reason a negative offset typed on the drawing bar came back positive.)
+function parseOffsetIn(v){
+  if(v==null)return null;
+  if(typeof v==='number')return v;
+  let s=_ftInNorm(v);if(!s)return null;
+  let sign=1;
+  if(s[0]==='-'){sign=-1;s=s.slice(1).trim()}else if(s[0]==='+'){s=s.slice(1).trim()}
+  if(!s)return null;
+  if(/'/.test(s)){const f=parseFeet(s);return f==null||!isFinite(f)?null:sign*f*12}
+  const m=s.match(/^(\d+(?:\.\d+)?)?\s*(?:(\d+)\s*\/\s*(\d+))?\s*"?$/);
+  if(!m||(!m[1]&&!m[2]))return null;
+  return sign*((m[1]?parseFloat(m[1]):0)+(m[2]?parseInt(m[2],10)/parseInt(m[3],10):0));
+}
 function parseInches(v){
   if(v==null)return null;
   if(typeof v==='number')return v;
@@ -24401,7 +24416,7 @@ function adBeamLabelFor(lv,P){
     const p=parseSizeLabel(ln.text);if(!p||!p.isBeam||!(p.wIn>0)||!(p.dIn>0))continue;
     const c=[ln.x+(ln.w||0)/2,ln.y-(ln.h||10)/2];
     let d=Infinity;for(let i=0;i<P.length-1;i++)d=Math.min(d,adSegDist(c,P[i],P[i+1]));
-    if(d<lim&&(!best||d<best.d))best={d,w:p.wIn,dp:p.dIn,t:p.text};
+    if(d<lim&&(!best||d<best.d))best={d,w:p.wIn,dp:p.dIn,t:p.text,ln};
   }
   return best;
 }
@@ -24410,14 +24425,20 @@ function adBeamLabelFor(lv,P){
 function adSheetReads(lv,ring){
   const r={tosFt:null,tIn:null,src:[],mixed:false};
   const page=state.pdf.current,lines=adLines(page);if(!lines.length||!ring||ring.length<3)return r;
-  const tv=new Set(),th=new Set();
+  const tv=new Set(),th=new Set(),bv=new Set();
   for(const ln of lines){
     const c=[ln.x+(ln.w||0)/2,ln.y-(ln.h||10)/2];if(!adInPoly(c,ring))continue;
     const s=String(ln.text).replace(/[″”]/g,'"').replace(/[′’]/g,"'");let m;
     if(m=/T\s*\/\s*(?:O\s*)?SLAB\s*(?:EL\.?|ELEV\.?)?\s*[:=]?\s*(?:EL\.?\s*)?(\d+\s*'\s*-?\s*[\d\s\/]*"?)/i.exec(s)){const v=parseFeet(m[1]);if(v!=null&&isFinite(v)){tv.add(Math.round(v*96)/96);r.src.push(s.trim())}}
+    else if(m=/B\s*\/\s*(?:O\s*)?SLAB\s*(?:EL\.?|ELEV\.?)?\s*[:=]?\s*(?:EL\.?\s*)?(\d+\s*'\s*-?\s*[\d\s\/]*"?)/i.exec(s)){const v=parseFeet(m[1]);if(v!=null&&isFinite(v)){bv.add(Math.round(v*96)/96);r.src.push(s.trim())}}
     else if(m=/^(\d+(?:\.\d+)?)\s*"\s*(?:THICKENED\s+|THK\.?\s+|DROP\s+|DEPRESSED\s+)?(?:PT\s+|P\.T\.\s+|CIP\s+)?(SLAB|PANEL)\b/i.exec(s)){th.add(+m[1]);r.src.push(s.trim())}
   }
-  if(tv.size===1)r.tosFt=[...tv][0];if(th.size===1)r.tIn=[...th][0];r.mixed=tv.size>1||th.size>1;return r;
+  if(tv.size===1)r.tosFt=[...tv][0];if(th.size===1)r.tIn=[...th][0];
+  if(bv.size===1)r.bosFt=[...bv][0];
+  // no thickness note, but a top and a bottom: the thickness is the difference
+  // (Bothell writes "T/SLAB:91'-0\" B/SLAB:90'-7\"" for a 5" slab)
+  if(r.tIn==null&&!th.size&&r.tosFt!=null&&r.bosFt!=null){const d=Math.round((r.tosFt-r.bosFt)*12*8)/8;if(d>0&&d<120){r.tIn=d;r.tFromTB=true}}
+  r.mixed=tv.size>1||th.size>1||bv.size>1;return r;
 }
 
 // ── THE DRAWING BAR ──
@@ -24483,9 +24504,30 @@ function adPreviewRing(){
 }
 // a rectangle is square to the sheet, like Ortho
 function adRectRing(a,b){return [[a.x,a.y],[b.x,a.y],[b.x,b.y],[a.x,b.y]]}
+// the line a rectangle or polygon beam runs along: its long axis through the middle
+function adRingAxis(ring){
+  if(!ring||ring.length<3)return null;
+  const ang=adLongAxis(ring),c=Math.cos(ang),sn=Math.sin(ang);let a0=Infinity,a1=-Infinity,b0=Infinity,b1=-Infinity;
+  ring.forEach(([x,y])=>{const u=x*c+y*sn,v=-x*sn+y*c;a0=Math.min(a0,u);a1=Math.max(a1,u);b0=Math.min(b0,v);b1=Math.max(b1,v)});
+  const vm=(b0+b1)/2;return [[a0*c-vm*sn,a0*sn+vm*c],[a1*c-vm*sn,a1*sn+vm*c]];
+}
+// T/BM and B/BM printed with the size label: "22X17 BM / T/BM: 91'-0\" / B/BM: 89'-7\""
+function adBeamElevsNear(lv,L){
+  if(!L||!L.ln)return null;
+  const lines=adLines(state.pdf.current),h=Math.max(L.ln.h||10,8),cx=L.ln.x+(L.ln.w||0)/2,cy=L.ln.y;
+  const got={};
+  for(const ln of lines){
+    const s=String(ln.text).replace(/[″”]/g,'"').replace(/[′’]/g,"'");
+    const m=/([TB])\s*\/\s*(?:O\s*)?BM\s*[:=]?\s*(?:EL\.?\s*)?(\d+\s*'\s*-?\s*[\d\s\/]*"?)/i.exec(s);if(!m)continue;
+    const d=Math.hypot(ln.x+(ln.w||0)/2-cx,ln.y-cy);if(d>h*5)continue;
+    const k=m[1].toUpperCase()==='T'?'top':'bot',v=parseFeet(m[2]);
+    if(v!=null&&isFinite(v)&&(!got[k]||d<got[k].d))got[k]={v,d};
+  }
+  return got.top||got.bot?{topFt:got.top?got.top.v:null,botFt:got.bot?got.bot.v:null}:null;
+}
 function adBeamSize(lv,P){
   const L=P&&P.length>=2?adBeamLabelFor(lv,P):null;
-  if(L)return{w:L.w,d:L.dp,src:'label',t:L.t};
+  if(L)return{w:L.w,d:L.dp,src:'label',t:L.t,elev:adBeamElevsNear(lv,L)};
   const v=adUI().drawVals.beam,m=/(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/.exec(v.size||'');
   if(m)return{w:+m[1],d:+m[2],src:'bar'};
   const d=Math.round(((lv&&lv.slabThickness||7.5)+12)*4)/4;
@@ -24549,12 +24591,13 @@ function adLiveBar(){
   else if(k==='slab'||k==='grade'){const P=u.drawVals[k];rd=adOffWords(P.off||0);warn=!!P.off;
     if(pr&&pr.length>=3){const sr=adSheetReads(lv,pr);
       if(sr.mixed){rd='the sheet has different notes inside — the bar values will be used';warn=true}
-      else if(sr.src.length){rd=`sheet says ${[sr.tIn!=null?inchStr(sr.tIn):'',sr.tosFt!=null?'T.O.S. '+ftInStr(sr.tosFt):''].filter(Boolean).join(' · ')} — will use it`;warn=false}}}
+      else if(sr.src.length){rd=`sheet says ${[sr.tIn!=null?inchStr(sr.tIn)+(sr.tFromTB?' (T/SLAB − B/SLAB)':''):'',sr.tosFt!=null?'T.O.S. '+ftInStr(sr.tosFt):''].filter(Boolean).join(' · ')} — will use it`;warn=false}}}
   else if(k==='beam'){const B=u.drawVals.beam;
     const P=state.drawing.points.length?adP(state.drawing.points).concat([[ (state.drawing.snapPt||mouseCanvas).x,(state.drawing.snapPt||mouseCanvas).y]]):null;
-    const sz=adBeamSize(lv,m==='center'?P:null);
-    const src=m==='center'&&P?(sz.src==='label'?`${sz.w}×${sz.d} from “${sz.t}” · `:`no BM label nearby — ${sz.w}×${sz.d} · `):'';
-    if(m==='center'&&P&&sz.src!=='label')warn=true;
+    const axis=m==='center'?P:(pr&&pr.length>=3?adRingAxis(pr):null);
+    const sz=adBeamSize(lv,axis);
+    const src=axis?(sz.src==='label'?`${sz.w}×${sz.d} from “${sz.t}”${sz.elev&&sz.elev.topFt!=null?` · T/BM ${ftInStr(sz.elev.topFt)}`:''} · `:`no BM label nearby — ${sz.w}×${sz.d} · `):'';
+    if(axis&&sz.src!=='label')warn=true;
     if(!B.inherit){rd=src+`top ${adElevStr(lv,B.off)} (${adOffWords(B.off)}) · bottom ${hasElev(lv)?ftInStr(lv.elevation+(B.off||0)/12-sz.d/12):'—'}`;warn=warn||!!B.off}
     else if(!pr)rd=m==='center'?'size from the nearest BM label · top from the slab it sits in':'top from the slab it sits in';
     else{const parts=adTosParts(lv,pr);
@@ -24597,7 +24640,7 @@ function adBindBar(bar){
     if(t.id==='adThick'&&P){const v=parseFloat(t.value);P.t=v>0?v:null}
     if(t.id==='adSize'){u.drawVals.beam.size=t.value.trim()}
     if(t.id==='adElev'&&P&&hasElev(lv)){const v=parseFeet(t.value);if(v!=null&&isFinite(v))P.off=Math.round((v-lv.elevation)*12*8)/8}
-    if(t.id==='adOff'&&P){const v=parseInches(t.value);if(v!=null&&isFinite(v))P.off=Math.round(v*8)/8}
+    if(t.id==='adOff'&&P){const v=parseOffsetIn(t.value);if(v!=null&&isFinite(v))P.off=Math.round(v*8)/8}
     if(t.id==='adMark'){u.drawVals.load.mark=t.value}
     if(t.id==='adLL'){u.drawVals.load.ll=t.value}
     if(t.id==='adSDL'){u.drawVals.load.sdl=t.value===''?null:t.value}
@@ -24900,10 +24943,21 @@ function adAfterDraw(lv,z,layer){
   if(k==='slab'||k==='grade'){const P=u.drawVals[k];if(P.t!=null)z.thicknessIn=P.t;z.offsetIn=P.off||0}
   if(k==='beam'){
     const B=u.drawVals.beam,pb=AD.pendingBeam;AD.pendingBeam=null;
-    const sz=pb||adBeamSize(lv,null);
+    // a centerline beam read its label as it was drawn; a rectangle or polygon
+    // one reads it now, along its own long axis (ARE-19)
+    const sz=pb||adBeamSize(lv,adRingAxis(adP(z.polygon)));
     z.widthIn=sz.w;z.depthIn=sz.d;z.adSizeSrc=sz.src==='label'?'label':(sz.src==='bar'?'bar':'default');
-    if(pb){z.adCenter=pb.cl;if(sz.src==='label')notes.push(`${sz.w}×${sz.d} from “${sz.t}”`);else if(sz.src==='default'){notes.push(`no BM label near it — ${sz.w}×${sz.d} assumed, check the size`);warn=true}}
+    if(pb)z.adCenter=pb.cl;
+    if(sz.src==='label')notes.push(`${sz.w}×${sz.d} from “${sz.t}”`);else if(sz.src==='default'){notes.push(`no BM label near it — ${sz.w}×${sz.d} assumed, check the size`);warn=true}
     z.offsetIn=B.inherit?null:(B.off||0);
+    // T/BM beside the label sets the top where it differs from what the beam
+    // would inherit; T/BM − B/BM checks the depth
+    const el=sz.elev;
+    if(el&&el.topFt!=null&&hasElev(lv)&&B.inherit){
+      const o=Math.round((el.topFt-lv.elevation)*12*8)/8,inh=adBeamTop(lv,z);
+      if(inh.state==='conflict'||Math.abs((inh.off||0)-o)>=1/8){z.offsetIn=o;notes.push(`T.O.B. ${ftInStr(el.topFt)} from the sheet`)}
+    }
+    if(el&&el.topFt!=null&&el.botFt!=null){const dd=Math.round((el.topFt-el.botFt)*12*8)/8;if(dd>0&&Math.abs(dd-z.depthIn)>=0.5){notes.push(`the sheet's T/BM − B/BM is ${inchStr(dd)}, not ${inchStr(z.depthIn)} — check the depth`);warn=true}}
   }
   if(k==='load'){
     const v=u.drawVals.load;
@@ -24921,7 +24975,8 @@ function adAfterDraw(lv,z,layer){
     const sr=adSheetReads(lv,adP(z.polygon));
     if(sr.mixed){notes.push('the sheet has different notes inside it — check its values');warn=true}
     else{
-      if(sr.tIn!=null&&sr.tIn!==+slabThicknessOf(lv,z)){z.thicknessIn=sr.tIn;notes.push(`${inchStr(sr.tIn)} from the sheet`)}
+      if(sr.tIn!=null&&sr.tIn!==+slabThicknessOf(lv,z)){z.thicknessIn=sr.tIn;notes.push(sr.tFromTB?`${inchStr(sr.tIn)} from the sheet's T/SLAB − B/SLAB`:`${inchStr(sr.tIn)} from the sheet`)}
+      else if(sr.src.length&&!notes.some(n=>/from the sheet/.test(n)))notes.push('the sheet agrees with these values');
       if(sr.tosFt!=null&&hasElev(lv)){const o=Math.round((sr.tosFt-lv.elevation)*12*8)/8;if(o!==slabOffsetOf(z)){z.offsetIn=o;notes.push(`T.O.S. ${ftInStr(sr.tosFt)} from the sheet`)}}
       if(sr.src.length)z.adSheet={tIn:sr.tIn,tosFt:sr.tosFt};
     }
@@ -25472,7 +25527,7 @@ function adBindBatch(el,lv,sl){
   const on=(id,ev,fn)=>{const x=el.querySelector('#'+id);if(x)x.addEventListener(ev,fn)};
   on('adBThick','change',e=>{const v=parseFloat(e.target.value);if(v>0)set('Set thickness',z=>{if(['slab','grade'].includes(slabKind(z)))z.thicknessIn=v})});
   on('adBElev','change',e=>{const v=parseFeet(e.target.value);if(v!=null&&isFinite(v)&&hasElev(lv)){const o=Math.round((v-lv.elevation)*12*8)/8;set('Set T.O.S.',z=>{if(['slab','grade'].includes(slabKind(z))||(isBeam(z)&&z.offsetIn!=null))z.offsetIn=o})}});
-  on('adBOff','change',e=>{const v=parseInches(e.target.value);if(v!=null&&isFinite(v))set('Set offset',z=>{if(['slab','grade'].includes(slabKind(z))||(isBeam(z)&&z.offsetIn!=null))z.offsetIn=Math.round(v*8)/8})});
+  on('adBOff','change',e=>{const v=parseOffsetIn(e.target.value);if(v!=null&&isFinite(v))set('Set offset',z=>{if(['slab','grade'].includes(slabKind(z))||(isBeam(z)&&z.offsetIn!=null))z.offsetIn=Math.round(v*8)/8})});
   on('adBSize','change',e=>{const m=/(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/.exec(e.target.value);if(m)set('Set beam size',z=>{if(isBeam(z)){z.widthIn=+m[1];z.depthIn=+m[2];z.adSizeSrc='hand'}})});
   on('adBTop','change',e=>{const v=e.target.value;if(v==='inh')set('Beam top inherits',z=>{if(isBeam(z)){z.offsetIn=null;delete z.adVerified}});else if(v==='set')set('Set beam top',z=>{if(isBeam(z)&&z.offsetIn==null){const t=adBeamTop(lv,z);z.offsetIn=t.off||0}})});
   on('adBMark','change',e=>{const v=e.target.value;if(v==='')return;const c=conditionByMark(v);set('Set mark',z=>{z.mark=v;if(c)z.capacityPSF=conditionCapacity(c)})});
