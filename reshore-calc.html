@@ -771,6 +771,13 @@ input[readonly],input.derived{background:var(--derived-bg);color:var(--text-seco
 .ra-thru{grid-column:1/4;font-size:var(--fs-sm);color:var(--danger);margin-top:2px}
 /* MDL-18: stiff shore on slab on grade — wood pad required. Amber, not red: a
    field condition to install, not a doubt about the answer. */
+.pill-dim{display:inline-block;padding:0 6px;border-radius:9px;background:var(--bg-tint,#F2F2F2);color:var(--text-secondary);font-size:var(--fs-xs,11px);font-weight:600}
+.ha-card{border:1px solid var(--border,#d9d9d9);border-radius:8px;padding:8px 10px;margin:0 0 10px;background:var(--bg)}
+.ha-head{display:flex;flex-direction:column;gap:2px;margin-bottom:6px}
+.ha-row{display:grid;grid-template-columns:auto auto 1fr auto;gap:10px;align-items:center;padding:5px 0;border-top:1px solid var(--border,#eee);font-size:var(--fs-sm)}
+.ha-row.omitted .ha-name{text-decoration:line-through;opacity:.7}
+.ha-name{font-weight:700}.ha-sf{color:var(--text-secondary)}
+.ha-rec{font-weight:700;color:var(--accent-text,#0f766e)}.ha-state.omit{font-weight:700;color:var(--text-secondary)}
 .ra-min{grid-column:1/4;font-size:var(--fs-sm);font-weight:700;color:var(--text-secondary);margin-top:2px}
 .ra-minres{color:var(--text-secondary);font-weight:700}
 .ra-pad{grid-column:1/4;font-size:var(--fs-sm);color:var(--warn,#d99a1c);margin-top:2px}
@@ -3452,14 +3459,14 @@ function drawFrame(){
       const poly=z.polygon;
       if(!poly||poly.length<2)return;
       const sIdx=zoneStyleIdx(z,zi);
-      const a=live?1:0.35;
+      const a=(live?1:0.35)*(z.omit?0.45:1);          // MDL-20: omitted from Results — faded, dashed
       tracePoly(poly);
       drawCtx.fillStyle=zoneColor(sIdx,0.16*a);
       drawCtx.fill();
       if(live){
         // hatch drawn in screen space so it doesn't scale with zoom
         drawCtx.save();
-        const pat=hatchPattern(drawCtx,sIdx,0.55);
+        const pat=hatchPattern(drawCtx,sIdx,z.omit?0.2:0.55);
         if(pat){
           // screen space is CSS px, which on this canvas is the dpr transform
           drawCtx.setTransform(dpr,0,0,dpr,0,0);
@@ -3479,7 +3486,8 @@ function drawFrame(){
       const isSel=live&&zi===state.activeZoneIdx;
       drawCtx.strokeStyle=isSel?C_SEL:(live?C_STROKE:zoneColor(sIdx,0.4));
       drawCtx.lineWidth=(isSel?2.5:1.5)/zoom;
-      drawCtx.stroke();
+      if(z.omit)drawCtx.setLineDash([6/zoom,4/zoom]);
+      drawCtx.stroke();drawCtx.setLineDash([]);
       if(live&&!isSel)poly.forEach(pt=>{
         drawCtx.fillStyle=zoneColor(sIdx,0.8);
         drawCtx.fillRect(pt.x-3/zoom,pt.y-3/zoom,6/zoom,6/zoom);
@@ -8562,7 +8570,7 @@ function renderZoneList(){
   const loadItem=(z,i)=>`
     <div class="sb-item${i===state.activeZoneIdx?' active':''}${adSel().includes(z.id)?' ad-multi':''}" data-zone="${i}">
       <span class="zone-dot" style="background:${zoneColor(zoneStyleIdx(z,i),0.75)}"></span>
-      <span>${esc(zoneName(lv,z,i))}</span>
+      <span>${esc(zoneName(lv,z,i))}${z.omit?' <span class="pill pill-dim" title="Left out on Results: the floor\'s typical capacity is used here (MDL-20)">omitted from Results</span>':''}</span>
       <span class="meta">${z.llMark!=null?esc(pairCode(z.llMark,z.sdlMark))+' · '
              :(z.mark!=null?`#${z.mark} · `:'')}${z.capacityPSF} PSF${(sib=>sib.length?` · <span class="lm-dim" title="This area crosses the zone line; the rest of it is drawn on ${esc(sib.join(', '))}">continues on ${esc(sib.join(', '))}</span>`:'')(splitSiblingNames(lv,z))}</span>
     </div>`;
@@ -13906,7 +13914,10 @@ function solvePourLevel(stack,pourIdx,opts){
   const unaligned=belowLevels.filter(l=>levelNeedsAlignment(l)&&!levelFullyMatched(l));
   const pourLoading=levelZonesInBuilding(pour,'loading');
   const pourSlabs=levelZonesInBuilding(pour,'slab');
-  const capLists=belowLevels.map(l=>levelZonesInBuilding(l,'loading'));
+  // MDL-20: an area omitted from Results reads as the floor's typical
+  // capacity; capAll keeps every area for the include/omit comparison
+  const capAll=belowLevels.map(l=>levelZonesInBuilding(l,'loading'));
+  const capLists=capAll.map((list,k)=>list&&k>0?list.filter(e=>!e.zone.omit):list);
   const slabLists=belowLevels.map(l=>levelZonesInBuilding(l,'slab'));
   // FLOOR EDGES: a floor with edge shapes exists only inside them; one
   // without exists everywhere. (Loading areas are about capacity only.)
@@ -14292,7 +14303,17 @@ function solvePourLevel(stack,pourIdx,opts){
 
   const needChoice=out.reduce((n,r)=>n+r.steps.filter(s=>stNeeds(s)&&!s.chosen&&s.options.length).length,0)
                   +beams.reduce((n,b)=>n+b.rows.filter(r=>r.beamKey&&r.beamNet>0&&!r.beamChosen&&r.options.length).length,0);
-  return{spatial:true,step,exact:true,pieces:pieces.length,sampled,
+  // MDL-20: what the floors below would say at one point with some loading
+  // areas put back or left out — the include/omit comparison, read the same
+  // way the solve reads, without solving the job again
+  const whatIf=(x,y,thick,opt)=>{
+    const omit=new Set((opt&&opt.omit)||[]),incl=new Set((opt&&opt.include)||[]);
+    const saved=capLists.slice();
+    for(let k=1;k<capAll.length;k++)if(capAll[k])capLists[k]=capAll[k].filter(e=>!omit.has(e.zone.id)&&(!e.zone.omit||incl.has(e.zone.id)));
+    try{readColumn(x,y,thick,belowLevels.length-1);return cascadeAtPoint(belowLevels,0,thick,dl,shores)}
+    finally{for(let k=0;k<saved.length;k++)capLists[k]=saved[k]}
+  };
+  return{spatial:true,step,exact:true,pieces:pieces.length,sampled,whatIf,
          // Legacy sample COUNTS. The exact model measures area, so these are
          // kept only for old callers and are always zero — read the *SF
          // fields instead. Four Results-header notices (openings, overhang
@@ -15306,6 +15327,128 @@ function showPourSheet(){
   state.activeLevelIdx=li;
   goToPage(pages[0]).then(()=>{renderCanvas();if(typeof renderPageBar==='function')renderPageBar()});
 }
+// ── INCLUDE OR OMIT A HIGHER-CAPACITY AREA (MDL-20) ──
+// Adolfo, Sep 25 2026: "a recommendation/option to omit or include a loading
+// area in the results to either simplify the calculations/install because you
+// dont gain much from including it or to include it because it would provide
+// a real savings to install at a more spread out pattern." Only an area whose
+// capacity is ABOVE its floor's typical can be left out: the typical then
+// governs there, which is always conservative. An area counts until it is
+// omitted; the choice is the area's, for every pour that loads it. The saving
+// is a shore count per floor — the reshoring under a floor goes in once, so
+// the tightest pour governs it. Omitting is recommended only where it changes
+// nothing; anything else is the user's call.
+function isHighArea(lv,z){
+  if(!lv||!z||isEdgeZone(z))return false;
+  const typ=levelDefaultCapacity(lv);
+  return typ>0&&z.capacityPSF!=null&&+z.capacityPSF>typ;
+}
+function highAreas(){
+  const top=topLevelId(),out=[];
+  state.levels.forEach((lv,li)=>{
+    if(lv.id===top||levelOnGrade(lv))return;
+    zonesOf(lv,'loading').forEach(z=>{if(isHighArea(lv,z))out.push({lv,li,z})});
+  });
+  return out;
+}
+function areaTag(lv,z){const c=zoneCode(z);return `${levelTagName(lv.name)} · ${c?c+' ':''}${Math.round(z.capacityPSF)} PSF`}
+// shores in SF of footprint for one row, with the shore the row has (or the
+// strongest legal one before a pick)
+function rowShores(st,sf,shoreId){
+  if(!stNeeds(st)||!(sf>0))return 0;
+  const opts=st.options||[];if(!opts.length)return 0;
+  if(st.minLevel)return sf/GRID_PATTERNS[GRID_PATTERNS.length-1].area;
+  const o=opts.find(x=>x.shoreId===shoreId)||opts.reduce((a,b)=>b.capacityAtHeight>a.capacityAtHeight?b:a,opts[0]);
+  const per=sfPerShore(o.capacityAtHeight,st.resultant);
+  const pat=GRID_PATTERNS.slice().reverse().find(g=>g.area<=per);
+  return sf/(pat?pat.area:Math.max(per,1));
+}
+let _highCache={key:null,v:null};
+function highAreaSavings(){
+  const key=(typeof calculatedInputKey!=='undefined'?calculatedInputKey:'')+'|'+JSON.stringify(shoreChoices());
+  if(_highCache.key===key&&_highCache.v)return _highCache.v;
+  const out=new Map();
+  if(typeof schedSolve==='undefined'||!schedSolve)return out;
+  for(const H of highAreas()){
+    const e=(levelZonesInBuilding(H.lv,'loading')||[]).find(x=>x.zone===H.z);
+    if(!e){out.set(H.z.id,{sf:0,floors:[],pours:[]});continue}
+    const zmp=mpOf(e.bPoly);
+    const perFloor=new Map();                       // floor name → {with,without} per pour → max
+    let sfOver=0;const pours=new Set(),breaks=new Set();
+    for(const L of schedSolve.levels){
+      const S=L.solve;if(!S||!S.spatial||!S.whatIf)continue;
+      const loads=L.solve.regions.some(r=>r.steps.some(st=>st.level&&(st.level.defId||st.level.id)===H.lv.id));
+      if(!loads)continue;
+      const acc=new Map();
+      for(const r of S.regions){
+        if(!r.mp)continue;
+        const ov=mpInter(r.mp,zmp);const oa=mpArea(ov);if(!(oa>1))continue;
+        sfOver+=oa;pours.add(L.pour.name);
+        for(const poly of ov){
+          const one=[poly],a=mpArea(one);if(!(a>0.5))continue;
+          const pt=mpInnerPoint(one);if(!pt)continue;
+          const w=S.whatIf(pt.x,pt.y,r.thicknessIn,{include:[H.z.id]});
+          const wo=S.whatIf(pt.x,pt.y,r.thicknessIn,{omit:[H.z.id]});
+          const pick=st=>{const orig=r.steps.find(x=>x.levelIdx===st.levelIdx);return orig&&orig.choiceKey?shoreChoices()[orig.choiceKey]:null};
+          const add=(res,slot)=>{for(const st of res.steps){if(!st.level)continue;const nm=st.level.name;
+            const v=acc.get(nm)||{w:0,wo:0};v[slot]+=rowShores(st,a,pick(st));acc.set(nm,v)}};
+          add(w,'w');add(wo,'wo');
+          // leaving it out must not leave load with nowhere to go
+          const bad=res=>res.unresolved||res.steps.some(st=>stNeeds(st)&&!(st.options||[]).length);
+          if(bad(wo)&&!bad(w))breaks.add(L.pour.name);
+        }
+      }
+      for(const [nm,v] of acc){const f=perFloor.get(nm)||{w:0,wo:0};f.w=Math.max(f.w,v.w);f.wo=Math.max(f.wo,v.wo);perFloor.set(nm,f)}
+    }
+    const floors=[...perFloor].map(([name,v])=>({name,with:Math.ceil(v.w-1e-6),without:Math.ceil(v.wo-1e-6)}))
+      .filter(f=>f.with||f.without).map(f=>({...f,saved:f.without-f.with}));
+    out.set(H.z.id,{sf:sfOver/Math.max(1,pours.size),floors,pours:[...pours],breaks:[...breaks],saved:floors.reduce((n,f)=>n+f.saved,0)});
+  }
+  _highCache={key,v:out};
+  return out;
+}
+function highAreasHtml(L,tabF){
+  const list=highAreas();if(!list.length)return '';
+  const sv=highAreaSavings();
+  const rows=list.map(H=>{
+    const v=sv.get(H.z.id)||{floors:[],pours:[],saved:0};
+    if(!v.pours.length)return '';
+    if(tabF&&!v.floors.some(f=>f.name===tabF.name))return '';
+    const typ=Math.round(levelDefaultCapacity(H.lv));
+    const saving=v.floors.filter(f=>f.saved>0).map(f=>`<b>${f.saved}</b> shore${f.saved===1?'':'s'} under ${esc(levelTagName(f.name))}`).join(' · ');
+    const none=!v.floors.some(f=>f.saved!==0)&&!(v.breaks||[]).length;
+    const brk=(v.breaks||[]).length?`<span class="lm-warn">needed — without it the load under the ${esc(v.breaks.map(levelTagName).join(', '))} pour${v.breaks.length>1?'s':''} is not taken up within the stack</span>`:'';
+    const what=brk&&!H.z.omit?brk:H.z.omit
+      ?`<span class="ha-state omit">omitted — typical ${typ} PSF used here</span>${saving?` · putting it back would save ${saving}`:' · putting it back changes nothing'}`
+      :(none?`<span class="ha-rec">no change either way — omitting it keeps the pattern simple</span>`
+            :`including it saves ${saving}`);
+    return `<div class="ha-row${H.z.omit?' omitted':''}" data-hz="${esc(String(H.z.id))}" data-hli="${H.li}">
+      <span class="ha-name" title="${esc(zoneName(H.lv,H.z,zonesOf(H.lv,'loading').indexOf(H.z)))}">${esc(areaTag(H.lv,H.z))}</span>
+      <span class="ha-sf">${fmtArea(mpArea(mpOf((levelZonesInBuilding(H.lv,'loading')||[]).find(x=>x.zone===H.z)?.bPoly||[])))}</span>
+      <span class="ha-what">${what}</span>
+      <button type="button" class="btn btn-sm${H.z.omit?' btn-go':''}" data-hz-toggle="${esc(String(H.z.id))}" data-hli="${H.li}">${H.z.omit?'Include':'Omit'}</button></div>`;
+  }).filter(Boolean);
+  if(!rows.length)return '';
+  return `<div class="ha-card"><div class="ha-head"><b>Areas above the typical capacity</b><span class="lm-dim">Leaving one out uses the floor's typical capacity there — always conservative. One choice per area, for every pour; shores counted per floor.</span></div>${rows.join('')}</div>`;
+}
+function setAreaOmit(li,zid,on){
+  const lv=state.levels[li];if(!lv)return;
+  const z=zonesOf(lv,'loading').find(q=>String(q.id)===String(zid));if(!z)return;
+  history.record(on?'Omit area from Results':'Include area in Results');
+  if(on)z.omit=true;else delete z.omit;
+  state.results=null;_highCache={key:null,v:null};
+  persist();
+  if(typeof runSchedule==='function')runSchedule();
+  renderSidebar();renderCanvas();
+}
+function bindHighAreas(host){
+  host.querySelectorAll('button[data-hz-toggle]').forEach(b=>b.addEventListener('click',e=>{
+    e.stopPropagation();
+    const li=+b.dataset.hli,zid=b.dataset.hzToggle;
+    const lv=state.levels[li],z=lv&&zonesOf(lv,'loading').find(q=>String(q.id)===String(zid));
+    setAreaOmit(li,zid,!(z&&z.omit));
+  }));
+}
 function renderSchedule(){
   const host=document.getElementById('schedBody');
   const head=document.getElementById('schedHead');
@@ -15558,6 +15701,8 @@ function renderSchedule(){
     host.innerHTML=regionCards.join('')+(beamCards.length?BEAMS_HEAD+beamCards.join(''):'');
   }
 
+  // MDL-20: the areas above the typical, with what each one saves
+  {const ha=highAreasHtml(L,tabF);if(ha){host.insertAdjacentHTML('afterbegin',ha);bindHighAreas(host)}}
   groupAnswerCards(host,L);
   // the fold arrow opens or closes a card without touching the plan
   host.querySelectorAll('button.card-fold').forEach(b=>b.addEventListener('click',e=>{
@@ -16473,14 +16618,17 @@ function printSchedule(){
       <div class="snip snip-ov"><span class="snip-wait">plan — rendering…</span></div></div>`).join(''):'';
   // A legend first: swatch, name, size and pattern — the sheet someone can
   // hold against the plan without reading the whole schedule.
-  const legend=s.spatial&&s.regions.length?`<h3>Regions on this placement</h3>
+  // MDL-20: say which higher-capacity areas were left out, and that it is conservative
+  const omitted=highAreas().filter(H=>H.z.omit);
+  const omitNote=omitted.length?`<p class="note"><b>Omitted from these results:</b> ${omitted.map(H=>`${esc(areaTag(H.lv,H.z))} area on ${esc(H.lv.name)}`).join('; ')} — the floor's typical capacity is used there (conservative).</p>`:'';
+  const legend=(s.spatial&&s.regions.length?omitNote:'')+(s.spatial&&s.regions.length?`<h3>Regions on this placement</h3>
     <table class="legend"><thead><tr><th></th><th>Region</th><th>Area</th><th>Reshore levels</th><th>Pattern</th></tr></thead><tbody>${
       s.regions.map((r,ri)=>{
         const pats=[...new Set(r.steps.filter(st=>st.chosen).map(st=>st.chosen.pattern))];
         return `<tr><td style="width:16px"><span class="sw" style="background:${regionColorCss(regionColorIdx(r,ri,L),1)}"></span></td>
           <td>${esc(pourTitle(L,regionLabel(r,ri,L),regionNum(ri)))}</td><td>${fmtArea(r.areaSF)}</td>
           <td>${r.reshoreLevels}</td><td><b>${pats.length?esc(pats.join(' / ')):'—'}</b></td></tr>`;
-      }).join('')}</tbody></table>`:'';
+      }).join('')}</tbody></table>`:'');
   const rows=s.spatial?(s.regions.map((r,ri)=>{
     const gradeStep=r.steps.find(st=>st.grade);
     const body=r.steps.filter(st=>!st.open&&!st.grade&&stNeeds(st)).map(st=>`<tr>
@@ -24740,8 +24888,9 @@ function adTagText(lv,z,layer){
     const code=z.llMark!=null?pairCode(z.llMark,z.sdlMark):(z.mark!=null?'#'+z.mark:null);
     const c=z.mark!=null?conditionByMark(z.mark):null;
     const psf=z.capacityPSF!=null?`${Math.round(z.capacityPSF)} PSF`:'';
-    if(!code)return{t:z.label||psf||'Area',short:psf||'Area'};
-    return{t:`${code}${c&&c.desc?' · '+c.desc:''} · ${psf}`,short:`${code} · ${psf}`};
+    const om=z.omit?' · omitted':'';
+    if(!code)return{t:(z.label||psf||'Area')+om,short:(psf||'Area')+om};
+    return{t:`${code}${c&&c.desc?' · '+c.desc:''} · ${psf}${om}`,short:`${code} · ${psf}${om}`};
   }
   const k=slabKind(z),el=o=>hasElev(lv)?ftInStr(lv.elevation+o/12):(o?offsetStr(o):'typ.');
   if(k==='beam'){const t=adBeamTop(lv,z);
@@ -24783,7 +24932,7 @@ const _adTagCache={sig:null,out:[]};
 function adTagLayout(lv,layer){
   const arr=zonesOf(lv,layer).filter(z=>zoneOnSheet(lv,z)&&z.polygon&&z.polygon.length>=3&&!isEdgeZone(z));
   const H=adTextH(state.pdf.current)||adPxIn(lv,9);           // 9" on the sheet until its text is read
-  const sig=layer+H+lv.elevation+JSON.stringify(arr.map(z=>[z.id,z.kind,z.polygon,z.offsetIn,z.thicknessIn,z.widthIn,z.depthIn,z.mark,z.llMark,z.sdlMark,z.capacityPSF]))+(layer==='slab'?JSON.stringify(zonesOf(lv,'slab').filter(z=>!isBeam(z)).map(z=>[z.id,z.offsetIn])):'');
+  const sig=layer+H+lv.elevation+JSON.stringify(arr.map(z=>[z.id,z.kind,z.polygon,z.offsetIn,z.thicknessIn,z.widthIn,z.depthIn,z.mark,z.llMark,z.sdlMark,z.capacityPSF,z.omit]))+(layer==='slab'?JSON.stringify(zonesOf(lv,'slab').filter(z=>!isBeam(z)).map(z=>[z.id,z.offsetIn])):'');
   if(sig===_adTagCache.sig)return _adTagCache.out;
   const placed=[],out=[];
   const rings=new Map(arr.map(z=>[z,adP(z.polygon)]));
