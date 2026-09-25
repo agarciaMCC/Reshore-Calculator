@@ -772,6 +772,7 @@ input[readonly],input.derived{background:var(--derived-bg);color:var(--text-seco
 /* MDL-18: stiff shore on slab on grade — wood pad required. Amber, not red: a
    field condition to install, not a doubt about the answer. */
 .pill-dim{display:inline-block;padding:0 6px;border-radius:9px;background:var(--bg-tint,#F2F2F2);color:var(--text-secondary);font-size:var(--fs-xs,11px);font-weight:600}
+.sq-floorsum{margin:6px 0 8px;font-size:var(--fs-md,14px)}
 .ha-card{border:1px solid var(--border,#d9d9d9);border-radius:8px;padding:8px 10px;margin:0 0 10px;background:var(--bg)}
 .ha-head{display:flex;flex-direction:column;gap:2px;margin-bottom:6px}
 .ha-row{display:grid;grid-template-columns:auto auto 1fr auto;gap:10px;align-items:center;padding:5px 0;border-top:1px solid var(--border,#eee);font-size:var(--fs-sm)}
@@ -22529,10 +22530,12 @@ async function runAutoDetect(opt){
     // once"): the sheet on screen is read first and the review opens on it
     // straight away; the other sheets are read behind it, each one's shapes
     // joining the queue as they arrive, with the progress said in the head.
-    targets.sort((a,b)=>(a.page===state.pdf.current?-1:b.page===state.pdf.current?1:0)||(a.levelIdx-b.levelIdx));
+    // ARE-28 (Sep 25): bottom floor first, the way the review walks
+    targets.sort((a,b)=>scanFloorRank(a.levelIdx)-scanFloorRank(b.levelIdx)||(a.page-b.page));
     const token={};scanToken=token;
     const what=opt.beams&&opt.openings?'both':(opt.openings?'openings':'beams');
     beamScan={page:targets.length===1?targets[0].page:null,levelIdx:targets[0].levelIdx,startLevelIdx:targets[0].levelIdx,
+              floorLi:targets[0].levelIdx,targets:targets.map(t=>({levelIdx:t.levelIdx,page:t.page,read:false})),
               items:[],sel:-1,multi:targets.length>1,what,view:'queue',
               progress:{done:0,total:targets.length,page:targets[0].page},notes:{outside:0,crossings:0,skipped,drawn:0}};
     renderBeamPanel();
@@ -22552,6 +22555,7 @@ async function runAutoDetect(opt){
         beamScan.notes.crossings+=r.unoutlined||0;
       }
       const c=clipItemsToEdge(found,lv,t.page);
+      {const tt=beamScan.targets&&beamScan.targets.find(x=>x.page===t.page&&x.levelIdx===t.levelIdx);if(tt)tt.read=true}
       beamScan.notes.outside+=c.dropped;
       beamScan.notes.drawn+=scanDropDrawn(c.kept);
       beamScan.items.push(...c.kept);
@@ -22562,7 +22566,7 @@ async function runAutoDetect(opt){
       renderBeamPanel();renderCanvas();
       // the first candidate is shown at once only when it sits on the sheet
       // already on screen — a zoom, never a page flip under the user's hands
-      if(n===1&&c.kept.length&&beamScan.view==='queue'&&scanMayJump()){const cur=scanCurrent();if(cur&&(cur.page!=null?cur.page:beamScan.page)===state.pdf.current)scanShow(cur)}
+      if(!beamScan.shownAny&&beamScan.view==='queue'&&scanMayJump()){const cur=scanCurrent();if(cur&&(cur.page!=null?cur.page:beamScan.page)===state.pdf.current){beamScan.shownAny=true;scanShow(cur)}}
     }
     if(scanToken!==token||!beamScan)return;
     const notes=[],nt=beamScan.notes;
@@ -22634,17 +22638,55 @@ function beamGeomWidthIn(it){
 // type. The old list is one click away for anyone who wants to tick.
 const SCAN_TYPE_ORDER={beam:0,slab:1,opening:2};
 function scanTypeName(kind,n){return kind==='beam'?(n===1?'beam':'beams'):kind==='opening'?(n===1?'opening':'openings'):(n===1?'thickened slab':'thickened slabs')}
-// Floors are walked from the one on screen when the scan started down the
-// stack, then round to the ones above — so the review begins where the user
-// is looking rather than at the roof.
-function scanLevelRank(li){
-  const n=state.levels.length||1,start=beamScan&&beamScan.startLevelIdx!=null?beamScan.startLevelIdx:0;
-  return ((li==null?0:li)-start+n)%n;
+// ── FLOOR BY FLOOR, BOTTOM UP (ARE-28) ──
+// Adolfo, Sep 25 2026: "the confirmation process should start from the bottom
+// most floor and work its way up … split up by floor where once all beams,
+// slabs, openings on a floor are reviewed, it prompts the user to go to the
+// next level … otherwise it could make the process feel long and daunting."
+// So the queue holds ONE floor at a time — by type within it (his pick:
+// beams, thickened slabs, openings), largest first — and when that floor is
+// done it stops on a card that says what was done there and waits for Next.
+function scanFloorRank(li){
+  const l=state.levels[li];
+  return l&&l.elevation!=null&&!isNaN(l.elevation)?+l.elevation:-(li==null?0:li)*1e3;   // levels are stored top down
+}
+function scanPending(){
+  if(!beamScan)return [];
+  return beamScan.items.filter(it=>!it.done&&!it.failed&&it.polygon&&it.polygon.length>2);
+}
+function scanFloorOf(it){return it.levelIdx!=null?it.levelIdx:beamScan.levelIdx}
+function scanFloorRead(li){return !beamScan.targets||beamScan.targets.filter(t=>t.levelIdx===li).every(t=>t.read)}
+// the floors still to review, bottom up, and those still being read
+function scanFloorsAhead(){
+  const lis=new Set(scanPending().map(scanFloorOf));
+  if(beamScan.targets)for(const t of beamScan.targets)if(!t.read)lis.add(t.levelIdx);
+  lis.delete(beamScan.floorLi);
+  return [...lis].sort((a,b)=>scanFloorRank(a)-scanFloorRank(b));
+}
+function scanFloorsAll(){
+  const lis=new Set(beamScan.items.map(scanFloorOf));
+  if(beamScan.targets)for(const t of beamScan.targets)lis.add(t.levelIdx);
+  return [...lis].sort((a,b)=>scanFloorRank(a)-scanFloorRank(b));
 }
 function scanQueue(){
   if(!beamScan)return [];
-  return beamScan.items.filter(it=>!it.done&&!it.failed&&it.polygon&&it.polygon.length>2)
-    .sort((a,b)=>((SCAN_TYPE_ORDER[a.kind]||0)-(SCAN_TYPE_ORDER[b.kind]||0))||(scanLevelRank(a.levelIdx)-scanLevelRank(b.levelIdx))||(b.areaPx2-a.areaPx2));
+  if(beamScan.floorLi==null){const f=scanFloorsAll();beamScan.floorLi=f.length?f[0]:beamScan.levelIdx}   // the bottom floor
+  return scanPending().filter(it=>scanFloorOf(it)===beamScan.floorLi)
+    .sort((a,b)=>((SCAN_TYPE_ORDER[a.kind]||0)-(SCAN_TYPE_ORDER[b.kind]||0))||(b.areaPx2-a.areaPx2));
+}
+function scanFloorTally(li){
+  const t=(beamScan.floorTally||(beamScan.floorTally={}))[li]||(beamScan.floorTally[li]={added:0,adjusted:0,skipped:0});
+  return t;
+}
+function scanNextFloor(){
+  const ahead=scanFloorsAhead();
+  if(!ahead.length)return;
+  beamScan.floorLi=ahead[0];beamScan.cur=null;beamScan.adjusting=null;
+  state.activeZoneIdx=null;state.ui.vertexIdx=null;
+  const it=scanCurrent();
+  renderBeamPanel();                    // the card turns over at once; the sheet follows
+  if(it)scanShow(it);
+  else renderCanvas();
 }
 // A candidate that is already drawn on the floor — the same kind of shape
 // covering the same ground — is not offered again.
@@ -22674,6 +22716,10 @@ function scanDropDrawn(items){
 }
 function scanCurrent(){
   if(!beamScan)return null;
+  // a floor where nothing was found has nothing to review: pass straight on
+  while(beamScan.floorLi!=null&&scanFloorRead(beamScan.floorLi)&&!scanPending().some(it=>scanFloorOf(it)===beamScan.floorLi)&&!(beamScan.floorTally&&beamScan.floorTally[beamScan.floorLi])){
+    const ahead=scanFloorsAhead();if(!ahead.length)break;beamScan.floorLi=ahead[0];
+  }
   const q=scanQueue();
   if(!q.length){beamScan.cur=null;return null}
   if(beamScan.cur&&q.includes(beamScan.cur))return beamScan.cur;
@@ -22747,6 +22793,7 @@ function scanAccept(adjust){
   const it=scanCurrent();if(!it)return;
   const added=scanCommit([it],adjust?'Add a shape from the sheet and adjust it':'Add a shape from the sheet');
   beamScan.tally=beamScan.tally||{added:0,skipped:0};beamScan.tally.added+=added.length;
+  {const ft=scanFloorTally(scanFloorOf(it));ft.added+=added.length;if(adjust)ft.adjusted+=added.length}
   if(adjust&&added.length){
     // the shape is real now: select it with its corners live, on its own sheet
     const {lv,z}=added[0];
@@ -22768,6 +22815,7 @@ function scanSkip(){
   const it=scanCurrent();if(!it)return;
   it.done='skipped';it.pick=false;
   beamScan.tally=beamScan.tally||{added:0,skipped:0};beamScan.tally.skipped++;
+  scanFloorTally(scanFloorOf(it)).skipped++;
   beamScan.adjusting=null;
   scanAdvance();
 }
@@ -22778,13 +22826,16 @@ function scanBack(){
   if(!sk.length)return;
   const it=sk[sk.length-1];it.done=null;beamScan.cur=it;
   if(beamScan.tally)beamScan.tally.skipped=Math.max(0,beamScan.tally.skipped-1);
+  {const ft=scanFloorTally(scanFloorOf(it));ft.skipped=Math.max(0,ft.skipped-1)}
+  beamScan.floorLi=scanFloorOf(it);
   scanShow(it);
 }
 function scanAcceptAllType(){
   const it=scanCurrent();if(!it)return;
   const same=scanQueue().filter(x=>x.kind===it.kind&&(x.kind!=='beam'||x.sized));
-  const added=scanCommit(same,`Add every remaining ${scanTypeName(it.kind,2)} from the sheets`);
+  const added=scanCommit(same,`Add every remaining ${scanTypeName(it.kind,2)} on ${(state.levels[beamScan.floorLi]||{}).name||'this floor'}`);
   beamScan.tally=beamScan.tally||{added:0,skipped:0};beamScan.tally.added+=added.length;
+  scanFloorTally(beamScan.floorLi).added+=added.length;
   persist();renderSidebar();
   scanAdvance();
 }
@@ -22795,6 +22846,29 @@ function scanQueueHtml(){
   const sf=x=>{const f=beamFtPerPx(x);return f?fmtArea(x.areaPx2*f*f):`${Math.round(x.areaPx2/1000)}k px&sup2;`};
   const tally=beamScan.tally||{added:0,skipped:0};
   const listBtn=`<button type="button" class="btn btn-sm" id="bsList" title="Every candidate as a list with tick boxes">List</button>`;
+  const floors=scanFloorsAll(),fNo=floors.indexOf(beamScan.floorLi)+1,flv=state.levels[beamScan.floorLi]||{};
+  const floorOf=`floor ${Math.max(1,fNo)} of ${Math.max(1,floors.length)}`;
+  // ARE-28: this floor is done (or still being read) and there are floors above
+  if(!it&&!beamScan.adjusting&&(!scanFloorRead(beamScan.floorLi)||scanFloorsAhead().length)){
+    if(!scanFloorRead(beamScan.floorLi))return `<div class="mp-panel sq-panel"><div class="mp-head">${esc(levelTagName(flv.name||''))} <span class="lm-dim">${floorOf}</span></div>${progress}
+      <p class="step-help dim">Reading ${esc(flv.name?levelTagName(flv.name):'this floor')}'s sheet${(beamScan.targets||[]).filter(t=>t.levelIdx===beamScan.floorLi).length>1?'s':''}…</p>
+      <div class="mp-actions"><button type="button" class="btn btn-sm" id="bsClose">Stop</button></div></div>`;
+    const ft=scanFloorTally(beamScan.floorLi),nxt=scanFloorsAhead()[0],nlv=state.levels[nxt]||{};
+    const nWait=scanPending().filter(x=>scanFloorOf(x)===nxt).length,nRead=scanFloorRead(nxt);
+    const fsk=beamScan.items.filter(x=>x.done==='skipped'&&scanFloorOf(x)===beamScan.floorLi).length;
+    return `<div class="mp-panel sq-panel sq-floordone">
+      <div class="mp-head">${pillHtml('ok',esc(levelTagName(flv.name||''))+' reviewed')} <span class="lm-dim">${floorOf}</span></div>
+      ${progress}
+      <p class="sq-floorsum"><b>${ft.added}</b> accepted${ft.adjusted?` (${ft.adjusted} adjusted)`:''} · <b>${ft.skipped}</b> skipped${fsk?' — Back brings the last one back':''}</p>
+      <div class="mp-actions sq-acts">
+        <button type="button" class="btn btn-sm btn-primary" id="bsNextFloor" title="Review the next floor up (Enter)">Next: ${esc(nlv.name?levelTagName(nlv.name):'next floor')} — ${nRead?`${nWait} to review`:'reading…'} ▸</button>
+        <span class="sq-gap"></span>
+        ${fsk?`<button type="button" class="btn btn-sm" id="bsBack" title="Back to the last one skipped on this floor">◂ Back</button>`:''}
+        ${fsk?listBtn:''}
+        <button type="button" class="btn btn-sm" id="bsClose" title="Stop the review here; what was accepted stays">Stop here</button>
+      </div>
+      <div class="sq-keys lm-dim">Enter goes on to ${esc(nlv.name?levelTagName(nlv.name):'the next floor')}</div></div>`;
+  }
   if(!it&&!beamScan.adjusting){
     const skipped=beamScan.items.filter(x=>x.done==='skipped').length,drawn=beamScan.items.filter(x=>x.done==='drawn').length;
     const body=pr?`<p class="step-help dim">Nothing on the sheets read so far. Reading on…</p>`
@@ -22825,7 +22899,7 @@ function scanQueueHtml(){
            <button type="button" class="btn btn-sm" id="bsSkip" title="Leave this one out and move on (N)">Skip</button>`}
       ${!adjusting&&it&&(it.page!=null?it.page:beamScan.page)!==state.pdf.current?`<button type="button" class="btn btn-sm" id="bsShow" title="Open its sheet and zoom to it">Show</button>`:''}
       <span class="sq-gap"></span>
-      ${allN>1&&!adjusting&&it?`<button type="button" class="btn btn-sm" id="bsAllType" title="Accept every remaining ${esc(scanTypeName(it.kind,2))} in the queue${it.kind==='beam'?' that has a size':''}">Accept all ${allN} ${esc(scanTypeName(it.kind,allN))}</button>`:''}
+      ${allN>1&&!adjusting&&it?`<button type="button" class="btn btn-sm" id="bsAllType" title="Accept every remaining ${esc(scanTypeName(it.kind,2))} on ${esc(lv.name?levelTagName(lv.name):'this floor')}${it.kind==='beam'?' that has a size':''}">Accept all ${allN} ${esc(scanTypeName(it.kind,allN))} on ${esc(lv.name?levelTagName(lv.name):'this floor')}</button>`:''}
       ${!adjusting&&beamScan.items.some(x=>x.done==='skipped')?`<button type="button" class="btn btn-sm" id="bsBack" title="Back to the last one skipped">\u25c2 Back</button>`:''}
       ${!adjusting?listBtn:''}
       <button type="button" class="btn btn-sm" id="bsClose" title="Close the review; what was accepted stays">Close</button>
@@ -22833,8 +22907,8 @@ function scanQueueHtml(){
   return `<div class="mp-panel sq-panel">
     <div class="mp-head"><span class="sq-type">${adjusting?'Adjusting':esc(scanTypeName(it?it.kind:'beam',2)).replace(/^./,c=>c.toUpperCase())}</span>
       ${adjusting?'':`<span class="sq-count">${pos} of ${kindQ.length}</span>`}
-      ${pillHtml('read',`${esc(lv.name||'')}${shown.page?` · sheet ${shown.page}`:''}`)}
-      <span class="lm-dim">${q.length} to review${added?` · ${added} added`:''} &middot; nothing is written until you accept it</span></div>
+      ${pillHtml('read',`${esc(lv.name?levelTagName(lv.name):'')}${shown.page?` · sheet ${shown.page}`:''}`)}
+      <span class="lm-dim">${floorOf} &middot; ${q.length} to review on ${esc(lv.name?levelTagName(lv.name):'this floor')}${added?` · ${added} added`:''} &middot; nothing is written until you accept it</span></div>
     ${progress}
     <div class="sq-card${bad?' v-warn':''}${adjusting?' adj':''}">
       <div class="sq-name">${adjusting?pillHtml('ok','added')+' ':''}${name} <span class="lm-dim">${sf(shown)}</span></div>
@@ -22855,10 +22929,15 @@ function bindScanQueue(el){
   on('bsAllType',scanAcceptAllType);
   on('bsList',()=>{beamScan.view='list';renderBeamPanel();renderCanvas()});
   on('bsClose',cancelBeamScan);
+  on('bsNextFloor',scanNextFloor);
 }
 function scanKeys(e){
   if(!beamScan||beamScan.view==='list'||typeof curStep==='undefined'||groupOf(curStep).id!=='areas')return false;
-  if(!scanCurrent()&&!beamScan.adjusting)return false;
+  if(!scanCurrent()&&!beamScan.adjusting){
+    // ARE-28: on the floor-done card, Enter goes on to the next floor
+    if(e.key==='Enter'&&scanFloorRead(beamScan.floorLi)&&scanFloorsAhead().length){e.preventDefault();scanNextFloor();return true}
+    return false;
+  }
   if(e.key==='Enter'){e.preventDefault();beamScan.adjusting?scanNext():scanAccept(false);return true}
   if(!beamScan.adjusting&&(e.key==='a'||e.key==='A')){e.preventDefault();scanAccept(true);return true}
   if(!beamScan.adjusting&&(e.key==='n'||e.key==='N')){e.preventDefault();scanSkip();return true}
@@ -22945,7 +23024,14 @@ function drawBeamScan(zoom,F_MONO){
       const path=new Path2D();path.moveTo(p[0].x,p[0].y);for(let k=1;k<p.length;k++)path.lineTo(p[k].x,p[k].y);path.closePath();
       drawCtx.fillStyle=sel?selectRgba(.16):(it.done==='skipped'?'rgba(120,120,120,.05)':'rgba(120,120,120,.10)');
       drawCtx.fill();
-      if(sel)glowStroke(drawCtx,path,zoom,2);
+      if(sel){
+        glowStroke(drawCtx,path,zoom,2);
+        // ARE-28: its grip points, the same handles Areas edits with, so a
+        // stray or missing corner is seen before Accept or Accept & adjust
+        const g=6/zoom;
+        for(const q of p){drawCtx.fillStyle='#fff';drawCtx.fillRect(q.x-g/2,q.y-g/2,g,g);
+          drawCtx.lineWidth=1.5/zoom;drawCtx.strokeStyle=selectRgba(1);drawCtx.strokeRect(q.x-g/2,q.y-g/2,g,g)}
+      }
       else{drawCtx.strokeStyle=it.done==='skipped'?'rgba(110,110,110,.35)':'rgba(110,110,110,.6)';drawCtx.lineWidth=1.2/zoom;drawCtx.setLineDash([6/zoom,4/zoom]);drawCtx.stroke();drawCtx.setLineDash([])}
       if(sel){const c=polyCentroid(p);
         drawCtx.font=`700 ${Math.max(11,13/zoom)}px ${cssVar('--font-display')||F_MONO}`;

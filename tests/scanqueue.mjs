@@ -1,11 +1,11 @@
-// @rules ARE-11  (see DECISIONS.md)
+// @rules ARE-11, ARE-28  (see DECISIONS.md)
 // THE SCAN IS A REVIEW QUEUE (Sep 21 2026). Adolfo: "you have to click show
 // and then tick the box to be sure what is highlighted. they all show up at
 // once instead of being presented level by level. they should be broken out
 // by type when confirming and have a confirm all button. you should also be
 // able to adjust the shape before confirming … something like a next button
 // would be helpful." Run against the 1175 set, sheets 4 and 3.
-//  A. the queue opens on one candidate, shown on its sheet, by type then floor
+//  A. the queue opens on one candidate, shown on its sheet, by type (one floor at a time, ARE-28)
 //  B. Accept writes that one shape and moves on; Skip writes nothing
 //  C. Accept & adjust writes it and leaves it selected with its corners live
 //  D. Accept all remaining <type> takes the rest of that type, sized only
@@ -45,7 +45,9 @@ await page.evaluate(async b64 => {
 // a hand-made queue: the shapes of sheets 4 and 3 as the detector reads them
 await page.evaluate(async () => {
   const items = [];
-  for (const [pg, li] of [[4, 0], [3, 1]]) {
+  // ARE-28 (Sep 25): the queue holds one floor at a time, so the mechanics
+  // are read on one floor here — tests/scanfloors.mjs walks the floors
+  for (const [pg, li] of [[4, 0]]) {
     const r = await detectGreyShapes(pg);
     for (const it of r.items) items.push({ ...it, page: pg, levelIdx: li });
   }
@@ -56,7 +58,7 @@ await page.evaluate(async () => {
 });
 await page.waitForTimeout(500);
 
-console.log('A. one candidate at a time, by type then floor');
+console.log('A. one candidate at a time, by type');
 const A = await page.evaluate(() => {
   const q = scanQueue(), cur = scanCurrent();
   const panel = document.getElementById('beamPanel');
@@ -149,7 +151,7 @@ const D = await page.evaluate(async () => {
   return { beamsLeft: beamsLeft.length, sized: sized.length, unsized: unsized.length, label, added: after - before, curKind: cur && cur.kind, leftBeams: scanQueue().filter(x => x.kind === 'beam').length };
 });
 console.log('   ' + JSON.stringify(D));
-ok(/^Accept all \d+ beams$/.test(D.label || ''), 'the button names the type and the count: ' + D.label);
+ok(/^Accept all \d+ beams on L4$/.test(D.label || ''), 'the button names the type and the count: ' + D.label);
 ok(D.added === D.sized, `it added every sized beam left (${D.added} of ${D.sized}) and none of the ${D.unsized} unsized`);
 ok(D.leftBeams === D.unsized, 'the unsized beams stay in the queue for a look: ' + D.leftBeams);
 
@@ -176,20 +178,19 @@ ok(E.curKind === 'opening' && E.added === 1 && E.kind === 'opening', 'Enter acce
 ok(/added/.test(E.doneHead), 'with the queue empty the panel sums up: ' + E.doneHead.slice(0, 120));
 ok(E.rows === E.skipped && E.ticks === E.skipped, `the list shows the ${E.skipped} skipped ones with tick boxes, not the ones already added: ${E.rows} rows`);
 
-console.log('F. what is already drawn is not offered again; the queue starts at the sheet on screen');
+console.log('F. what is already drawn is not offered again; floors rank bottom up');
 const F = await page.evaluate(() => {
   const lv = state.levels[0];
   const z = zonesOf(lv, 'slab').find(x => x.kind === 'beam');
   const dup = { kind: 'beam', polygon: z.polygon.map(p => ({ x: p.x + 1, y: p.y + 1 })), areaPx2: 5000, page: 4, levelIdx: 0, sized: true, widthIn: 24, depthIn: 17 };
   const fresh = { kind: 'beam', polygon: [{ x: 3000, y: 3000 }, { x: 3400, y: 3000 }, { x: 3400, y: 3040 }, { x: 3000, y: 3040 }], areaPx2: 16000, page: 4, levelIdx: 0, sized: true, widthIn: 24, depthIn: 17 };
   const dropped = scanDropDrawn([dup, fresh]);
-  // the walk starts at the floor on screen when the scan began
-  beamScan.startLevelIdx = 1;
-  const ranks = [0, 1, 2].map(li => scanLevelRank(li));
+  // ARE-28: floors are walked bottom up (by elevation), not from the one on screen
+  const ranks = [0, 1, 2].map(li => scanFloorRank(li));
   return { dropped, dupDone: dup.done, freshDone: fresh.done || null, ranks };
 });
 ok(F.dropped === 1 && F.dupDone === 'drawn' && !F.freshDone, 'a candidate covering a beam already on the floor is marked drawn and left out; a new one is kept');
-ok(F.ranks.join() === '2,0,1', 'floors are walked from the one on screen down the stack, then round to the top: ' + F.ranks.join());
+ok(F.ranks[2] < F.ranks[1] && F.ranks[1] < F.ranks[0], 'floors rank bottom up by elevation (ARE-28 replaced "from the one on screen"): ' + F.ranks.join());
 
 console.log('G. leaving Areas pauses the review; coming back resumes it');
 const G = await page.evaluate(async () => {

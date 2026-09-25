@@ -152,6 +152,7 @@ What the calculator must do. Canonical, versioned with the code; the project doc
 | ARE-25 | THE CHECKS atop the list ("Ready for Results" / "N to look at"): partial overlaps of different conditions (full containment is intended; OK keeps both), beams to verify, beam sizes not from a label, slabs the sheet disagrees with, and on Loading, floor no mark covers (only without a typical capacity). Gaps and overlaps are tinted; clicking a check zooms to it. | Sep 24 |
 | ARE-26 | LIGHT / DARK toolbar toggle (remembered; follows the system until chosen). The sheet stays white and markup looks the same in both. User-visible text uses American spelling. | Sep 24 |
 | ARE-27 | Markup is LOCKED on Results and Sequence: no selecting, dragging, corner erasing, deleting or arming drawing tools. Pan, zoom, paging and region clicks still work; a locked badge stays up. | Sep 10, Sep 15 |
+| ARE-28 | THE SCAN REVIEW WALKS FLOOR BY FLOOR, BOTTOM UP (refines ARE-11): sheets are read bottom floor first; the queue holds ONE floor at a time (a floor on several sheets is one step; a floor with nothing found is passed over), by type within it (beams, thickened slabs, openings; largest first); "Accept all" takes the rest of that type on THIS floor. The candidate under review shows its grip points (every corner) so a stray corner is seen before Accept or Accept & adjust. When a floor is done the review stops on a card — "L3 reviewed · 3 accepted (1 adjusted) · 1 skipped" — with "Next: L4 — N to review" (Enter), Back to the last one skipped there, and Stop here; it never moves on by itself. The head says "floor 2 of 5". | Sep 25 |
 
 ## RES — Results
 
@@ -312,6 +313,7 @@ What the calculator must do. Canonical, versioned with the code; the project doc
 | Orange selected-region highlight | RES-06 | Sep 8 |
 | Green selected-region highlight with marching ants | RES-10 | Sep 21 |
 | Auto-trace button and review panel on the Loads step | ARE-12 | Sep 21 |
+| The scan queue ordered by type across the whole job, starting from the floor on screen | ARE-28 | Sep 25 |
 | Typical capacity shown read-only on the Levels row | BLD-14 | Sep 21 |
 | All unfinished sections of a stacked step open at once | UI-27 | Sep 21 |
 | "Start a combined chart / Start split schedules" asked cold on an empty Loads step | LOD-01 | Sep 21 |
