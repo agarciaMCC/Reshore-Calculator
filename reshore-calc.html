@@ -1123,6 +1123,7 @@ select.sched-shore option,select.sel-styled option{background:var(--surface-rais
 /* ── RESULTS READ TOP-DOWN LIKE A FIELD SHEET (RES-11) ── */
 .sched-region-head{align-items:center}
 .sched-region-head .card-name{font-family:var(--font-display);font-size:var(--fs-lg);font-weight:700;white-space:normal;line-height:1.25}
+.card-num{display:inline-block;min-width:1.6em;padding:0 5px;border-radius:4px;border:2px solid var(--text);text-align:center;font-weight:800}
 .card-pour{display:inline-block;padding:0 6px;border-radius:4px;background:var(--text);color:var(--bg);font-weight:800;letter-spacing:.02em}
 .sched-region:not(.folded) .card-chips{flex-basis:100%;margin-left:22px}
 .inst-fl{font-family:var(--font-display);font-size:var(--fs-lg)}
@@ -3653,6 +3654,7 @@ function drawFrame(){
   if(typeof drawRegionMap==='function')drawRegionMap(lv,zoom,F_MONO);
   drawAssumptionOverlay(lv);
   if(typeof drawResultHighlight==='function')drawResultHighlight(lv,zoom,F_MONO);
+  if(typeof drawResultTags==='function')drawResultTags(lv,zoom);
   // ── Grid overlay: where the app THINKS the grid lines are. During a match
   // it follows the live fit; on the Match step it shows the stored fit for
   // the floor on this sheet. If these do not sit on the drawn grid, the
@@ -8078,6 +8080,7 @@ function drawRegionMap(lv,zoom,F_MONO){
   // ── A FLOOR'S TAB: THE PLAN SHADED BY WHAT GOES IN UNDER IT ──
   const tabF=resultsFloor(L);
   if(tabF&&tabF.level&&lv.id===(tabF.level.defId||tabF.level.id)){
+    _resTabTxt=new Map();
     drawCtx.save();
     if(sheetClip)drawCtx.clip(sheetClip);
     const labels=[];
@@ -8115,21 +8118,10 @@ function drawRegionMap(lv,zoom,F_MONO){
           drawCtx.beginPath();for(let x=x0-(y1-y0);x<x1;x+=gap){drawCtx.moveTo(x,y1);drawCtx.lineTo(x+(y1-y0),y0)}drawCtx.stroke()}
         drawCtx.restore();
       }
-      if(txt&&r.key!==sel)labels.push({r,txt,fill});
+      if(txt)labels.push({r,txt,fill});
     }
-    // the pattern written where the region has room for it
-    const fs=Math.max(11,13/zoom);
-    drawCtx.font=`700 ${fs}px ${F_MONO}`;drawCtx.textAlign='center';drawCtx.textBaseline='middle';
-    for(const {r,txt,fill} of labels){
-      const cx=(r.bb.minX+r.bb.maxX)/2,cy=(r.bb.minY+r.bb.maxY)/2;
-      if(!inSheetGround(lv,cx,cy))continue;
-      const c=buildingToPixel(cx,cy,T);if(!c)continue;
-      const a=buildingToPixel(r.bb.minX,r.bb.minY,T),b=buildingToPixel(r.bb.maxX,r.bb.maxY,T);
-      const w=drawCtx.measureText(txt).width;
-      if(a&&b&&(w>Math.abs(b.px-a.px)||fs*1.2>Math.abs(b.py-a.py)))continue;
-      drawCtx.lineWidth=4/zoom;drawCtx.strokeStyle='rgba(255,255,255,.92)';drawCtx.strokeText(txt,c.px,c.py);
-      drawCtx.fillStyle='#222';drawCtx.fillText(txt,c.px,c.py);
-    }
+    // RES-16: the pattern goes on the number tag ("1 · 8×8"), placed by drawResultTags
+    for(const {r,txt} of labels)_resTabTxt.set(r.key,txt);
     drawCtx.restore();
     return;
   }
@@ -8147,31 +8139,91 @@ function drawRegionMap(lv,zoom,F_MONO){
     else drawCtx.fill(regionCellPath(cells,st,T,occ,!!clip));
     drawCtx.restore();
   });
-  // names last so no fill lands on top of one
+  // RES-16: the plan carries numbers, not names — drawResultTags, after the highlight
+  drawCtx.restore();
+}
+// ── RESULTS NUMBER TAGS (RES-16) ──
+// The Areas tag rules (ARE-21) applied to the Results plan: each tag sits
+// inside its own polygon, clear of the holes cut in it, sized to the sheet's
+// text, shrinking before it would spill — and a region made of several
+// separate pieces gets its number on every piece. Beams take theirs along
+// the beam. A piece too small for its number is found by its color and by
+// clicking it. On a floor's tab the tag also carries the pattern ("1 · 8×8").
+let _resTabTxt=new Map();
+const _resTagCache={sig:null,out:[]};
+function resRingsOf(mp,T){
+  // [outer px ring, hole px rings] per piece
+  return (mp||[]).map(poly=>poly.map(ring=>ring.map(q=>{const s=buildingToPixel(q[0],q[1],T);return s?[s.px,s.py]:null}).filter(Boolean)))
+    .filter(pr=>pr[0]&&pr[0].length>=3);
+}
+function resTagLayout(lv,L,T,tabF,zoom){
+  // a number has to be read at any zoom: never under ~15 px on screen (the
+  // zoom is stepped so panning does not re-place everything), bigger with
+  // the sheet's own text when zoomed in
+  const zq=Math.pow(2,Math.round(Math.log2(Math.max(zoom||1,1e-3))*2)/2);
+  const page=state.pdf.current,H=Math.max((adTextH(page)||adPxIn(lv,9))*1.3,15/zq);
+  const tabKey=tabF?tabF.key:'all';
+  const sig=[L.pour.name,lv.id,page,H,zq,tabKey,T.join?T.join(','):JSON.stringify(T),L.solve.regions.map(r=>r.key+(_resTabTxt.get(r.key)||'')).join(';'),(L.solve.beams||[]).length].join('|');
+  if(sig===_resTagCache.sig)return _resTagCache.out;
+  const placed=[],out=[];
+  const zoned=isPourLevel(lv)&&pourIsZoned(L);
+  const onSheet=(ring)=>{
+    let x=0,y=0;for(const p of ring){x+=p[0];y+=p[1]}x/=ring.length;y/=ring.length;
+    const b=pixelToBuilding(x,y,T);
+    return inSheetGround(lv,b.bx,b.by);
+  };
+  // smallest pieces first, so the big ones find room around them
+  const pieces=[];
   L.solve.regions.forEach((r,ri)=>{
-    if(r.key===sel)return;                     // the selected one gets its own label
-    const cx=(r.bb.minX+r.bb.maxX)/2,cy=(r.bb.minY+r.bb.maxY)/2;
-    // its name belongs on its own sheet: the zone it is filed under on the
-    // pour's sheets, the sheet whose ground holds it on a floor below
-    if(isPourLevel(lv)&&pourIsZoned(L)){if(regionZonePage(r,L)!==state.pdf.current)return}
-    else if(!inSheetGround(lv,cx,cy))return;
-    const c=buildingToPixel(cx,cy,T);
-    if(!c)return;
-    // The name is the load path, which is long: it goes on the plan one
-    // step per line, and only where the region has room for it. A patch too
-    // small for its name is found by its color and by clicking it — the
-    // selected region always gets its own label.
-    const lines=String(regionLabel(r,ri,L)).split(' – ');
-    const fs=Math.max(10,12/zoom),lh=fs*1.15;
-    drawCtx.font=`700 ${fs}px ${F_MONO}`;
-    const w=Math.max(...lines.map(t=>drawCtx.measureText(t).width)),h=lh*lines.length;
-    const a=buildingToPixel(r.bb.minX,r.bb.minY,T),b=buildingToPixel(r.bb.maxX,r.bb.maxY,T);
-    if(a&&b){const bw=Math.abs(b.px-a.px),bh=Math.abs(b.py-a.py);if(w>bw||h>bh)return}
-    drawCtx.textAlign='center';drawCtx.textBaseline='middle';
-    drawCtx.lineWidth=4/zoom;drawCtx.strokeStyle='rgba(255,255,255,.92)';
-    drawCtx.fillStyle=regionColorCss(regionColorIdx(r,ri,L),1);
-    lines.forEach((t,i)=>{const y=c.py+(i-(lines.length-1)/2)*lh;drawCtx.strokeText(t,c.px,y);drawCtx.fillText(t,c.px,y)});
+    if(tabF&&!_resTabTxt.has(r.key))return;       // on a floor's tab: only what goes in under it
+    if(zoned&&regionZonePage(r,L)!==page)return;
+    for(const [outer,...holes] of resRingsOf(r.mp,T)){
+      if(!zoned&&!onSheet(outer))continue;
+      pieces.push({kind:'region',key:r.key,ri,outer,holes,a:adArea(outer)});
+    }
   });
+  pieces.sort((a,b)=>a.a-b.a);
+  for(const pc of pieces){
+    const num=regionNum(pc.ri),pat=_resTabTxt.get(pc.key);
+    const tx=pat?{t:`${num} · ${pat}`,short:num}:{t:num};
+    const p=adPlaceArea(pc.outer,tx,H,placed.concat(pc.holes),[]);
+    if(!p)continue;placed.push(p.r);out.push({kind:'region',key:pc.key,ri:pc.ri,p});
+  }
+  if(!tabF)(L.solve.beams||[]).forEach((b,bi)=>{
+    const parts=(b.group&&b.members?b.members:[b]).map(m=>m.mp).filter(Boolean);
+    for(const mp of parts)for(const [outer] of resRingsOf(mp,T)){
+      if(!onSheet(outer))continue;
+      const p=adPlaceBeam(null,outer,{t:beamNum(bi)},H*0.85,placed,[]);
+      if(!p||!adRingInside(p.r,outer)&&p.h<H*0.3)continue;
+      placed.push(p.r);out.push({kind:'beam',key:beamHlKey(b),bi,p});
+    }
+  });
+  _resTagCache.sig=sig;_resTagCache.out=out;return out;
+}
+function drawResultTags(lv,zoom){
+  if(typeof schedSolve==='undefined'||!schedSolve||typeof curStep==='undefined'||curStep!=='results')return;
+  const L=schedSolve.levels[schedPourIdx];
+  if(!L||!L.solve||!L.solve.spatial)return;
+  const T=screenTransform(lv);if(!T)return;
+  const tabF=resultsFloor(L);
+  const onTab=tabF&&tabF.level&&lv.id===(tabF.level.defId||tabF.level.id);
+  if(!onTab)_resTabTxt=new Map();
+  const sel=state.ui.highlight&&state.ui.highlight.regionKey;
+  const out=resTagLayout(lv,L,T,onTab?tabF:null,zoom);
+  drawCtx.save();
+  {const sc=sheetClipPath(lv,T);if(sc)drawCtx.clip(sc)}
+  for(const t of out){
+    const p=t.p,px=p.h*zoom;if(px<4)continue;
+    const bd=adBox(p.t,p.h),lit=t.key===sel;
+    const col=t.kind==='beam'?'#c2410c':regionColorCss(regionColorIdx(L.solve.regions[t.ri],t.ri,L),1);
+    drawCtx.save();drawCtx.translate(p.cx,p.cy);drawCtx.rotate(p.ang);
+    drawCtx.fillStyle=lit?selectRgba(1):'rgba(255,255,255,.95)';
+    drawCtx.strokeStyle=lit?selectRgba(1):col;drawCtx.lineWidth=Math.max(1,Math.min(2.2,px/7))/zoom;
+    drawCtx.beginPath();if(drawCtx.roundRect)drawCtx.roundRect(-bd.w/2,-bd.h/2,bd.w,bd.h,Math.min(5/zoom,bd.h/3));else drawCtx.rect(-bd.w/2,-bd.h/2,bd.w,bd.h);
+    drawCtx.fill();drawCtx.stroke();
+    drawCtx.fillStyle=lit?'#fff':'#111827';drawCtx.font=`700 ${p.h}px ${AD_FONT}`;drawCtx.textAlign='center';drawCtx.textBaseline='middle';
+    drawCtx.fillText(p.t,0,p.h*0.04);drawCtx.restore();
+  }
   drawCtx.restore();
 }
 // Which beam row a highlight names: the beam, the region it is over, and —
@@ -8254,7 +8306,7 @@ function drawResultHighlight(lv,zoom,F_MONO){
   }
   // label at the region center, haloed so it survives dark line work
   const c=buildingToPixel((h.bb.minX+h.bb.maxX)/2,(h.bb.minY+h.bb.maxY)/2,T);
-  if(c&&h.label){
+  if(c&&h.label&&!(sameP&&(rmp||isBeam))){
     drawCtx.font=`700 ${Math.max(11,13/zoom)}px ${cssVar('--font-display')||F_MONO}`;
     drawCtx.textAlign='center';drawCtx.textBaseline='middle';
     drawCtx.lineWidth=4/zoom;drawCtx.strokeStyle='rgba(255,255,255,.92)';
@@ -14564,8 +14616,16 @@ function regionLabel(r,i,L){return regionDisplayLabel(r,i,L)}
 // before the slab/beam details". The plain names (plan labels, keys, diagram
 // titles that already say the pour) are left as they are.
 function pourTagOf(L){const lvl=L||(typeof schedSolve!=='undefined'&&schedSolve&&schedSolve.levels[schedPourIdx]);return lvl&&lvl.pour?levelTagName(lvl.pour.name):''}
-function pourTitle(L,label){const t=pourTagOf(L);return t?`${t} · ${label}`:label}
-function pourTitleHtml(L,label){const t=pourTagOf(L);return (t?`<span class="card-pour" title="The level being poured">${esc(t)}</span> · `:'')+esc(label)}
+// RES-16: every region and beam carries a NUMBER — regions 1, 2, 3 … in
+// schedule order (largest first), beams B1, B2 … — which leads its title and
+// is the only thing written on the Results plan, so the long load-path name
+// stays in the schedule. Adolfo, Sep 25 2026: "designate a number before the
+// title and just show the number as the tag in plan view so that the title
+// text doesnt clog up the plan view".
+function regionNum(ri){return String(ri+1)}
+function beamNum(bi){return 'B'+(bi+1)}
+function pourTitle(L,label,num){const t=pourTagOf(L);return (num!=null?`${num} · `:'')+(t?`${t} · ${label}`:label)}
+function pourTitleHtml(L,label,num){const t=pourTagOf(L);return (num!=null?`<span class="card-num" title="This number tags it on the plan">${esc(num)}</span> `:'')+(t?`<span class="card-pour" title="The level being poured">${esc(t)}</span> · `:'')+esc(label)}
 function regionColorIdx(r,i,L){
   const lvl=L||(schedSolve&&schedSolve.levels[schedPourIdx]);
   if(lvl&&r&&r.key){
@@ -14779,7 +14839,7 @@ function noShoreItems(L){
       // its own words, because "no shore is tall enough" is not what is
       // wrong with it.
       out.push({kind:'region',ri,lv:defIdxOf(st.level),floor:st.level.name,noSlab:!!st.open,
-        label:pourTitle(L,regionLabel(r,ri,L)),areaSF:r.areaSF,heightFt:st.shoreHeightFt,
+        label:pourTitle(L,regionLabel(r,ri,L),regionNum(ri)),areaSF:r.areaSF,heightFt:st.shoreHeightFt,
         onGrade:!!(onward&&onward.grade),
         support:(st.supportLevel&&st.supportLevel.name)||(onward&&onward.level.name)||null,
         spansOpen:st.spansOpen||0});
@@ -14789,7 +14849,7 @@ function noShoreItems(L){
     for(const row of b.rows||[]){
       if(!row.noOptions)continue;
       out.push({kind:'beam',bi,lv:defIdxOf(row.level),floor:row.level.name,
-        label:pourTitle(L,beamLabel(b,bi)),areaSF:b.areaSF,heightFt:row.shoreHeightFt,
+        label:pourTitle(L,beamLabel(b,bi),beamNum(bi)),areaSF:b.areaSF,heightFt:row.shoreHeightFt,
         support:row.supportLevel&&row.supportLevel.name,spansOpen:row.spansOpen||0});
     }
   });
@@ -15387,7 +15447,7 @@ function renderSchedule(){
       <div class="sched-region-head sched-go" data-ri="${ri}" data-lv="${defIdxOf(L.pour)}" title="Show this region on the pour level's sheet${r.loadingMarks.length?` · pour-level mark${r.loadingMarks.length>1?'s':''} ${esc(r.loadingMarks.join(', '))}`:''}">
         <button type="button" class="card-fold" data-fold="${esc(ck)}" title="${open?'Fold this region back to one line':'Open this region: the strip, the numbers, the diagram'}">${open?'\u25be':'\u25b8'}</button>
         <span class="lm-swatch" style="background:${regionColorCss(regionColorIdx(r,ri,L),0.9)}" title="This color marks the region on the plan and in the print legend"></span>
-        <b class="card-name">${pourTitleHtml(L,regionLabel(r,ri,L))}</b>
+        <b class="card-name">${pourTitleHtml(L,regionLabel(r,ri,L),regionNum(ri))}</b>
         <span class="card-sf">${fmtArea(r.areaSF)}</span>
         <span class="card-chips">${chips}</span>
       </div>
@@ -15693,7 +15753,7 @@ function beamBlock(b,bi,L,hl){
     <div class="sched-region-head sched-go" data-bi="${bi}" data-lv="${defIdxOf(L.pour)}" title="Show this beam on the pour level's sheet">
       <button type="button" class="card-fold" data-fold="${esc(ck)}" title="${open?'Fold this beam back to one line':'Open this beam: its rows and the diagram'}">${open?'\u25be':'\u25b8'}</button>
       <span class="lm-swatch" style="background:${slabInkHex(b.zone)}"></span>
-      ${b.group?`<span class="beam-count" title="${b.count} beams with the same size, stem, slab condition and shore heights (within an inch) share this row — one pick covers all of them">${b.count}×</span>`:''}<b class="card-name">${pourTitleHtml(L,beamLabel(b,bi))}</b>${b.brokenOut?` <span class="beam-tag" title="This beam has its own row and picks; regroup it below">broken out</span>`:''}
+      ${b.group?`<span class="beam-count" title="${b.count} beams with the same size, stem, slab condition and shore heights (within an inch) share this row — one pick covers all of them">${b.count}×</span>`:''}<b class="card-name">${pourTitleHtml(L,beamLabel(b,bi),beamNum(bi))}</b>${b.brokenOut?` <span class="beam-tag" title="This beam has its own row and picks; regroup it below">broken out</span>`:''}
       <span class="card-sf">${b.lengthFt!=null?b.lengthFt+' LF':fmtArea(b.areaSF)}${b.group?` · ${b.count} beams`:''}</span>
       <span class="card-chips">${chips}</span>
     </div>
@@ -16360,7 +16420,7 @@ function printSchedule(){
       s.regions.map((r,ri)=>{
         const pats=[...new Set(r.steps.filter(st=>st.chosen).map(st=>st.chosen.pattern))];
         return `<tr><td style="width:16px"><span class="sw" style="background:${regionColorCss(regionColorIdx(r,ri,L),1)}"></span></td>
-          <td>${esc(pourTitle(L,regionLabel(r,ri,L)))}</td><td>${fmtArea(r.areaSF)}</td>
+          <td>${esc(pourTitle(L,regionLabel(r,ri,L),regionNum(ri)))}</td><td>${fmtArea(r.areaSF)}</td>
           <td>${r.reshoreLevels}</td><td><b>${pats.length?esc(pats.join(' / ')):'—'}</b></td></tr>`;
       }).join('')}</tbody></table>`:'';
   const rows=s.spatial?(s.regions.map((r,ri)=>{
@@ -16372,7 +16432,7 @@ function printSchedule(){
       <td>${st.chosen?st.chosen.capacityAtHeight.toLocaleString():'—'}</td>
       <td>${st.chosen?Math.round(st.chosen.sfPerShore):'—'}</td>
       <td><b>${st.chosen?st.chosen.pattern:'—'}</b></td></tr>`).join('');
-    return `<h3><span class="sw" style="background:${regionColorCss(regionColorIdx(r,ri,L),1)}"></span>${esc(pourTitle(L,regionLabel(r,ri,L)))} &mdash; ${fmtArea(r.areaSF)}, placement ${r.placementLoad.toFixed(1)} PSF</h3>
+    return `<h3><span class="sw" style="background:${regionColorCss(regionColorIdx(r,ri,L),1)}"></span>${esc(pourTitle(L,regionLabel(r,ri,L),regionNum(ri)))} &mdash; ${fmtArea(r.areaSF)}, placement ${r.placementLoad.toFixed(1)} PSF</h3>
       <div class="snip" data-snip="r:${ri}"><span class="snip-wait">plan snippet — rendering…</span></div>
       <table><thead><tr><th>Reshore under</th><th>Mark</th><th>Cap PSF</th><th>Resultant PSF</th><th>Shore height</th>
         <th>Shore</th><th>Capacity lb</th><th>SF/shore</th><th>Pattern</th></tr></thead>
@@ -16384,7 +16444,7 @@ function printSchedule(){
       <td>${r.beamNet>0&&r.shoreHeightFt!=null?feetToStr(r.shoreHeightFt):'—'}</td>
       <td>${r.beamNet<=0?'<i>absorbed here</i>':(r.beamChosen?esc(r.beamChosen.shore.name)+' — '+r.beamChosen.capacityAtHeight.toLocaleString()+' lb':'<i>not chosen</i>')}</td>
       <td>${r.beamNet>0?r.beamPerCluster:'—'}</td><td><b>${r.beamSpacingFt!=null?feetToStr(r.beamSpacingFt)+' o.c.':'—'}</b></td></tr>`).join('');
-    return `<div class="snip snip-beam" data-snip="b:${bi}"><span class="snip-wait">plan snippet — rendering…</span></div><h3>${esc(pourTitle(L,beamLabel(b,bi)))} &mdash; ${b.lengthFt!=null?b.lengthFt+' LF, ':''}stem ${inchStr(b.stemIn)} below the ${inchStr(b.thicknessIn)} slab = ${b.plf} PLF along the beam, shored separately from the slab grid</h3>
+    return `<div class="snip snip-beam" data-snip="b:${bi}"><span class="snip-wait">plan snippet — rendering…</span></div><h3>${esc(pourTitle(L,beamLabel(b,bi),beamNum(bi)))} &mdash; ${b.lengthFt!=null?b.lengthFt+' LF, ':''}stem ${inchStr(b.stemIn)} below the ${inchStr(b.thicknessIn)} slab = ${b.plf} PLF along the beam, shored separately from the slab grid</h3>
       <table><thead><tr><th>Reshore under</th><th>Stem in PLF</th><th>Slab spare PSF × eff. width ft = PLF</th><th>Shore PLF</th><th>Shore height</th><th>Shore</th><th>Per cluster</th><th>Spacing along beam</th></tr></thead><tbody>${br}</tbody></table>
       ${b.beamUnresolved?'<p><b>Not absorbed within the defined stack.</b></p>':''}
       <div class="dg-print">${beamPathSvg({...b,index:bi},L)}</div>`;
@@ -16553,11 +16613,11 @@ async function fillPrintSnippets(win,L){
     try{
       if(key.startsWith('r:')){
         const ri=+key.slice(2),r=s.regions[ri];
-        const url=r?await regionSnippet(r,L,regionLabel(r,ri,L),false):null;
+        const url=r?await regionSnippet(r,L,regionNum(ri),false):null;
         el.innerHTML=url?`<img src="${url}" alt="">`:'';
       }else if(key.startsWith('b:')){
         const bi=+key.slice(2),b=(s.beams||[])[bi];
-        const url=b?await regionSnippet(b,L,beamLabel(b,bi),true):null;
+        const url=b?await regionSnippet(b,L,beamNum(bi),true):null;
         el.innerHTML=url?`<img src="${url}" alt="">`:'';
       }else if(key.startsWith('f:')){
         const f=resultsTabFloors(L).find(x=>x.key===key.slice(2));

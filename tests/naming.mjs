@@ -1,4 +1,4 @@
-// @rules RGN-07, RGN-08, RES-09, RES-15  (see DECISIONS.md)
+// @rules RGN-07, RGN-08, RES-09, RES-15, RES-16  (see DECISIONS.md)
 // How regions are designated: a name that IS the load path — the pour's slab
 // thickness, then each floor below with its capacity (Adolfo, Sep 17 2026:
 // "Slab Thickness - Level below load capacity - Level below that load
@@ -181,12 +181,14 @@ const painted = await page.evaluate(async () => {
   const want = L.solve.regions.map((r, i) => norm(regionColorCss(regionColorIdx(r, i, L), 0.20)));
   return { hits: want.filter(c => seen.has(c)).length, n: want.length,
            // a name goes on the plan one step per line, where the region has room for it
-           names: L.solve.regions.map((r, i) => regionLabel(r, i, L)).filter(n => n.split(' – ').every(line => texts.includes(line))).length,
+           // RES-16: the plan carries each region's NUMBER, not its name
+           names: L.solve.regions.map((r, i) => regionNum(i)).filter(n => texts.includes(n)).length,
+           long: texts.filter(t => / Slab/.test(t)).length,
            dbg: { curStep, pourIdx: schedPourIdx, onScreen: (levelOnScreen()||{}).name, page: state.pdf.current,
                   want: want.slice(0,2), sample: [...new Set(rec)].slice(0,8) } };
 });
 ok(painted.hits === painted.n, `every region is painted in its own color (${painted.hits}/${painted.n})`);
-ok(painted.names >= 2, `the big regions carry their names on the plan, one step per line; small patches go by color (${painted.names}/${painted.n})`);
+ok(painted.names >= 2 && painted.long === 0, `the big regions carry their numbers on the plan, not their names; small patches go by color (${painted.names}/${painted.n}, ${painted.long} names)`);
 // with a region selected, the teal selection (RES-10) still goes over the top
 const selPaint = await page.evaluate(() => {
   const L = schedSolve.levels.find(x => x.pour.name === 'Roof');

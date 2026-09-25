@@ -1,4 +1,4 @@
-// @rules RES-04, RGN-07  (see DECISIONS.md)
+// @rules RES-04, RGN-07, RES-16  (see DECISIONS.md)
 // RESULTS BY ZONE + THE NAME IS THE LOAD PATH (Kinect, Sep 17 2026)
 // Adolfo: "this type of view is not helpful. ideally the results would be
 // split in north and south. its very confusing to try and understand the
@@ -110,19 +110,19 @@ const D = await page.evaluate(async () => {
     const t = []; const t0 = c.fillText.bind(c);
     c.fillText = function (x) { t.push(String(x)); return t0.apply(c, arguments) };
     renderNow(); c.fillText = t0;
-    // a name goes on the plan one step per line: keep the lines that belong to a region name
-    const all = new Set(L.solve.regions.flatMap((r, i) => regionLabel(r, i, L).split(' – ')));
+    // RES-16: the plan carries region numbers: keep the texts that are one
+    const all = new Set(L.solve.regions.map((r, i) => regionNum(i)));
     return t.filter(x => all.has(x));
   };
   const n = await labelsOn(10), s = await labelsOn(11);
-  const names = L.solve.regions.map((r, i) => regionLabel(r, i, L));
+  const names = L.solve.regions.map((r, i) => regionNum(i));
   const zp = L.solve.regions.map(r => regionZonePage(r, L));
-  const linesOf = pg => new Set(names.filter((x, i) => zp[i] === pg).flatMap(x => x.split(' – ')));
+  const linesOf = pg => new Set(names.filter((x, i) => zp[i] === pg));
   const onlyOf = pg => { const mine = linesOf(pg), other = linesOf(pg === 10 ? 11 : 10); return [...mine].filter(x => !other.has(x)) };
   return { n, s, northOnly: onlyOf(10), southOnly: onlyOf(11), northLines: [...linesOf(10)], southLines: [...linesOf(11)] };
 });
-ok(D.n.length > 0 && D.s.length > 0, `labels drawn on both sheets: North ${D.n.length} lines, South ${D.s.length} lines`);
-ok(D.n.every(x => D.northLines.includes(x)) && D.s.every(x => D.southLines.includes(x)), 'and each sheet carries only lines of its own zone\'s names: ' + JSON.stringify({ n: D.n, s: D.s }));
+ok(D.n.length > 0 && D.s.length > 0, `number tags drawn on both sheets: North ${D.n.length}, South ${D.s.length}`);
+ok(D.n.every(x => D.northLines.includes(x)) && D.s.every(x => D.southLines.includes(x)), 'and each sheet carries only its own zone\'s numbers: ' + JSON.stringify({ n: D.n, s: D.s }));
 ok(!D.n.some(x => D.southOnly.includes(x)) && !D.s.some(x => D.northOnly.includes(x)), 'nothing that belongs only to the other zone is written on a sheet');
 
 console.log('E. a row opens the sheet of that floor that holds the region');

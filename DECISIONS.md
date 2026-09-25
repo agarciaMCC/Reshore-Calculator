@@ -170,6 +170,7 @@ What the calculator must do. Canonical, versioned with the code; the project doc
 | RES-13 | Print refuses results that no longer match the inputs. | Sep 15 |
 | RES-14 | Results needs a drawing set: with none loaded the Results gate blocks the solve, whatever else is entered by hand. Test fixtures without a PDF use a stand-in sheet. | Sep 24 |
 | RES-15 | EVERY RESULTS TITLE LEADS WITH THE POUR: region and beam cards, the no-shore alert and the print legend and headings read "Roof · 9" Slab – L3 138 PSF – L2 138 PSF (B2)" (the pour in its own pill on screen; a floor named 3 reads L3). NO GRID RANGE IN A TITLE: two patches of one condition are told apart by the shore height where it differs ("· 13'-1" under L3"), then by what else differs, then by a number; the bays stay in the row's small print. Plan labels and keys are unchanged. | Sep 25 |
+| RES-16 | NUMBERS ON THE RESULTS PLAN: regions are numbered 1, 2, 3 … in schedule order and beams B1, B2 …; the number leads the title ("1 Roof · 9" Slab – …") and is the ONLY thing written on the Results plan (no load-path names, the selected region included; its tag lights teal instead). Tags follow ARE-21: inside their own polygon, clear of its holes, shrinking before they spill, never under ~15 px on screen; a region of several separate pieces gets its number on every piece; beams take theirs along the beam; a piece too small is found by color and click. On a floor's tab the tag carries the pattern ("1 · 8×8"). Print snippets carry the number. | Sep 25 |
 
 ## PRT — The printed sheet
 
@@ -299,6 +300,7 @@ What the calculator must do. Canonical, versioned with the code; the project doc
 | Elevations as decimal feet (112.50) | UI-28 | Sep 23 |
 | Region names as grid bays plus carrying mark (1-6 / A-D B2) | RGN-07 | Sep 17 |
 | Grid bays in a region's title to tell two patches apart (· 1-6 / A-D) | RES-15 | Sep 25 |
+| Load-path names written on the Results plan (and the floating label on the selected region) | RES-16 | Sep 25 |
 | Whole-level SOG needs no sheet match | MDL-02 | Sep 15 |
 | Areas list grouped by sheet zone name, sheet on screen first | ARE-03 | Sep 17 |
 | A Slab edge tolerance project setting (default 2 ft) | MDL-11 | Sep 18 |

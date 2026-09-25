@@ -1,4 +1,4 @@
-// @rules RES-15  (see DECISIONS.md)
+// @rules RES-15, RES-16  (see DECISIONS.md)
 // THE POUR LEADS EVERY TITLE. Adolfo, Sep 25 2026: "in the results page, it
 // would be good if it was more obvious what level was pouring. Right now its
 // just a small dropdown option at the top that then disappears as you scroll.
@@ -53,7 +53,7 @@ const cards = await page.evaluate(() => {
 });
 ok(cards.length >= 1, 'there is at least one pour with regions: ' + cards.map(c => c.pour).join(', '));
 for (const c of cards) {
-  ok(c.heads.length && c.heads.every(h => h.startsWith(c.tag + ' · ')), `${c.pour}: every card title starts "${c.tag} · ": ` + JSON.stringify(c.heads.slice(0, 2)));
+  ok(c.heads.length && c.heads.every((h, i) => h.startsWith((i + 1) + ' ' + c.tag + ' · ')), `${c.pour}: every card title starts with its number, then "${c.tag} · ": ` + JSON.stringify(c.heads.slice(0, 2)));
   ok(c.pills.length === c.heads.length && c.pills.every(p => p === c.tag), `${c.pour}: the pour sits in its own pill on every card`);
   ok(c.plain.every(n => !n.startsWith(c.tag + ' · ')), `${c.pour}: the plain region name (plan labels, keys) is unchanged`);
 }
@@ -75,9 +75,9 @@ const other = await page.evaluate(() => {
   const heads = [...html.matchAll(/<h3><span class="sw"[^>]*><\/span>(.*?) &mdash;/g)].map(m => m[1].trim());
   return { tag, ns, cells, heads };
 });
-ok(other.ns.every(n => n.startsWith(other.tag + ' · ')), 'no-shore alert lines lead with the pour: ' + JSON.stringify(other.ns.slice(0, 1)));
-ok(other.cells.length && other.cells.every(n => n.startsWith(other.tag + ' · ')), 'print legend names lead with the pour: ' + JSON.stringify(other.cells.slice(0, 1)));
-ok(other.heads.length && other.heads.every(n => n.startsWith(other.tag + ' · ')), 'print region headings lead with the pour: ' + JSON.stringify(other.heads.slice(0, 1)));
+ok(other.ns.every(n => new RegExp('^B?\\d+ · ' + other.tag + ' · ').test(n)), 'no-shore alert lines lead with the pour: ' + JSON.stringify(other.ns.slice(0, 1)));
+ok(other.cells.length && other.cells.every(n => new RegExp('^\\d+ · ' + other.tag + ' · ').test(n)), 'print legend names lead with the pour: ' + JSON.stringify(other.cells.slice(0, 1)));
+ok(other.heads.length && other.heads.every(n => /^\d+ · /.test(n) && n.includes(' · ' + other.tag + ' · ')), 'print region headings lead with the pour: ' + JSON.stringify(other.heads.slice(0, 1)));
 
 console.log('C. beams too, on the 1175 Bothell job');
 const bothell = path.resolve(here, '..', '1175_Bothell_Stem_4.reshore.json');
@@ -103,7 +103,7 @@ if (fs.existsSync(bothell)) {
     }
     return null;
   });
-  ok(b && b.heads.length && b.heads.every(h => h.startsWith(b.tag + ' · ')), 'beam card titles lead with the pour: ' + JSON.stringify(b && b.heads.slice(0, 1)));
+  ok(b && b.heads.length && b.heads.every((h, i) => h.startsWith('B' + (i + 1) + ' ' + b.tag + ' · ')), 'beam card titles lead with the pour: ' + JSON.stringify(b && b.heads.slice(0, 1)));
   // "remove the grid range in the pour titles" (Sep 25): patches of one
   // condition are told apart by the shore height where it differs
   const r = await p2.evaluate(() => {
@@ -113,6 +113,51 @@ if (fs.existsSync(bothell)) {
   });
   ok(r.length && r.every(h => !/ · \d+-\d+ \/ [A-Z]-[A-Z]/.test(h)), 'no card title carries a grid range: ' + JSON.stringify(r.slice(0, 3)));
   ok(r.some(h => /\(B2\) · 13'-1" under L3$/.test(h)) && r.some(h => /\(B2\) · 13'-9" under L3/.test(h)), 'the B2 patches at different heights are named by the height: ' + JSON.stringify(r.slice(0, 3)));
+  console.log('D. the plan carries numbers, inside their own pieces (RES-16)');
+  const t = await p2.evaluate(() => {
+    const k = schedSolve.levels.findIndex(L => L.pour.name === 'Roof');
+    schedPourIdx = k; state.ui.resultsFloor = null; renderSchedule();
+    const L = schedSolve.levels[k], lv = state.levels.find(l => l.id === (L.pour.defId || L.pour.id));
+    const T = screenTransform(lv);
+    const out = resTagLayout(lv, L, T, null, 1);
+    const inside = out.filter(o => o.kind === 'region').every(o => {
+      const r = L.solve.regions[o.ri];
+      return resRingsOf(r.mp, T).some(([outer, ...holes]) => adRingInside(o.p.r, outer) && holes.every(h => !adRingsOverlap(o.p.r, h)));
+    });
+    const texts = out.map(o => o.p.t);
+    const multi = L.solve.regions.map((r, ri) => ({ ri, pieces: resRingsOf(r.mp, T).length, tags: out.filter(o => o.kind === 'region' && o.ri === ri).length }));
+    // nothing long is written on the plan, the selected region included
+    const said = [];
+    const ft = drawCtx.fillText, st = drawCtx.strokeText;
+    drawCtx.fillText = function (txt) { said.push(String(txt)); return ft.apply(this, arguments); };
+    drawCtx.strokeText = function (txt) { said.push(String(txt)); return st.apply(this, arguments); };
+    const r0 = L.solve.regions[0];
+    setResultHighlight({ cells: r0.cells, step: r0.cellStep, bb: r0.bb, label: regionLabel(r0, 0, L), regionKey: r0.key, pour: L.pour.name });
+    renderNow();
+    drawCtx.fillText = ft; drawCtx.strokeText = st;
+    setResultHighlight(null);
+    return { n: out.length, texts, inside, multi, long: said.filter(x => / Slab – /.test(x)), beams: out.filter(o => o.kind === 'beam').length };
+  });
+  ok(t.n > 0 && t.texts.every(x => /^B?\d+( · .+)?$/.test(x)), 'every tag is a number (beams B1, B2 …): ' + JSON.stringify(t.texts.slice(0, 8)));
+  ok(t.inside, 'every region tag sits inside its own piece and clear of the holes cut in it');
+  ok(t.long.length === 0, 'no load-path name is written on the plan, the selected region included: ' + JSON.stringify(t.long.slice(0, 1)));
+  ok(t.multi.every(m => m.tags <= m.pieces), 'never more tags than pieces');
+  ok(t.multi.filter(m => m.pieces > 1).every(m => m.tags >= 1), 'a region of several pieces is tagged: ' + JSON.stringify(t.multi));
+  ok(t.beams > 0, 'beams carry their numbers along the beam: ' + t.beams);
+  await p2.evaluate(() => {
+    const k = schedSolve.levels.findIndex(L => L.pour.name === 'Roof');
+    const L = schedSolve.levels[k];
+    const f = resultsTabFloors(L)[0]; if (f) setResultsFloor(L, f.key);
+  });
+  await p2.waitForTimeout(2500);
+  const tab = await p2.evaluate(() => {
+    const L = schedSolve.levels[schedPourIdx];
+    renderNow();
+    const lv = getActiveLevel();
+    const out = resTagLayout(lv, L, screenTransform(lv), resultsFloor(L), 1);
+    return out.map(o => o.p.t);
+  });
+  ok(tab && tab.length && tab.every(x => /^\d+( · .+)?$/.test(x)) && tab.some(x => / · /.test(x)), "on a floor's tab the tag carries the pattern: " + JSON.stringify(tab && tab.slice(0, 4)));
   await p2.close();
 } else console.log('  (1175 job not in this checkout, skipped)');
 

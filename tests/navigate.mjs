@@ -1,4 +1,4 @@
-// @rules RES-02, RES-03  (see DECISIONS.md)
+// @rules RES-02, RES-03, RES-16  (see DECISIONS.md)
 // READING THE RESULTS (Sep 18 2026)
 // Adolfo: "we need a much easier way to navigate/interpret results." Chose:
 // floor tabs with the plan shaded by pattern, one-line region cards, and a
@@ -123,7 +123,7 @@ const B = await page.evaluate(async () => {
   const painted = [...fills].map(x => x.toLowerCase());
   return { key: f.key, name: f.name, zone: f.zone, page: state.pdf.current, onFloorSheet: levelHasPage(lv, state.pdf.current) && lv.name === f.name,
     legend: !!legend, lgItems, nCards: cards.length, allOnTab, activeChips: activeChips.filter(a => a.length).length, rows,
-    patColours, paintedPat: patColours.filter(pc => painted.includes(pc)).length, labels: t.filter(x => /^\d+×\d+$/.test(x) || /pick shore/.test(x)).length,
+    patColours, paintedPat: patColours.filter(pc => painted.includes(pc)).length, labels: t.filter(x => /^\d+ · (\d+×\d+|pick shore)/.test(x)).length,   // RES-16: "1 · 8×8" on the number tag
     tabActive: document.querySelector('.rs-tab.active').dataset.rsf };
 });
 console.log('   ' + JSON.stringify({ tab: B.key, page: B.page, legend: B.lgItems, cards: B.nCards, rows: B.rows, painted: B.paintedPat + '/' + B.patColours.length, labels: B.labels }));
@@ -134,7 +134,7 @@ ok(B.nCards > 0 && B.allOnTab, `the cards are the regions over this floor in thi
 ok(B.activeChips === B.nCards, 'each card has this floor\'s chip marked active');
 ok(B.rows.length === 1 && new RegExp('under ' + B.name).test(B.rows[0]), 'an opened card shows this floor\'s row alone: ' + JSON.stringify(B.rows));
 ok(B.paintedPat >= 1, 'the plan is shaded in the legend\'s pattern colors: ' + B.paintedPat + ' of ' + B.patColours.length);
-ok(B.labels > 0, 'with the pattern written on the regions that have room: ' + B.labels);
+ok(B.labels > 0, 'with the pattern on each region\'s number tag where it has room: ' + B.labels);
 
 console.log('D. Next through the outstanding rows');
 const D = await page.evaluate(async () => {
