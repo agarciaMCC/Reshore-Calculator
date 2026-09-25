@@ -1,4 +1,4 @@
-// @rules MDL-01, MDL-06  (see DECISIONS.md)
+// @rules MDL-01, MDL-06, MDL-19  (see DECISIONS.md)
 // THE McCLONE SEQUENCE ITSELF. Not ACI: find the slab loading conditions, turn
 // them into capacities, take the floor-to-ceiling heights, run the resultant
 // load floor by floor, pick a shore by height and capacity, and that pick
@@ -164,7 +164,8 @@ ok(E.loadGate.includes('loads'), 'and on a load schedule: ' + E.loadGate.join(',
 console.log('F. change the condition and the grid changes with it');
 await build({ sdl: 25, ll: 40, reducible: false });   // 74 PSF: 130 -> 56 -> absorbed
 r = await solve();
-ok(r.steps[0].res === 56 && r.steps[1].res < 0 && r.reshore === 1, 'unreduced, 74 PSF floors: 56 under L3 and L2 absorbs it: ' + JSON.stringify(r.steps.map(s => s.res)));
+// MDL-19 (Sep 25): one level needed, so the absorbing floor gets the minimum second level
+ok(r.steps[0].res === 56 && r.steps[1].res < 0 && r.reshore === 2, 'unreduced, 74 PSF floors: 56 under L3, L2 absorbs it and takes the minimum second level: ' + JSON.stringify(r.steps.map(s => s.res)));
 const f = r.steps[0].opts.find(o => o.shore === '6-6 Ellis');
 ok(f && f.pattern === '8×10' && f.spacing === 8, '5400/56 = 96 SF opens the grid to 8x10 (80 fits, 100 does not): ' + JSON.stringify(f));
 await build({ sdl: 25, ll: 100, reducible: false });  // 148 PSF: everything absorbed at L3

@@ -1,4 +1,4 @@
-// @rules RGN-07, RGN-08, RES-09, RES-15, RES-16  (see DECISIONS.md)
+// @rules RGN-07, RGN-08, RES-09, RES-15, RES-16, MDL-19  (see DECISIONS.md)
 // How regions are designated: a name that IS the load path — the pour's slab
 // thickness, then each floor below with its capacity (Adolfo, Sep 17 2026:
 // "Slab Thickness - Level below load capacity - Level below that load
@@ -78,11 +78,13 @@ const e2 = roof.find(r => near(r.sf, 615, 60));
 // RES-15 (Sep 25): "remove the grid range in the pour titles". The bays no
 // longer tell two patches apart in the name; they move to the row's small
 // print, and the patches are numbered (a height differing would name it).
-ok(west && /^9" Slab – L3 138 PSF – L2 138 PSF \(B2\)$/.test(west.name), 'the west patch of the B2 condition carries no grid bays in its name: ' + JSON.stringify(roof.map(r => [r.name, r.sf])));
-ok(east && /^9" Slab – L3 138 PSF – L2 138 PSF \(B2\) \(\d\)$/.test(east.name), 'the east patch is told apart by a number, not its bays: ' + (east && east.name));
+// MDL-19 (Sep 25): one level is needed here, so L2 gets the minimum second
+// level and the name goes on to what it stands on
+ok(west && /^9" Slab – L3 138 PSF – L2 138 PSF – L1 SOG \(B2\)$/.test(west.name), 'the west patch of the B2 condition carries no grid bays in its name: ' + JSON.stringify(roof.map(r => [r.name, r.sf])));
+ok(east && /^9" Slab – L3 138 PSF – L2 138 PSF – L1 138 PSF$/.test(east.name), 'the east patch is told apart by what its second level stands on, not its bays: ' + (east && east.name));
 ok(roof.every(r => !/ · \d+-\d+ \/ [A-Z]-[A-Z]/.test(r.name)), 'no region name carries a grid range');
 ok(west && /^1-6 \/ A-D$/.test(west.grid || '') && east && /^[4-6]-10 \/ A-D$/.test(east.grid || ''), 'the bays are still worked out for the small print: ' + (west && west.grid) + ' / ' + (east && east.grid));
-ok(e2 && /^9" Slab – L3 125 PSF – L2 138 PSF$/.test(e2.name), 'the E2 cutout has its own numbers, so no mark or bays are needed: ' + (e2 && e2.name));
+ok(e2 && /^9" Slab – L3 125 PSF – L2 138 PSF – L1 SOG$/.test(e2.name), 'the E2 cutout has its own numbers, so no mark or bays are needed: ' + (e2 && e2.name));
 ok(roof.some(r => /\(C2\)$/.test(r.name)), 'the C2 region, same numbers as B2, carries its mark in brackets: ' + JSON.stringify(roof.map(r => r.name)));
 ok(new Set(roof.map(r => r.name)).size === roof.length, 'names are unique within the placement: ' + JSON.stringify(roof.map(r => r.name)));
 ok(new Set(roof.map(r => r.color)).size === roof.length, 'so are the colors: ' + JSON.stringify(roof.map(r => r.color)));

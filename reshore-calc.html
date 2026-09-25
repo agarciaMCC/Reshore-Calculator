@@ -771,6 +771,8 @@ input[readonly],input.derived{background:var(--derived-bg);color:var(--text-seco
 .ra-thru{grid-column:1/4;font-size:var(--fs-sm);color:var(--danger);margin-top:2px}
 /* MDL-18: stiff shore on slab on grade — wood pad required. Amber, not red: a
    field condition to install, not a doubt about the answer. */
+.ra-min{grid-column:1/4;font-size:var(--fs-sm);font-weight:700;color:var(--text-secondary);margin-top:2px}
+.ra-minres{color:var(--text-secondary);font-weight:700}
 .ra-pad{grid-column:1/4;font-size:var(--fs-sm);color:var(--warn,#d99a1c);margin-top:2px}
 .ra-row.pad{border-left:3px solid var(--warn,#d99a1c)}
 .pat-chip.pad{box-shadow:0 0 0 1px var(--warn,#d99a1c) inset}
@@ -12984,6 +12986,17 @@ function zoneAt(list,x,y){
 
 // Deliberately does NOT choose. Several shores are usually legal and the
 // pick is an equipment call, so the app lists them and the schedule asks.
+// MDL-19: the forced second level carries nothing the math asks for, so it
+// goes in at the loosest pattern the catalog allows (Adolfo, Sep 25: "loosest
+// pattern"), with any shore that reaches the height.
+function shoreOptionsForMin(heightFt,shores){
+  const loose=GRID_PATTERNS[GRID_PATTERNS.length-1];
+  return eligibleShores(heightFt,shores).map(s=>({shoreId:s.id,shore:s,capacityAtHeight:interpCapacity(s,heightFt),
+    sfPerShore:loose.area,pattern:loose.name,spacing:patternSpacingFt(loose.name),timber:isTimberShore(s),minLevel:true}));
+}
+// Does this row put shores in? A load the floor cannot take, or the second
+// level MDL-19 adds where one level would do.
+function stNeeds(st){return !!(st&&!st.open&&!st.grade&&(st.resultant>0||st.minLevel))}
 function shoreOptionsFor(heightFt,resultantPsf,shores){
   const eligible=eligibleShores(heightFt,shores);
   const r=resultantPsf>0?resultantPsf:0;
@@ -13015,7 +13028,7 @@ function throughOk(){
   if(!state.project.throughOk)state.project.throughOk={};
   return state.project.throughOk;
 }
-function isThrough(st){return !!(st&&!st.open&&!st.grade&&st.resultant>0&&st.spansOpen>0&&st.supportLevel)}
+function isThrough(st){return !!(st&&!st.open&&!st.grade&&stNeeds(st)&&st.spansOpen>0&&st.supportLevel)}
 function throughAccepted(key){return !!throughOk()[key]}
 // the open floors a through-shore passes: the steps between this one and its support
 function throughPassed(r,st){
@@ -13055,7 +13068,7 @@ function setThroughOk(key,on){
 // pad note on its row, on the install summary and on the printed sheet. It
 // is a field condition, not an OK to press away — the note stays.
 const PAD_SPEC='two layers of 3/4" plywood (1-1/2" min), 12"×12" or larger';
-function needsPad(st){return !!(st&&!st.open&&!st.grade&&st.resultant>0&&st.onGrade&&st.chosen&&!st.chosen.timber)}
+function needsPad(st){return !!(st&&!st.open&&!st.grade&&stNeeds(st)&&st.onGrade&&st.chosen&&!st.chosen.timber)}
 function beamNeedsPad(row){return !!(row&&!row.open&&!row.grade&&row.beamNet>0&&row.onGrade&&row.beamChosen&&!row.beamChosen.timber)}
 function padText(shoreName,onName){return `${shoreName} is a stiff shore standing on slab on grade${onName?` (${onName})`:''}: set every base on a wood pad — ${PAD_SPEC} — so the slabs above can deflect and share the load. Without the pad the slabs are held flat and the shores carry the full stack to grade.`}
 function padItems(L){
@@ -13143,13 +13156,34 @@ function cascadeAtPoint(stack,pourIdx,thickIn,dl,shores){
                 ...(sloped&&hMinFt!=null&&hFt!=null&&Math.abs(hFt-hMinFt)>=1/24?{shoreHeightMinFt:hMinFt,sloped:true}:{}),
                 spansOpen:sup?sj-j-1:0,
                 options:(needShores&&hFt!=null)?shoreOptionsFor(hFt,Math.max(resultant,0),shores):[]});
-    if(resultant<=0){remaining=0;break}
+    if(resultant<=0){
+      // MDL-19: MINIMUM 2 LEVELS OF RESHORE. Adolfo, Sep 25 2026: "if only one
+      // level of reshore is required, we would default to 2 levels (except
+      // where not possible when reshore goes to slab on grade) as a safety
+      // measure since slabs are still pretty green when we pour on top of
+      // them." So where the first level of shores is the only one the load
+      // needs, the floor that absorbs it gets a row of its own as well, at
+      // the loosest pattern — unless there is nothing under it to stand on.
+      // (A floor on grade has already ended the loop above.) Slabs only:
+      // beams keep their own chain (BEM-01).
+      if(reshore===1&&sup){
+        const st=steps[steps.length-1];
+        const h2=shoreHeightUnder(lv,sup,sl.soffitIn!=null?sl.soffitIn:sl.thick,sl.off,(supSl.offLow!=null?supSl.offLow:supSl.off)||0);
+        if(h2!=null){
+          st.minLevel=true;st.shoreHeightFt=h2;
+          if(sloped){const h2m=shoreHeightUnder(lv,sup,sl.soffitIn!=null?sl.soffitIn:sl.thick,sl.offLow!=null?sl.offLow:sl.off,supSl.off||0);
+            if(h2m!=null&&Math.abs(h2-h2m)>=1/24){st.shoreHeightMinFt=h2m;st.sloped=true}}
+          st.options=shoreOptionsForMin(h2,shores);
+        }
+      }
+      remaining=0;break;
+    }
     remaining=resultant;
     reshore++;
     if(!sup)break;                      // nothing below to stand on
   }
   return{placementLoad:pLoad,steps,
-         reshoreLevels:steps.filter(s=>!s.open&&s.resultant>0).length,
+         reshoreLevels:steps.filter(stNeeds).length,
          unresolved:remaining>0};
 }
 
@@ -13995,6 +14029,10 @@ function solvePourLevel(stack,pourIdx,opts){
     const last=res.steps[res.steps.length-1];
     if(!last)return true;
     if(last.grade)return true;
+    // absorbed, and nothing stands under it — unless MDL-19 will put a second
+    // level there, which needs the floor it stands on read as well
+    const wantsMin=!last.open&&!(last.resultant>0)&&res.steps.filter(x=>!x.open&&x.resultant>0).length===1;
+    if(!stNeeds(last)&&!wantsMin)return true;
     return last.supportIdx!=null&&last.supportIdx>=0&&last.supportIdx<=k;
   };
   const rawPieces=exactPartition(readMP,belowLevels,slabLists,capLists,settledBy);
@@ -14077,7 +14115,12 @@ function solvePourLevel(stack,pourIdx,opts){
     let depth=belowLevels.length-1;
     if(!res.unresolved&&res.steps.length){
       const last=res.steps[res.steps.length-1];
-      depth=Math.max(last.levelIdx,(last.supportIdx!=null&&last.supportIdx>=0)?last.supportIdx:last.levelIdx);
+      // the floor the last shores stand on counts only where shores go in:
+      // a floor that absorbs the load (and gets no MDL-19 row) stands on
+      // nothing, so what is under it cannot split a region (Sep 25, Adolfo:
+      // regions that match down to where the load is absorbed are one)
+      const stands=stNeeds(last)&&last.supportIdx!=null&&last.supportIdx>=0;
+      depth=Math.max(last.levelIdx,stands?last.supportIdx:last.levelIdx);
     }
     const key=sig.slice(0,depth+1).join('|');
     let reg=regions.get(key);
@@ -14085,7 +14128,7 @@ function solvePourLevel(stack,pourIdx,opts){
       reg={key,thicknessIn:thick,slabZone:slabZ&&slabZ.zone,
            openBelow:res.steps.some(s=>s.open),
            toGrade:res.steps.some(s=>s.grade&&s.remaining>0),
-           loadingMarks:new Set(),caps:sig.slice(1,depth+1),stepCodes:{},edgeSamples:0,
+           loadingMarks:new Set(),caps:sig.slice(1,depth+1),levelNames:belowLevels.map(l=>l.name),stepCodes:{},edgeSamples:0,
            placementLoad:res.placementLoad,steps:res.steps,
            reshoreLevels:res.reshoreLevels,unresolved:res.unresolved,
            samples:0,cells:[],cellStep:step,mp:null,areaSF:0,edgeSF:0,
@@ -14181,7 +14224,7 @@ function solvePourLevel(stack,pourIdx,opts){
       const codes=r.stepCodes[s.levelIdx];
       return{...s,choiceKey:key,chosen,
              code:codes&&codes.size?[...codes].sort(markSort).join(' / '):null,
-             noOptions:s.resultant>0&&s.options.length===0};
+             noOptions:(s.resultant>0||s.minLevel)&&s.options.length===0};
     })
   })).sort((a,b)=>b.areaSF-a.areaSF);
   out.forEach((r,i)=>{r.index=i});
@@ -14247,7 +14290,7 @@ function solvePourLevel(stack,pourIdx,opts){
   // identical beams share a row (Adolfo, Sep 18 2026) — see groupBeamItems
   const beams=groupBeamItems(rawBeams,pour.name,shores,step);
 
-  const needChoice=out.reduce((n,r)=>n+r.steps.filter(s=>s.resultant>0&&!s.chosen&&s.options.length).length,0)
+  const needChoice=out.reduce((n,r)=>n+r.steps.filter(s=>stNeeds(s)&&!s.chosen&&s.options.length).length,0)
                   +beams.reduce((n,b)=>n+b.rows.filter(r=>r.beamKey&&r.beamNet>0&&!r.beamChosen&&r.options.length).length,0);
   return{spatial:true,step,exact:true,pieces:pieces.length,sampled,
          // Legacy sample COUNTS. The exact model measures area, so these are
@@ -14370,7 +14413,7 @@ function regroupBeamsOf(L){
   const s=L.solve;
   s.beams=groupBeamItems(s.rawBeams,L.pour.name,state.shores,s.step||SOLVE_STEP_FT);
   L._beamNames=null;
-  s.pendingChoices=s.regions.reduce((n,r)=>n+r.steps.filter(x=>x.resultant>0&&!x.chosen&&x.options.length).length,0)
+  s.pendingChoices=s.regions.reduce((n,r)=>n+r.steps.filter(x=>stNeeds(x)&&!x.chosen&&x.options.length).length,0)
                   +s.beams.reduce((n,b)=>n+b.rows.filter(r=>r.beamKey&&r.beamNet>0&&!r.beamChosen&&r.options.length).length,0);
   s.anyUnresolved=s.regions.some(r=>r.unresolved)||s.beams.some(b=>b.beamUnresolved);
   s.noShoreRows=s.regions.reduce((n,r)=>n+r.steps.filter(x=>x.noOptions).length,0)+s.beams.reduce((n,b)=>n+b.rows.filter(r=>r.noOptions).length,0);
@@ -14545,7 +14588,22 @@ function pathStepName(st){
   return `${nm} ${capText(st.capacity)} PSF`;
 }
 function regionPathName(r){
-  return `${inchStr(r.thicknessIn)} Slab – `+(r.steps||[]).map(pathStepName).join(' – ');
+  const steps=r.steps||[];
+  // MDL-19: where the last floor gets the minimum second level, the floor
+  // those shores stand on is part of the condition too (on grade needs a pad)
+  const last=steps[steps.length-1];
+  let tail='';
+  if(last&&last.minLevel&&last.supportLevel){
+    // any open floors the second level passes, then the floor it stands on
+    const caps=r.caps||[];
+    for(let k=last.levelIdx+1;k<last.supportIdx;k++){
+      const c=caps[k-1];if(c==='open'||c==='none')tail+=` – ${levelTagName(r.levelNames&&r.levelNames[k]||'?')} ${c==='none'?'no slab':'opening'}`;
+    }
+    const nm=levelTagName(last.supportLevel.name);
+    const c=caps[last.supportIdx-1];
+    tail+=last.onGrade?` – ${nm} SOG`:(c!=null&&/^[\d.]+/.test(String(c))?` – ${nm} ${capText(parseFloat(c))} PSF`:` – ${nm}`);
+  }
+  return `${inchStr(r.thicknessIn)} Slab – `+steps.map(pathStepName).join(' – ')+tail;
 }
 function regionDerivedNames(L){
   const regs=(L&&L.solve&&L.solve.regions)||[];
@@ -14676,7 +14734,7 @@ function pourInstallPlan(L){
       f.levelIdx=Math.min(f.levelIdx,st.levelIdx);
       if(st.open){f.openSF+=r.areaSF;continue}
       if(st.grade){f.gradeSF+=r.areaSF;f.gradePsf=Math.max(f.gradePsf,st.remaining||0);continue}
-      if(!(st.resultant>0)){f.absorbedSF+=r.areaSF;continue}
+      if(!stNeeds(st)){f.absorbedSF+=r.areaSF;continue}
       f.rowCount++;
       if(st.shoreHeightFt!=null)f.heights.add(Math.round(st.shoreHeightFt*100)/100);
       const pat=st.chosen?st.chosen.pattern:null;
@@ -14737,7 +14795,7 @@ function bulkRowsFor(scope,L,floorName){
   const addPour=LL=>{
     if(!LL||!LL.solve||!LL.solve.spatial)return;
     for(const r of LL.solve.regions)for(const st of r.steps){
-      if(st.open||st.grade||!(st.resultant>0)||!st.options.length)continue;
+      if(st.open||st.grade||!stNeeds(st)||!st.options.length)continue;
       if(floorName&&st.level.name!==floorName)continue;
       rows.push({key:st.choiceKey,options:st.options,chosen:st.chosen,floor:st.level.name,kind:'slab'});
     }
@@ -14904,7 +14962,7 @@ function laterPatternMap(L,floorName){
   for(const LL of laterPlacements(L)){
     for(const rr of LL.solve.regions){
       const st=rr.steps.find(x=>x.level&&x.level.name===floorName);
-      if(!st||st.open||st.grade||!(st.resultant>0)||!st.chosen)continue;
+      if(!st||st.open||st.grade||!stNeeds(st)||!st.chosen)continue;
       const pa=patternArea(st.chosen.pattern);
       for(let i=0;i<rr.cells.length;i+=2){
         const k=ck(rr.cells[i],rr.cells[i+1]),cur=map.get(k);
@@ -14917,7 +14975,7 @@ function laterPatternMap(L,floorName){
 // Does a later pour need the reshoring under this step's floor tighter on
 // this region's ground? {pattern, pour, sf, cells} or null.
 function laterGoverns(L,r,st){
-  if(!L||!r||!st||!st.chosen||st.open||st.grade||!(st.resultant>0))return null;
+  if(!L||!r||!st||!st.chosen||st.open||st.grade||!stNeeds(st))return null;
   const key=st.choiceKey||(st.level.name+'|'+r.key);
   const cache=r._later||(r._later={});
   if(key in cache)return cache[key];
@@ -14973,7 +15031,7 @@ function floorStateAt(r,f){
   if(!st)return {kind:'none'};
   if(st.grade)return {kind:'grade',st};
   if(st.open)return {kind:st.noSlab?'noslab':'open',st};
-  if(!(st.resultant>0))return {kind:'absorbed',st};
+  if(!stNeeds(st))return {kind:'absorbed',st};
   if(!st.chosen)return {kind:st.options&&st.options.length?'pending':'nofit',st};
   return {kind:'pattern',pattern:st.chosen.pattern,shore:st.chosen.shore.name,st};
 }
@@ -15104,7 +15162,7 @@ function outstandingItems(L){
   s.regions.forEach((r,ri)=>{
     const z=zoned?zi(regionZonePage(r,L)):0;
     r.steps.forEach((st,si)=>{
-      if(st.open||st.grade||!(st.resultant>0)||!st.options||!st.options.length||st.chosen)return;
+      if(st.open||st.grade||!stNeeds(st)||!st.options||!st.options.length||st.chosen)return;
       out.push({kind:'slab',ri,si,key:st.choiceKey,level:st.level,ord:z*1e6+ri*100+si,region:r,
                 floorKey:zoned?`${st.level.name}|${regionZonePage(r,L)}`:st.level.name,label:regionLabel(r,ri,L)});
     });
@@ -15378,11 +15436,11 @@ function renderSchedule(){
         st.capacity!=null&&!st.grade?`${st.capacity} PSF capacity`:''}"><span class="ra-u">under</span> ${esc(st.level.name)}</div>`;
       if(st.grade)return`<div class="ra-row quiet sched-go" ${rowAttr}>${fl}<div class="ra-msg">on grade — absorbs the remaining ${st.remaining.toFixed(1)} PSF, nothing below</div></div>`;
       if(st.open)return`<div class="ra-row quiet sched-go" ${rowAttr}>${fl}<div class="ra-msg">${st.noSlab?`${esc(st.level.name)} has no slab here, so there is nothing to reshore against — ${passes}`:`opening — the shore above spans past this floor; ${passes}`}</div></div>`;
-      if(st.resultant<=0)return`<div class="ra-row quiet sched-go" ${rowAttr}>${fl}<div class="ra-msg">absorbed — no shores needed under ${esc(st.level.name)}</div></div>`;
+      if(st.resultant<=0&&!st.minLevel)return`<div class="ra-row quiet sched-go" ${rowAttr}>${fl}<div class="ra-msg">absorbed — no shores needed under ${esc(st.level.name)}</div></div>`;
       const ch=st.chosen;
       const opts=st.options.map(o=>
         `<option value="${o.shoreId}"${ch&&ch.shoreId===o.shoreId?' selected':''}>`
-        +`${esc(o.shore.name)} — ${o.capacityAtHeight.toLocaleString()} lb → ${Math.round(o.sfPerShore)} SF → ${o.pattern}</option>`).join('');
+        +`${esc(o.shore.name)} — ${o.capacityAtHeight.toLocaleString()} lb → ${o.minLevel?o.pattern+' (minimum level)':Math.round(o.sfPerShore)+' SF → '+o.pattern}</option>`).join('');
       const pick=st.options.length
         ? `<select class="sched-shore" data-key="${esc(st.choiceKey)}">
              <option value="">— choose (${st.options.length} legal) —</option>${opts}</select>`
@@ -15400,13 +15458,13 @@ function renderSchedule(){
       const pad=needsPad(st);
       const padHtml=pad?`<div class="ra-pad">\u26a0 <b>Wood pad required under every ${esc(ch.shore.name)} base</b> \u2014 ${esc(padText(ch.shore.name,st.supportLevel&&st.supportLevel.name))}</div>`:'';
       return`<div class="ra-row${ch?'':' pend'}${thru&&!thruOk?' thru':''}${shortEnd?' thru':''}${pad?' pad':''} sched-go" ${rowAttr}>${fl}
-        <div class="ra-res" title="${st.capacity} PSF capacity taken off what arrives"><b>${st.resultant.toFixed(1)}</b> psf</div>
+        ${st.minLevel?`<div class="ra-res ra-minres" title="The load is absorbed at this floor; this is the second of the minimum two levels">min.</div>`:`<div class="ra-res" title="${st.capacity} PSF capacity taken off what arrives"><b>${st.resultant.toFixed(1)}</b> psf</div>`}
         <div class="ra-pick">
           <span class="rs-dim${thru?' rs-thru':''}${st.sloped?' rs-slope':''}" title="${st.supportLevel?`stands on ${esc(st.supportLevel.name)}${st.spansOpen?` through ${st.spansOpen} open floor${st.spansOpen>1?'s':''}`:''}`:'nothing below to stand on'}${st.sloped?` \u00b7 sloped: ${esc(feetToStr(st.shoreHeightMinFt))} at the low end, ${esc(feetToStr(st.shoreHeightFt))} at the high \u2014 the tallest governs`:''}">${
             esc(shoreHeightText(st))}${st.sloped?' <i class="rs-ramp" title="ramp \u2014 the shore height runs through this range">ramp</i>':''}${thru?' \u2193'+esc(st.supportLevel.name):''}</span>
           ${pick}
           ${ch?`<span class="rs-pat" title="${Math.round(ch.sfPerShore)} SF per shore">${esc(ch.pattern)}</span>`:''}
-        </div>${laterHtml}${thruHtml}${slopeHtml}${padHtml}</div>`;
+        </div>${st.minLevel?'<div class="ra-min">minimum 2 levels of reshore required</div>':''}${laterHtml}${thruHtml}${slopeHtml}${padHtml}</div>`;
     }).join('');
     const rows=r.steps.map(st=>{
       const rowAttr=`data-ri="${ri}" data-lv="${defIdxOf(st.level)}" title="Show this region on ${esc(st.level.name)}'s sheet"`;
@@ -15420,7 +15478,7 @@ function renderSchedule(){
           <td>${esc(st.level.name)}</td><td>—</td><td>—</td>
           <td>${st.resultant.toFixed(1)}</td><td colspan="4">${st.noSlab?'no slab here — outside this floor\'s floor edge; load passes through':'opening — no slab here, load passes through'}</td></tr>`;
       }
-      if(st.resultant<=0){
+      if(st.resultant<=0&&!st.minLevel){
         return `<tr class="sched-absorbed sched-go" ${rowAttr}>
           <td>${esc(st.level.name)}</td><td>${st.code?esc(st.code):'—'}</td><td>${st.capacity}</td>
           <td>${st.resultant.toFixed(1)}</td><td colspan="4">absorbed — no shores needed here</td></tr>`;
@@ -15431,7 +15489,7 @@ function renderSchedule(){
         <td>${esc(st.level.name)}</td>
         <td>${st.code?esc(st.code):'—'}</td>
         <td>${st.capacity}</td>
-        <td><b>${st.resultant.toFixed(1)}</b></td>
+        <td>${st.minLevel?'<span class="lm-dim">minimum 2 levels of reshore required</span>':`<b>${st.resultant.toFixed(1)}</b>`}</td>
         <td title="${standsOn}${st.sloped?` · sloped: ${esc(feetToStr(st.shoreHeightMinFt))} at the low end — the tallest governs`:''}">${shoreHeightText(st)}${st.spansOpen?` <span class="lm-dim">↓${esc(st.supportLevel.name)}</span>`:''}</td>
         <td>${ch?esc(ch.shore.name)+' · '+ch.capacityAtHeight.toLocaleString()+' lb'+(needsPad(st)?` <span class="lm-warn" title="${esc(padText(ch.shore.name,st.supportLevel&&st.supportLevel.name))}">+ wood pad</span>`:'')
           :(st.options.length?`<span class="lm-warn">not chosen — ${st.options.length} legal above</span>`
@@ -15817,7 +15875,7 @@ function loadPathSvg(r,L){
   const pour=L.pour;
   const parts=[];
   let y=34;
-  const hs=r.steps.filter(st=>!st.open&&!st.grade&&st.resultant>0&&st.shoreHeightFt!=null).map(st=>st.shoreHeightFt);
+  const hs=r.steps.filter(st=>!st.open&&!st.grade&&stNeeds(st)&&st.shoreHeightFt!=null).map(st=>st.shoreHeightFt);
   const hRange=hs.length?(Math.min(...hs)===Math.max(...hs)?feetToStr(hs[0]):`${feetToStr(Math.min(...hs))} – ${feetToStr(Math.max(...hs))}`):null;
   parts.push(`<text x="${D.W/2}" y="20" text-anchor="middle" class="dg-title">${esc(`${pour.name} ${inchStr(r.thicknessIn)} slab placement — ${regionLabel(r,r.index)}${hRange?` (${hRange} shore height)`:''}`)}</text>`);
   // pour bar
@@ -15829,7 +15887,7 @@ function loadPathSvg(r,L){
   const steps=r.steps;
   for(let i=0;i<steps.length;i++){
     const st=steps[i];
-    const needShore=!st.open&&!st.grade&&st.resultant>0;
+    const needShore=!st.open&&!st.grade&&stNeeds(st);
     const gap=pendingShore?D.gapShore:(needShore||st.grade?D.gapPlain:D.gapPlain);
     // the gap ABOVE this floor's bar: arrow with the load arriving; if a shore
     // from above is pending it is drawn when we reach its support (below)
@@ -15862,7 +15920,7 @@ function loadPathSvg(r,L){
     }
     const code=st.code?`${st.code} · `:'';
     if(st.resultant<=0){
-      parts.push(diagBar(barY,`${st.level.name} (${code}${st.capacity} psf capacity)`,`absorbed — ${st.remaining.toFixed(1)} − ${st.capacity} = ${st.resultant.toFixed(1)} PSF · no shores`));
+      parts.push(diagBar(barY,`${st.level.name} (${code}${st.capacity} psf capacity)`,`absorbed — ${st.remaining.toFixed(1)} − ${st.capacity} = ${st.resultant.toFixed(1)} PSF · ${st.minLevel?'minimum 2 levels of reshore required'+(st.chosen?' ('+st.chosen.pattern+')':''):'no shores'}`));
       y=barY;break;
     }
     parts.push(diagBar(barY,`${st.level.name} (${code}${st.capacity} psf capacity)`,''));
@@ -16053,7 +16111,7 @@ function sequencePlan(all){
     const own=new Map();      // floor name -> {level, maxRes, sp, pending, areaSF}
     for(const r of s.regions){
       for(const st of r.steps){
-        if(st.open||st.grade||!(st.resultant>0))continue;
+        if(st.open||st.grade||!stNeeds(st))continue;
         const f=F(st.level);
         if(!f.pours.includes(P.pour.name))f.pours.push(P.pour.name);
         if(st.shoreHeightFt!=null)f.heights.add(Math.round(st.shoreHeightFt*100)/100);
@@ -16425,12 +16483,12 @@ function printSchedule(){
       }).join('')}</tbody></table>`:'';
   const rows=s.spatial?(s.regions.map((r,ri)=>{
     const gradeStep=r.steps.find(st=>st.grade);
-    const body=r.steps.filter(st=>!st.open&&!st.grade&&st.resultant>0).map(st=>`<tr>
-      <td>${esc(st.level.name)}${st.spansOpen?` <small>(stands on ${esc(st.supportLevel.name)})</small>`:''}</td><td>${st.code?esc(st.code):'—'}</td><td>${st.capacity}</td><td>${st.resultant.toFixed(1)}</td>
+    const body=r.steps.filter(st=>!st.open&&!st.grade&&stNeeds(st)).map(st=>`<tr>
+      <td>${esc(st.level.name)}${st.spansOpen?` <small>(stands on ${esc(st.supportLevel.name)})</small>`:''}</td><td>${st.code?esc(st.code):'—'}</td><td>${st.capacity}</td><td>${st.minLevel?'<i>minimum 2 levels of reshore required</i>':st.resultant.toFixed(1)}</td>
       <td>${st.shoreHeightFt!=null?feetToStr(st.shoreHeightFt):'—'}</td>
       <td>${st.chosen?esc(st.chosen.shore.name):'<i>not chosen</i>'}${needsPad(st)?' <b>+ wood pad</b>':''}</td>
       <td>${st.chosen?st.chosen.capacityAtHeight.toLocaleString():'—'}</td>
-      <td>${st.chosen?Math.round(st.chosen.sfPerShore):'—'}</td>
+      <td>${st.chosen&&!st.minLevel?Math.round(st.chosen.sfPerShore):'—'}</td>
       <td><b>${st.chosen?st.chosen.pattern:'—'}</b></td></tr>`).join('');
     return `<h3><span class="sw" style="background:${regionColorCss(regionColorIdx(r,ri,L),1)}"></span>${esc(pourTitle(L,regionLabel(r,ri,L),regionNum(ri)))} &mdash; ${fmtArea(r.areaSF)}, placement ${r.placementLoad.toFixed(1)} PSF</h3>
       <div class="snip" data-snip="r:${ri}"><span class="snip-wait">plan snippet — rendering…</span></div>
@@ -23479,8 +23537,8 @@ function restoreBrowserBackup(){
 
 // Grouping is a view operation. It never combines cells, loads or beam profiles.
 function answerGroupKey(r){
-  if(r.steps.some(s=>!s.open&&!s.grade&&s.resultant>0&&!s.chosen))return null;
-  return JSON.stringify(r.steps.map(s=>[s.levelIdx,s.level&&s.level.name,!!s.open,!!s.noSlab,!!s.grade,s.resultant>0,s.shoreHeightFt,s.shoreHeightMinFt==null?null:s.shoreHeightMinFt,s.supportIdx,s.chosen&&s.chosen.shoreId,s.chosen&&s.chosen.pattern]));
+  if(r.steps.some(s=>!s.open&&!s.grade&&stNeeds(s)&&!s.chosen))return null;
+  return JSON.stringify(r.steps.map(s=>[s.levelIdx,s.level&&s.level.name,!!s.open,!!s.noSlab,!!s.grade,stNeeds(s),s.shoreHeightFt,s.shoreHeightMinFt==null?null:s.shoreHeightMinFt,s.supportIdx,s.chosen&&s.chosen.shoreId,s.chosen&&s.chosen.pattern]));
 }
 function groupAnswerCards(host,L){
   const buckets=new Map();
