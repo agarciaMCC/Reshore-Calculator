@@ -169,6 +169,7 @@ What the calculator must do. Canonical, versioned with the code; the project doc
 | RES-12 | A beam row lights only the part of the beam it covers, as the solver cut it (a beam over two conditions is two rows); a group row lights every member's piece. | Sep 24 |
 | RES-13 | Print refuses results that no longer match the inputs. | Sep 15 |
 | RES-14 | Results needs a drawing set: with none loaded the Results gate blocks the solve, whatever else is entered by hand. Test fixtures without a PDF use a stand-in sheet. | Sep 24 |
+| RES-15 | EVERY RESULTS TITLE LEADS WITH THE POUR: region and beam cards, the no-shore alert and the print legend and headings read "Roof · 9" Slab – L3 138 PSF – …" (the pour in its own pill on screen; a floor named 3 reads L3). Plan labels, keys and the plain names underneath are unchanged. | Sep 25 |
 
 ## PRT — The printed sheet
 

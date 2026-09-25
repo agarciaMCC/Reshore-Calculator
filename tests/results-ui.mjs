@@ -260,7 +260,7 @@ const at = await page.evaluate((i) => {
   const c = buildingToPixel(p.x, p.y, T);
   const sc = canvasToScreen(c.px, c.py);
   const box = document.getElementById('drawCanvas').getBoundingClientRect();
-  return { x: box.left + sc.x, y: box.top + sc.y, key: r.key, label: regionLabel(r, i, L) };
+  return { x: box.left + sc.x, y: box.top + sc.y, key: r.key, label: regionLabel(r, i, L), pour: levelTagName(L.pour.name) };
 }, 1);
 await page.mouse.click(at.x, at.y);
 await page.waitForTimeout(400);
@@ -272,7 +272,8 @@ const picked = await page.evaluate(() => ({
   ants: antsWanted(),
 }));
 ok(picked.key === at.key, 'a click on the plan picks the region under it: ' + picked.label + ' vs ' + at.label);
-ok(picked.lit === 1 && picked.litName === at.label, 'exactly that region lights up in the schedule: ' + picked.litName);
+// RES-15: the card title leads with the pour ("Roof · …"); the region name follows it
+ok(picked.lit === 1 && picked.litName === at.pour + ' · ' + at.label, 'exactly that region lights up in the schedule: ' + picked.litName);
 ok(picked.ants, 'and the glow is on the plan (RES-10)');
 // a click on bare sheet, away from the placement, clears the pick
 const away = await page.evaluate(() => {
