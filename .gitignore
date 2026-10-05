@@ -27,3 +27,6 @@ __pycache__/
 shots/
 reshore-calc-ui-revamp.html
 reshore-calc-ui-pass2.html
+
+# Screenshots
+Claude outputs/*.png
