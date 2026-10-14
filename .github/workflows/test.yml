@@ -1,0 +1,34 @@
+name: Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+
+      - name: Run test suite
+        run: node tests/run.mjs --fresh
+        env:
+          RESHORE_JOBS: 4
+          RESHORE_BUDGET: 600
+          RESHORE_TIMEOUT: 300
+
+      - name: Check rule coverage
+        run: node tests/rules.mjs
