@@ -18,6 +18,7 @@ const { chromium } = await (async () => {
   catch { return createRequire('/home/claude/x.js')('playwright'); }
 })();
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 const eq = (a, b, m) => ok(Math.abs(a - b) < 1e-6, `${m}: got ${a}, want ${b}`);
@@ -25,7 +26,7 @@ const eq = (a, b, m) => ok(Math.abs(a - b) < 1e-6, `${m}: got ${a}, want ${b}`);
 const browser = await chromium.launch();
 const page = await browser.newPage();
 page.on('pageerror', e => { fail++; console.log('  PAGEERROR', e.message); });
-await page.goto('file://' + path.resolve(decodeURIComponent(new URL('.', import.meta.url).pathname), '..', 'reshore-calc.html'));
+await page.goto('file://' + path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..', 'reshore-calc.html'));
 await page.waitForFunction(() => typeof solveAll === 'function');
 await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
 

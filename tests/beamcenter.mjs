@@ -20,7 +20,8 @@ const { chromium } = await (async () => {
   catch { return createRequire('/home/claude/x.js')('playwright'); }
 })();
 import path from 'node:path';
-const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
+import { fileURLToPath } from 'node:url';
+const here = fileURLToPath(new URL('.', import.meta.url));
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
 

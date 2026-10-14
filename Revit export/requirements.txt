@@ -1,0 +1,4 @@
+ifcopenshell
+shapely
+numpy
+matplotlib

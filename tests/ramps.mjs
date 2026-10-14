@@ -23,8 +23,9 @@ const { chromium } = await (async () => {
   catch { return createRequire('/home/claude/x.js')('playwright'); }
 })();
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
-const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
+const here = fileURLToPath(new URL('.', import.meta.url));
 const root = path.resolve(here, '..');
 const app = process.argv[2] || path.join(root, 'reshore-calc.html');
 const kalae = process.argv[3] || path.join(root, 'Revit export', '1268_KALAE-revit.reshore.json');

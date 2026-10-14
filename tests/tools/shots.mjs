@@ -8,8 +8,9 @@ const { chromium } = await (async () => {
   catch { return createRequire('/home/claude/x.js')('playwright'); }
 })();
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
-const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
+const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.argv[2] || path.join(here, '..', 'shots');
 fs.mkdirSync(out, { recursive: true });
 const steps = process.argv.slice(3);

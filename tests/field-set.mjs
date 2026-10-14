@@ -22,7 +22,8 @@ const { chromium } = await (async () => {
 })();
 import fs from 'node:fs';
 import path from 'node:path';
-const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
+import { fileURLToPath } from 'node:url';
+const here = fileURLToPath(new URL('.', import.meta.url));
 const root = path.resolve(here, '..');
 const html = process.argv[2] || path.join(root, 'reshore-calc.html');
 const pdfPath = process.argv[3] || path.join(root, 'Kalae PDF Set.pdf');

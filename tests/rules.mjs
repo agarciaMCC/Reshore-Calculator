@@ -10,8 +10,9 @@
 //   node tests/rules.mjs --json     machine readable
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
+const here = fileURLToPath(new URL('.', import.meta.url));
 const root = path.resolve(here, '..');
 const json = process.argv.includes('--json');
 

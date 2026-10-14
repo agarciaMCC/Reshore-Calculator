@@ -15,8 +15,9 @@ const { chromium } = await (async () => {
   try { return await import('playwright'); }
   catch { return createRequire('/home/claude/x.js')('playwright'); }
 })();
-import path from 'node:path'; import fs from 'node:fs';
-const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
+import path from 'node:path';
+import { fileURLToPath } from 'node:url'; import fs from 'node:fs';
+const here = fileURLToPath(new URL('.', import.meta.url));
 let pass=0,fail=0; const ok=(c,m)=>{if(c)pass++;else{fail++;console.log('  FAIL',m)}};
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });

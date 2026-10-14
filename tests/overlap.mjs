@@ -8,8 +8,9 @@ const { chromium } = await (async () => {
   catch { return createRequire('/home/claude/x.js')('playwright'); }
 })();
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
-const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
+const here = fileURLToPath(new URL('.', import.meta.url));
 const file = 'file://' + path.resolve(here, '..', 'reshore-calc.html');
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };

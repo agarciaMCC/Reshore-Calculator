@@ -5,7 +5,8 @@
 // be absorbed, a real step must survive, and a curve must stay a curve.
 import fs from 'node:fs';
 import path from 'node:path';
-const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
+import { fileURLToPath } from 'node:url';
+const here = fileURLToPath(new URL('.', import.meta.url));
 const html = fs.readFileSync(path.resolve(here, '..', 'reshore-calc.html'), 'utf8');
 
 const grab = (startMark, endMark, label) => {

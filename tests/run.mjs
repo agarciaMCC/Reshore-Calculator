@@ -18,17 +18,18 @@
 // Call it again to pick up where it stopped; it reports when the last one lands.
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
-const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
+const here = fileURLToPath(new URL('.', import.meta.url));
 const root = path.resolve(here, '..');
 const STATE = path.join(here, '.run-state.json');
 
 // Browsers live in .pw-browsers in the project folder (gitignored) because the
 // network allowlist blocks playwright's own download, plus the one system
-// library the VM lacks.
+// library the VM lacks. Only used on Linux; on Windows the system install works.
 const LOCAL_BROWSERS = path.join(root, '.pw-browsers');
-if (!process.env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync(LOCAL_BROWSERS))
+if (process.platform !== 'win32' && !process.env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync(LOCAL_BROWSERS))
   process.env.PLAYWRIGHT_BROWSERS_PATH = LOCAL_BROWSERS;
 const LOCAL_LIB = path.join(LOCAL_BROWSERS, 'lib');
 if (fs.existsSync(LOCAL_LIB))

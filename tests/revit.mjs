@@ -24,9 +24,10 @@ const { chromium } = await (async () => {
   catch { return createRequire('/home/claude/x.js')('playwright'); }
 })();
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
-const here = decodeURIComponent(new URL('.', import.meta.url).pathname);
+const here = fileURLToPath(new URL('.', import.meta.url));
 const root = path.resolve(here, '..');
 const rvt = path.join(root, 'Revit export');
 let pass = 0, fail = 0;
