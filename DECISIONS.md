@@ -195,7 +195,7 @@ What the calculator must do. Canonical, versioned with the code; the project doc
 |---|---|---|
 | JOB-01 | Real step gates with Next; one route to any given result. | Sep 15 |
 | JOB-02 | New job returns to upload behind a confirm naming what goes, with Save job inside. Project settings and hand-added shores carry over. | Sep 9 |
-| JOB-03 | Sharing is a private claude.ai artifact link, Save job and Print adapted for the sandbox; the local file keeps normal download and popup behavior. | Sep 9 |
+| JOB-03 | Sharing is a private claude.ai artifact link, Save job and Print adapted for the sandbox; the local file keeps normal download and popup behavior. The shared link publishes `reshore-calc.css` and `reshore-solver.js` beside the page (or inlined); the page alone is unstyled and cannot solve. | Sep 9, Oct 14 |
 
 ## UI — Interaction
 
