@@ -891,7 +891,7 @@ def main():
     json.dump(job, open(job_path, 'w'), separators=(',', ':'))
     log(f"wrote {job_path}")
     print('\n' + '\n'.join(report))
-    with open(os.path.join(args.out, f"{base}-revit-export-log.txt"), 'w') as fh:
+    with open(os.path.join(args.out, f"{base}-revit-export-log.txt"), 'w', encoding='utf-8') as fh:
         fh.write('\n'.join(LOG) + '\n\n' + '\n'.join(report) + '\n')
 
 if __name__ == '__main__':
