@@ -61,9 +61,10 @@ Python 3.10+ with `ifcopenshell`, `shapely`, `numpy`, `matplotlib`:
 
 ## Checking an export
 
-`tests/load-in-calc.mjs` opens the PDF and job headlessly, checks every Building gate and the edge areas, then solves the L8 pour at a flat 54 PSF. It expects 70 PSF on L7 at 9'-1" and 16 PSF on L6, matching the Kalae workbook.
+`tests/load-in-calc.mjs` opens the PDF and job headlessly, checks every Building gate and the edge areas, then solves the L8 pour at a flat 54 PSF. It expects 70 PSF on L7 at 9'-1" and 16 PSF on L6, matching the Kalae workbook. It needs a `--drawings rendered` export: the checked-in job is a field export (RVT-09), which has no sheets of its own. From the repository folder:
 
-    node tests/load-in-calc.mjs ../reshore-calc.html "Revit export/1268_KALAE-revit-plans.pdf" "Revit export/1268_KALAE-revit.reshore.json"
+    python "Revit export/ifc2reshore.py" "Revit export/HI_KALAE_MCC_ST.ifc" --out check --rotate auto --drawings rendered
+    node "Revit export/tests/load-in-calc.mjs" reshore-calc.html check/1268-revit-plans.pdf check/1268-revit.reshore.json
 
 ## Limits
 

@@ -2,13 +2,20 @@
 // Building step is complete, then solve a pour with a test capacity.
 //   node tests/load-in-calc.mjs <reshore-calc.html> <plans.pdf> <job.reshore.json>
 import { createRequire } from 'node:module';
-const require = createRequire(import.meta.url);
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
 import fs from 'node:fs';
 import path from 'node:path';
 
 const [html, pdf, jobPath] = process.argv.slice(2);
 const job = JSON.parse(fs.readFileSync(jobPath, 'utf8'));
+// RVT-09: a field export carries no sheets of its own, so it can't be checked against the rendered PDF
+if (job.levels.some(l => Array.isArray(l.modelZones) && l.modelZones.length)) {
+  console.log('  FAIL this is a field export (RVT-09); re-run ifc2reshore.py with --drawings rendered to check it here');
+  process.exit(1);
+}
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ok  ', m); } else { fail++; console.log('  FAIL', m); } };
 
