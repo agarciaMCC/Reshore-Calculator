@@ -1,4 +1,4 @@
-// @rules RVT-01, RVT-02, RVT-03, RVT-05, RVT-06, RVT-07, RVT-08, RVT-09  (see DECISIONS.md)
+// @rules RVT-01, RVT-02, RVT-03, RVT-05, RVT-06, RVT-07, RVT-08, RVT-09, RVT-14  (see DECISIONS.md)
 // REVIT -> CALCULATOR (Sep 18 2026). McClone's own scope model, exported as
 // IFC, is turned into a calculator job by "Revit export/ifc2reshore.py".
 // Adolfo chose: Revit supplies GEOMETRY ONLY and the loading marks are drawn
@@ -81,8 +81,10 @@ if (A && A.status === 0) {
 }
 
 console.log('B. rotation is an option');
-const B = py(`import subprocess,sys; print(subprocess.run([sys.executable,'ifc2reshore.py','--help'],capture_output=True,text=True).stdout)`);
+const B = py(`import subprocess,sys; sys.stdout.reconfigure(encoding='utf-8'); r = subprocess.run([sys.executable,'ifc2reshore.py','--help'],capture_output=True,encoding='utf-8'); print(r.stdout); print(r.stderr, file=sys.stderr)`);
 const help = B ? B.stdout : '';
+// RVT-14: on Windows the console code page cannot print the help text's arrows; --help must not crash
+ok(B && /usage:/.test(help) && !/UnicodeEncodeError/.test(B.stderr), 'RVT-14: --help prints in full on any console (UTF-8): ' + (B ? B.stderr.trim().split('\n').pop() : 'no python'));
 ok(/--rotate ROTATE/.test(help) && /default none/i.test(help), '--rotate exists and defaults to none: ' + (help.match(/--rotate[^\n]*\n[^\n]*/) || [''])[0].replace(/\s+/g, ' '));
 ok(/auto/.test(help) && /degrees/.test(help), 'it takes "auto" (number gridlines vertical) or degrees');
 const src = fs.readFileSync(path.join(rvt, 'ifc2reshore.py'), 'utf8');
