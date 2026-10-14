@@ -2,9 +2,9 @@ name: Tests
 
 on:
   push:
-    branches: [master]
+    branches: [master, dev]
   pull_request:
-    branches: [master]
+    branches: [master, dev]
 
 jobs:
   test:
@@ -21,7 +21,7 @@ jobs:
       - run: npm ci
 
       - name: Install Playwright browsers
-        run: npx playwright install chromium
+        run: npx playwright install --with-deps chromium
 
       - name: Run test suite
         run: node tests/run.mjs --fresh
