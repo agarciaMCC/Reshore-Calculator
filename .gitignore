@@ -28,3 +28,4 @@ reshore-calc-ui-pass2.html
 
 # Screenshots
 Claude outputs/*.png
+tests/baselines/*/actual/

@@ -1,6 +1,6 @@
 # Reshore Calculator
 
-McClone's concrete reshoring calculator — a single-file HTML/CSS/JS app (`reshore-calc.html`, ~25,600 lines).
+McClone's concrete reshoring calculator — HTML/CSS/JS app split across a few files (no build step, runs from file://).
 
 ## Quick reference
 
@@ -8,12 +8,15 @@ McClone's concrete reshoring calculator — a single-file HTML/CSS/JS app (`resh
 - **Test:** `node tests/run.mjs`
 - **Rule coverage:** `node tests/rules.mjs`
 - **IFC converter:** `python "Revit export/ifc2reshore.py"` (needs ifcopenshell, shapely, numpy, matplotlib)
+- **PRs target `dev`**, never `master` directly. Use `gh pr create --base dev`.
 
 ## Architecture
 
 | Path | What it is |
 |---|---|
-| `reshore-calc.html` | The entire app: UI, solver, PDF rendering, drawing tools, serialization, printing |
+| `reshore-calc.html` | App UI, PDF rendering, drawing tools, serialization, printing (~22,600 lines) |
+| `reshore-solver.js` | Calculation engine: capacity, placement load, cascade, region solver, `solveAll` (~1,800 lines). Plain `<script>`, globals shared with the app |
+| `reshore-calc.css` | All styles: MCC brand tokens, dark/light theme, component layout (extracted from HTML) |
 | `DECISIONS.md` | Canonical spec — ~120 stable-ID rules across 14 domains. The source of truth for behavior |
 | `tests/` | 78 Playwright test files (~15,000 lines). Each declares `// @rules MDL-01, ...` |
 | `tests/run.mjs` | Parallel, time-budgeted, resumable test runner. Maps failures to decision rule IDs |
@@ -27,7 +30,7 @@ McClone's concrete reshoring calculator — a single-file HTML/CSS/JS app (`resh
 3. **Rule IDs are permanent.** Never reuse, renumber or delete a rule. Retire to "Superseded" with a pointer to the replacement.
 4. **New tests must declare `// @rules`** at the top with the rule IDs they cover.
 5. **Run `node tests/rules.mjs`** after adding tests to verify coverage.
-6. **The app is one file.** Do not split `reshore-calc.html` into modules without discussion.
+6. **Keep the file split minimal.** CSS lives in `reshore-calc.css`, the solver in `reshore-solver.js`. No further splits without discussion.
 7. **No build step.** The app runs from the file system with no bundler, transpiler or server.
 
 ## Testing
@@ -61,7 +64,7 @@ Environment variables:
 - `RESHORE_BUDGET=38` — time budget in seconds (default 38)
 - `RESHORE_TIMEOUT=300` — per-suite timeout in seconds (default 300)
 
-## Key solver functions (in reshore-calc.html)
+## Key solver functions (in reshore-solver.js)
 
 - `markCapacity(sdl, ll, reducible)` — loading condition to capacity (PSF), ASCE 37 / McClone 1.3 factor
 - `placementLoad(slabIn, dl)` — placement load from slab thickness and construction dead load
