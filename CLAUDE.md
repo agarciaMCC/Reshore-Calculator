@@ -8,6 +8,7 @@ McClone's concrete reshoring calculator — a single-file HTML/CSS/JS app (`resh
 - **Test:** `node tests/run.mjs`
 - **Rule coverage:** `node tests/rules.mjs`
 - **IFC converter:** `python "Revit export/ifc2reshore.py"` (needs ifcopenshell, shapely, numpy, matplotlib)
+- **PRs target `dev`**, never `master` directly. Use `gh pr create --base dev`.
 
 ## Architecture
 
