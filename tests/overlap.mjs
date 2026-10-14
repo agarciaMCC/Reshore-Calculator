@@ -195,7 +195,7 @@ ok(noHl, 'with nothing highlighted the Areas layer still changes the picture');
 
 console.log('F. the cutout note is in the code where the rule lives');
 ok(await page.evaluate(() => /cutout/i.test(capZoneAt.toString()) || true), 'capZoneAt reachable');
-const src = fs.readFileSync(path.resolve(here, '..', 'reshore-calc.html'), 'utf8');
+const src = fs.readFileSync(path.resolve(here, '..', 'reshore-solver.js'), 'utf8');
 ok(/an overlap reads as a CUTOUT/.test(src), 'the rule is documented at capZoneAt');
 
 await browser.close();

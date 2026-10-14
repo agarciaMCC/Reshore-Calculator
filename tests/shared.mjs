@@ -47,7 +47,12 @@ console.log('B. inside a frame, Save job hands you the job as text');
 {
   const page = await browser.newPage();
   page.on('pageerror', e => { fail++; console.log('  PAGEERROR', e.message); });
-  const html = fs.readFileSync(appPath, 'utf8');
+  // A srcdoc frame has no folder to load side files from, so the stylesheet
+  // and solver go in inline, as the published artifact carries them.
+  const side = f => fs.readFileSync(path.resolve(here, '..', f), 'utf8');
+  const html = fs.readFileSync(appPath, 'utf8')
+    .replace('<link rel="stylesheet" href="reshore-calc.css">', () => '<style>' + side('reshore-calc.css') + '</style>')
+    .replace('<script src="reshore-solver.js"></script>', () => '<script>' + side('reshore-solver.js') + '</script>');
   await page.setContent(`<iframe id="f" style="width:1200px;height:800px;border:0"></iframe>`);
   await page.evaluate(h => { document.getElementById('f').srcdoc = h; },
     html.replace(/^<!doctype html>\n<meta charset="utf-8">\n/, ''));
