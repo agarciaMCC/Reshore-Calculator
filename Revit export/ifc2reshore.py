@@ -850,6 +850,10 @@ def render_pdf(pages, xf, sheet, scale, out_pdf, B, ex, args):
 
 # ────────────────────────────────────────────────────────────────────────────
 def main():
+    # RVT-14: a Windows console or pipe defaults to cp1252, which cannot print the
+    # arrows in the help text and log; --help crashed before printing anything.
+    for st in (sys.stdout, sys.stderr):
+        if hasattr(st, 'reconfigure'): st.reconfigure(encoding='utf-8')
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('ifc')
     ap.add_argument('--out', default='.', help='output folder')
