@@ -25,9 +25,9 @@ await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
 // ── A. one type scale ───────────────────────────────────────────────────
 console.log('A. four sizes, nothing else (UI-24)');
 {
-  const html = fs.readFileSync(appPath, 'utf8');
-  // the app's own stylesheet: everything before the first embedded library
-  const css = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
+  const cssPath = path.resolve(here, '..', 'reshore-calc.css');
+  const css = fs.existsSync(cssPath) ? fs.readFileSync(cssPath, 'utf8')
+    : (() => { const h = fs.readFileSync(appPath, 'utf8'); return h.slice(h.indexOf('<style>'), h.indexOf('</style>')); })();
   const px = [...css.matchAll(/font-size:\s*([0-9.]+)px/g)].map(m => +m[1]).filter(v => v < 40);
   ok(px.length === 0, 'no literal pixel font sizes left in the stylesheet (found ' + px.length + ': ' + [...new Set(px)].join(', ') + ')');
   const toks = [...css.matchAll(/font-size:\s*var\(--fs-(xl|lg|md|sm)\)/g)].length;

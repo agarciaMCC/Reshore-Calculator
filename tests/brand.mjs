@@ -125,8 +125,10 @@ console.log('F. nothing is fetched from the network any more');
 r = await page.evaluate(() => ({
   links: [...document.querySelectorAll('link[href]')].map(l => l.href),
   scripts: [...document.querySelectorAll('script[src]')].map(s => s.src) }));
-ok(r.links.length === 0, 'no remote stylesheet: ' + JSON.stringify(r.links));
-ok(r.scripts.length === 0, 'no remote script: ' + JSON.stringify(r.scripts));
+const remoteLinks = r.links.filter(l => /^https?:/.test(l));
+ok(remoteLinks.length === 0, 'no remote stylesheet: ' + JSON.stringify(remoteLinks));
+const remoteScripts = r.scripts.filter(s => /^https?:/.test(s));
+ok(remoteScripts.length === 0, 'no remote script: ' + JSON.stringify(remoteScripts));
 
 console.log('G. the dark theme is the same brand, at values that work on black');
 r = await page.evaluate(() => {

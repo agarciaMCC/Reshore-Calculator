@@ -1,6 +1,6 @@
 # Reshore Calculator
 
-McClone's concrete reshoring calculator — a single-file HTML/CSS/JS app (`reshore-calc.html`, ~25,600 lines).
+McClone's concrete reshoring calculator — HTML/CSS/JS app split across a few files (no build step, runs from file://).
 
 ## Quick reference
 
@@ -14,7 +14,8 @@ McClone's concrete reshoring calculator — a single-file HTML/CSS/JS app (`resh
 
 | Path | What it is |
 |---|---|
-| `reshore-calc.html` | The entire app: UI, solver, PDF rendering, drawing tools, serialization, printing |
+| `reshore-calc.html` | App UI, solver, PDF rendering, drawing tools, serialization, printing (~24,400 lines) |
+| `reshore-calc.css` | All styles: MCC brand tokens, dark/light theme, component layout (extracted from HTML) |
 | `DECISIONS.md` | Canonical spec — ~120 stable-ID rules across 14 domains. The source of truth for behavior |
 | `tests/` | 78 Playwright test files (~15,000 lines). Each declares `// @rules MDL-01, ...` |
 | `tests/run.mjs` | Parallel, time-budgeted, resumable test runner. Maps failures to decision rule IDs |
@@ -28,7 +29,7 @@ McClone's concrete reshoring calculator — a single-file HTML/CSS/JS app (`resh
 3. **Rule IDs are permanent.** Never reuse, renumber or delete a rule. Retire to "Superseded" with a pointer to the replacement.
 4. **New tests must declare `// @rules`** at the top with the rule IDs they cover.
 5. **Run `node tests/rules.mjs`** after adding tests to verify coverage.
-6. **The app is one file.** Do not split `reshore-calc.html` into modules without discussion.
+6. **Keep the file split minimal.** CSS lives in `reshore-calc.css`, solver may move to `reshore-solver.js`. No further splits without discussion.
 7. **No build step.** The app runs from the file system with no bundler, transpiler or server.
 
 ## Testing
