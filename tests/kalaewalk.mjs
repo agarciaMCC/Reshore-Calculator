@@ -1,4 +1,4 @@
-// @rules UI-02, UI-18, RES-01, RES-17, RES-18, JOB-04  (see DECISIONS.md)
+// @rules UI-02, UI-18, RES-01, RES-17, RES-18, JOB-04, BLD-09, JOB-02, UI-15, UI-32, UI-19, UI-20, BLD-04, BLD-05  (see DECISIONS.md)
 // THE KALAE WALKTHROUGH (Oct 15 2026). An estimator's walk of the 1268 Kalae
 // job (42 levels, 27 marks, 41 placements) through all four steps found the
 // places where the app and the saved job disagreed, where a key did more than
@@ -19,11 +19,12 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); }
 const browser = await chromium.launch();
 const job = fs.readFileSync(path.resolve(here, '..', 'Revit export', '1268_KALAE.reshore.json'), 'utf8');
 const pdf = fs.readFileSync(path.resolve(here, '..', 'Revit export', '1268_KALAE-revit-plans.pdf')).toString('base64');
+const wrongSet = fs.readFileSync(path.resolve(here, '..', 'Kalae PDF Set.pdf')).toString('base64');
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
 // a fresh page with the job and its drawing set open, as File → Open does it.
 // `dlg` records every confirm() the app raises; set dlg.dismiss to answer No.
-async function openJob(dlg = {}) {
+async function openJob(dlg = {}, set = pdf) {
   const page = await browser.newPage({ viewport: { width: 1500, height: 950 } });
   page.on('pageerror', e => { fail++; console.log('  PAGEERROR', e.message); });
   page.on('dialog', d => { dlg.last = d.message(); dlg.all = (dlg.all || []).concat(d.message()); dlg.dismiss ? d.dismiss() : d.accept(); });
@@ -31,11 +32,12 @@ async function openJob(dlg = {}) {
   await page.waitForFunction(() => typeof solveAll === 'function');
   await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
   await page.evaluate(async ([j, p]) => {
+    if (p === null) { applyOpenedJob(JSON.parse(j), '1268_KALAE.reshore.json'); return; }
     window.__solves = 0; const real = solveAll; window.solveAll = o => { window.__solves++; return real(o); };
     applyOpenedJob(JSON.parse(j), '1268_KALAE.reshore.json');
     const bin = atob(p); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
     await loadFile(new File([u8], '1268_KALAE-revit-plans.pdf', { type: 'application/pdf' }));
-  }, [job, pdf]);
+  }, [job, set]);
   await wait(1500);
   return page;
 }
@@ -195,6 +197,108 @@ console.log('F. A pick that no longer matches is named (RES-17, JOB-04)');
     });
     ok(!F2.loss || /under .+ on the .+ placement/.test(F2.text), 'a lost pick names its floor and placement: ' + F2.text.slice(0, 160));
   }
+  await page.close();
+}
+
+console.log('G. A confirmed job keeps its levels; the read is folded (BLD-09)');
+{
+  const page = await openJob();
+  await page.evaluate(() => setStep('levels'));
+  await wait(2500);
+  const G = await page.evaluate(() => {
+    const box = document.getElementById('elevProposal');
+    return { confirmed: levelsConfirmed(), text: box.innerText, boxes: box.querySelectorAll('input[data-eppage]').length, show: !!box.querySelector('#epShow') };
+  });
+  ok(G.confirmed, 'the Kalae levels are confirmed');
+  ok(G.boxes === 0 && /Your levels are kept/.test(G.text), 'the read sits folded on one line, nothing ticked: ' + G.text.slice(0, 120));
+  if (G.show) {
+    await page.evaluate(() => document.getElementById('epShow').click());
+    await wait(2500);
+    const G2 = await page.evaluate(() => {
+      const box = document.getElementById('elevProposal'), ap = box.querySelector('#epApply');
+      return { ticked: box.querySelectorAll('input[data-eppage]:checked').length, boxes: box.querySelectorAll('input[data-eppage]').length, disabled: ap && ap.disabled, close: (box.querySelector('#epClose') || {}).innerText };
+    });
+    ok(G2.boxes > 0 && G2.ticked === 0 && G2.disabled, 'opened, no row is ticked and Apply waits for a tick: ' + [G2.boxes, G2.ticked, G2.disabled]);
+    ok(G2.close === 'Keep my levels', 'the way out says the levels stay: ' + G2.close);
+  }
+  await page.close();
+}
+
+console.log('H. The wrong drawing set is said at once (JOB-02)');
+{
+  const page = await openJob({}, wrongSet);
+  const H = await page.evaluate(() => ({ pages: state.pdf.pages, st: stepStatus('drawings'), mis: drawingSetMismatch(), saved: state.project.drawingSetPages }));
+  ok(H.pages === 12, 'the 12-page set loaded: ' + H.pages);
+  ok(!H.st.done && /go up to page 42/.test(H.st.text), 'Drawings is not done and says why: ' + H.st.text);
+  ok(/not the set the job was built on/.test(H.mis), 'the mismatch names the problem: ' + H.mis.slice(0, 100));
+  ok(H.saved === 12, 'the page count is saved with the job for next time: ' + H.saved);
+  await page.close();
+}
+
+console.log('I. The Drawings panel is one line and the set button steps back (UI-15, UI-32)');
+{
+  const page = await openJob();
+  await page.evaluate(() => setStep('drawings'));
+  await wait(300);
+  const I = await page.evaluate(() => ({ list: document.querySelectorAll('#drawingsInfo ul.step-list li').length, text: document.getElementById('drawingsInfo').innerText, primary: document.getElementById('btnUpload').classList.contains('btn-primary'), label: document.getElementById('btnUpload').textContent }));
+  ok(I.list === 0 && /42 plan sheets on 42 of 42 floors/.test(I.text), 'one summary line instead of 42 bullets: ' + I.text.slice(0, 160).replace(/\n/g, ' / '));
+  ok(!I.primary && /another/.test(I.label), 'with a set loaded the set button is plain: ' + I.label);
+  await page.close();
+}
+
+console.log('J. A job without its set names the set it needs (JOB-02)');
+{
+  const page = await openJob({}, null);
+  const J = await page.evaluate(() => {
+    state.project.drawingSet = '1268_KALAE-revit-plans.pdf';
+    return { label: stepBlockers('results').map(b => b.label).join(', '), st: stepStatus('drawings').text };
+  });
+  ok(/the drawing set 1268_KALAE-revit-plans\.pdf/.test(J.label), 'Results says which set: ' + J.label);
+  ok(/Open the drawing set 1268_KALAE/.test(J.st), 'Drawings says which set: ' + J.st);
+  await page.close();
+}
+
+console.log('K. The plan bar asks nothing on Levels (UI-20)');
+{
+  const page = await openJob();
+  const K = await page.evaluate(async () => {
+    setStep('levels'); state.activeLevelIdx = 0; await goToPage(1); renderPageBar();
+    const a = document.getElementById('pageBar').classList.contains('visible');
+    setStep('areas'); state.activeLevelIdx = 0; await goToPage(1); renderPageBar();
+    const b = document.getElementById('pageBar').classList.contains('visible');
+    return { levels: a, areas: b, here: levelForPage(1) };
+  });
+  ok(!K.levels, 'no "Go to sheet 42 / Work on 1" bar on arrival at Levels');
+  ok(K.areas, 'on Areas, where it matters, the bar still keeps sheet and floor honest');
+  await page.close();
+}
+
+console.log('L. Alike floors are pointed out once (UI-19)');
+{
+  const page = await openJob();
+  await page.evaluate(() => setStep('levels'));
+  await wait(300);
+  const L = await page.evaluate(() => (document.querySelector('.lvl-run-hint') || {}).innerText || '');
+  ok(/Floors .+ to .+ \(\d+\) are alike/.test(L) && /left as they are, the answer is the same/.test(L), 'the hint names the run and says leaving it is fine: ' + L.slice(0, 140));
+  await page.close();
+}
+
+console.log('M. Moving a sheet off a floor is flagged, and undone in one step (BLD-04, BLD-05, UI-02)');
+{
+  const page = await openJob();
+  const M = await page.evaluate(() => {
+    setStep('sheets');
+    const i19 = state.levels.findIndex(l => l.name === '19');
+    setSheetLevel(21, String(i19));
+    const l20 = state.levels.find(l => l.name === '20');
+    return { st: stepStatus('sheets'), l20: levelSheets(l20).map(s => s.page) };
+  });
+  ok(M.l20.length === 0, 'page 21 left floor 20: ' + JSON.stringify(M.l20));
+  ok(!M.st.done && /No sheet for 20/.test(M.st.text), 'Sheets is no longer done and names the bare floor: ' + M.st.text);
+  await page.keyboard.press('Control+z');
+  await wait(300);
+  const M2 = await page.evaluate(() => ({ n: state.levels.length, l20: levelSheets(state.levels.find(l => l.name === '20')).map(s => s.page), st: stepStatus('sheets') }));
+  ok(M2.n === 42 && M2.l20.includes(21) && M2.st.done, 'Ctrl+Z puts the sheet back without touching the job: ' + [M2.n, M2.l20, M2.st.text]);
   await page.close();
 }
 

@@ -530,8 +530,10 @@ const history=(function(){
     // UI-02: opening a job is a boundary, not an edit. Undoing it takes every
     // level off the screen, so it asks first (Kalae, Oct 15 2026: Ctrl+Z after
     // a sheet change that was cancelled wiped the job, with only a toast)
+    // ("New job" is not guarded: it asked before it ran, and undoing it is
+    // the way back it promised — JOB-02)
     const top=undoStack[undoStack.length-1];
-    if(/^(Open job|New job)$/.test(top.label)){
+    if(top.label==='Open job'){
       const n=state.levels.length;
       if(!confirm(`Undo "${top.label}"? This takes the whole job${n?` (${state.project.name}, ${n} level${n>1?'s':''})`:''} off the screen.\n\nRedo (Ctrl+Y) brings it back. Continue?`))return;
     }
@@ -1123,6 +1125,12 @@ function renderPageBar(){
   const bar=document.getElementById('pageBar');
   if(!bar)return;
   const p=state.pdf.current;
+  // the bar keeps sheet and floor honest where areas are drawn; on Drawings,
+  // Levels and Sheets nothing is drawn, so it asks nothing (Kalae, Oct 15
+  // 2026: "MECH ROOF's areas are on sheet 42 — Go to sheet 42 / Work on 1"
+  // on arrival at Levels, before anything was asked for)
+  // (an unplaced or skipped sheet still asks everywhere — that bar is the
+  // "Assign to" picker, BLD-04)
   if(!state.pdf.pages||!state.levels.length||state.align.active||(typeof autoTrace!=='undefined'&&autoTrace)||(typeof curGroup==='function'&&(curGroup().id==='answer'||curGroup().id==='loads'))){bar.classList.remove('visible');return}
   const here=levelForPage(p);
   const lv=getActiveLevel();
@@ -1131,7 +1139,8 @@ function renderPageBar(){
   // a load map under review is not a floor plan and does not need claiming
   if(autoTraceOn(p)){bar.classList.remove('visible');return}
   if(here>=0){
-    if(lv&&state.activeLevelIdx!==here){
+    const drawingStep=!(typeof curStep!=='undefined'&&(curStep==='drawings'||curStep==='levels'||curStep==='sheets'));
+    if(lv&&state.activeLevelIdx!==here&&drawingStep){
       const mine=levelSheets(lv).map(s=>s.page);
       const zHere=sheetZoneName(state.levels[here],p);
       html=`<span>Sheet ${p} is <b>${nm(state.levels[here])}</b>${zHere?` &middot; ${esc(zHere)}`:''}. ${nm(lv)}'s areas are ${mine.length?`on ${esc(sheetListLabel(lv))}`:'not on any sheet yet'}.</span>`
@@ -1782,11 +1791,18 @@ async function loadFile(file){
       resetPageTextCache();
       invalidateCalculatedResults('The drawing set was replaced; verify the matches and areas');
       state.pdf.doc=doc;state.pdf.pages=doc.numPages;state.pdf.current=1;state.pdf.pageImages={};
+      // JOB-02: the job remembers how many pages its set has, so a set that
+      // cannot be the one it was built on is said at once, not taken as done
+      // (Kalae, Oct 15 2026: a 12-page set opened on a 42-sheet job read
+      // "42 sheets matched" with no word)
+      const mis=drawingSetMismatch(true);
+      state.project.drawingSetPages=doc.numPages;
       document.getElementById('upload-prompt').style.display='none';
       document.getElementById('pageNav').style.display='flex';
       await renderPdfPage(1);
       updatePageInfo();fitView();renderCanvas();
       if(typeof refreshFlow==='function')refreshFlow();
+      if(mis)toast(mis,9000);
       sheetRead=null;
       // the levels and the sheet table read themselves; an empty job gets
       // its levels and sheet assignments, a job with levels sees a diff
@@ -3823,7 +3839,9 @@ function renderLoadMapTable(){
       if(t!==''&&isNaN(v)){toast('Enter a number.');renderLoadMapTable();return}
       history.record('Edit loading condition');
       getConditions()[i][f]=v;
-      getConditions()[i].confirmed=true;      // a hand edit is a confirmation
+      // a hand edit is a confirmation — unless it left the mark with no
+      // number, which asks again (LOD-09)
+      getConditions()[i].confirmed=conditionCapacity(getConditions()[i])!=null;
       afterConditionChange();
     });
   });
@@ -4168,7 +4186,8 @@ function renderSplitTables(){
         if(t!==''&&isNaN(v)){toast('Enter a number.');renderLoadMapTable();return}
         llSchedule()[i].load=v;
       }
-      llSchedule()[i].confirmed=true;
+      // LOD-09: a mark with its value cleared is asked again, not confirmed
+      llSchedule()[i].confirmed=llSchedule()[i].load!=null;
       afterConditionChange();
     });
   });
@@ -4178,7 +4197,7 @@ function renderSplitTables(){
       const t=inp.value.trim(),v=t===''?null:parseFloat(t);
       if(t!==''&&isNaN(v)){toast('Enter a number.');renderLoadMapTable();return}
       history.record('Edit dead-load schedule');
-      sdlSchedule()[i].load=v;sdlSchedule()[i].confirmed=true;
+      sdlSchedule()[i].load=v;sdlSchedule()[i].confirmed=v!=null;   // LOD-09: cleared = asked again
       afterConditionChange();
     });
   });
@@ -7118,7 +7137,7 @@ function renderAreasPrimary(){
   el.innerHTML=!conf
     ?`<span class="lm-dim">Beams, openings and thickened slabs are read off each sheet once its floor edge is confirmed (Building step).</span>`
     :(read<conf?`<span class="lm-dim">${read} of ${conf} sheets read for beams and openings — the rest are read when you arrive here.</span>`
-              :`<span class="lm-dim">Every confirmed sheet has been read for beams and openings — what you accepted is in the list below; <b>Detect again…</b> below reads a sheet once more.</span>`);
+              :`<span class="lm-dim">Every confirmed sheet has been read for beams and openings — what you accepted is in the list below${(s=>s&&s.n?`; <b>${s.n} shape${s.n>1?'s':''} on ${s.floors} floor${s.floors>1?'s':''}</b> found on the sheets ${s.n>1?'were':'was'} not reviewed when the review was stopped`:'')(state.ui.scanStopped)}; <b>Detect again…</b> below reads a sheet once more.</span>`);
 }
 function renderZoneList(){
   if(typeof renderAreasPrimary==='function')renderAreasPrimary();
@@ -8036,6 +8055,10 @@ function loadState(){
     deserializeDoc(data);
     if(state.levels.length>0)state.activeLevelIdx=0;
     browserSaveState='Saved in browser';
+    // JOB-02: a job that comes back from the browser store names the set it
+    // needs, as Open job does (Kalae, Oct 15 2026: after a reload the Results
+    // step read only "Needs a drawing set")
+    if(state.levels.length&&!state.pdf.pages)setTimeout(()=>toast(`${state.project.name||'The saved job'} is back from this browser's save — now open its drawing set${state.project.drawingSet?`: ${state.project.drawingSet}`:' (the PDF it was built on)'}`,7000),300);
   }catch(e){
     browserSaveState='Save failed';
     browserSaveDetail='Saved job could not be read. Use Restore previous save or open a job file.';
@@ -10077,16 +10100,29 @@ function confirmLevels(){
   if(typeof curStep!=='undefined'&&groupOf(curStep).id==='building')setStep('sheets');
   return true;
 }
+// UI-19: a run of three or more alike floors (same floor-to-floor, same slab,
+// not on grade, not already a range) is pointed out once, with what ticking
+// Typical Floor? would do — and that leaving them is just as right (Kalae,
+// Oct 15 2026: 32 identical tower floors, nothing said)
+function typicalRunHint(){
+  const L=state.levels;if(L.length<4)return '';
+  const key=i=>{const l=L[i];if(!l||isRange(l)||l.onGrade||!hasElev(l))return null;const f=floorToFloorBelow(i);if(f==null||isNaN(f))return null;return `${Math.round(f*96)}|${l.slabThickness}`};
+  const runs=[];let s=0;
+  for(let i=1;i<=L.length;i++){if(i===L.length||key(i)==null||key(i)!==key(s)){if(i-s>=3&&key(s)!=null)runs.push([s,i-1]);s=i}}
+  if(!runs.length)return '';
+  const r=runs[0],a=L[r[0]],b=L[r[1]],n=r[1]-r[0]+1;
+  return `<p class="lm-dim lvl-run-hint">Floors ${esc(b.name)} to ${esc(a.name)} (${n}) are alike — ${esc(feetToStr(floorToFloorBelow(r[0])))} floor to floor, ${esc(inchStr(a.slabThickness))} slab. Ticking <b>Typical Floor?</b> on one of them makes it stand for the run; left as they are, the answer is the same.</p>`;
+}
 function renderLevelsConfirm(){
   const host=document.getElementById('levelsConfirm');
   if(!host)return;
   if(!state.levels.length){host.innerHTML='';return}
   if(levelsConfirmed()){
-    host.innerHTML=`<span class="ep-ok">✓ Levels confirmed</span><span class="lm-dim"> — edit a row and confirm again if anything changes</span>`;
+    host.innerHTML=`<span class="ep-ok">✓ Levels confirmed</span><span class="lm-dim"> — edit a row and confirm again if anything changes</span>${typicalRunHint()}`;
     return;
   }
   const why=levelsConfirmable();
-  host.innerHTML=`<button class="btn btn-sm btn-wide btn-go" id="btnConfirmLevels"${why?' disabled':''} title="${esc(why||'Names, elevations and slab thickness are what you are confirming. Capacities come with the loads.')}">Confirm levels</button>${why?`<span class="lm-dim">${esc(why)}</span>`:''}`;
+  host.innerHTML=`<button class="btn btn-sm btn-wide btn-go" id="btnConfirmLevels"${why?' disabled':''} title="${esc(why||'Names, elevations and slab thickness are what you are confirming. Capacities come with the loads.')}">Confirm levels</button>${why?`<span class="lm-dim">${esc(why)}</span>`:''}${typicalRunHint()}`;
   const b=host.querySelector('#btnConfirmLevels');
   if(b)b.addEventListener('click',confirmLevels);
 }
@@ -10602,6 +10638,18 @@ async function renderElevProposal(showAll){
     ||(p.thickIn!=null&&p.thickIn>0&&p.thickN>=3&&p.curThick!==p.thickIn)
     ||(p.curPage!==p.page&&!(p.curPages||[]).includes(p.page));
   if(!showAll&&!elevProposal.some(wantsChange)){box.innerHTML='';elevProposal=null;return}
+  // BLD-09: a job whose levels are confirmed keeps them. The automatic read
+  // of its set is one folded line until asked for, and when opened nothing
+  // is ticked — a red "Apply ticked" over 42 ticked rows was one click from
+  // moving every floor (Kalae, Oct 15 2026)
+  const kept=!showAll&&levelsConfirmed();
+  if(kept&&!state.ui.epOpen){
+    const diff=elevProposal.filter(wantsChange),ex=diff.find(p=>p.levelIdx>=0&&p.elev!=null&&p.curElev!=null)||diff[0];
+    const eg=ex?(ex.levelIdx<0?`${ex.name} is not in your levels`:ex.elev!=null&&ex.curElev!=null?`${ex.name}: T.O.S. ${feetToStr(ex.elev)} on the sheet, ${feetToStr(ex.curElev)} here`:`${ex.name} reads differently`):'';
+    box.innerHTML=`<div class="ep-box ep-fold"><span class="lm-dim">The drawings read ${diff.length} floor${diff.length>1?'s':''} differently from the confirmed levels${eg?` (${esc(eg)})`:''}. Your levels are kept.</span> <button class="btn btn-sm" id="epShow" title="See each difference; nothing changes until you tick a row and apply it">Show the ${diff.length>1?'differences':'difference'}</button></div>`;
+    box.querySelector('#epShow').addEventListener('click',()=>{state.ui.epOpen=true;renderElevProposal(false)});
+    return;
+  }
   const row=p=>{
     const dE=p.elev!=null&&(p.curElev==null||Math.abs(p.curElev-p.elev)>1/48);
     const dT=p.thickIn!=null&&p.thickIn>0&&p.thickN>=3&&p.curThick!==p.thickIn;
@@ -10609,7 +10657,7 @@ async function renderElevProposal(showAll){
       ? `<span class="ep-ok">CLR HT ${esc(feetToStr(p.clrFt))} agrees with the stack over ${esc(p.clrBelow)}</span>`
       : `<span class="lm-warn">CLR HT ${esc(feetToStr(p.clrFt))} on the sheet, but this stack gives ${esc(feetToStr(p.clrCheckFt))} over ${esc(p.clrBelow)} — ${Math.abs(p.clrOffIn).toFixed(1)}" out</span>`);
     return `<div class="ep-row">
-      <label class="ep-pick"><input type="checkbox" data-eppage="${p.page}"${wantsChange(p)?' checked':''}${wantsChange(p)?'':' disabled'}>
+      <label class="ep-pick"><input type="checkbox" data-eppage="${p.page}"${wantsChange(p)&&!kept?' checked':''}${wantsChange(p)?'':' disabled'}>
         <b>${esc(p.name)}</b> <span class="lm-dim">page ${p.page}</span>
         ${isNew(p)?'<span class="ep-new">new</span>':''}${p.onGrade?'<span class="ep-new" style="background:#7a5a2a">on grade</span>':''}</label>
       <div class="ep-vals">
@@ -10624,20 +10672,25 @@ async function renderElevProposal(showAll){
         ${p.steps.length?`<span class="lm-dim">${p.steps.length} T.O.S. callout${p.steps.length>1?'s':''} off the main level (${[...new Set(p.steps.map(x=>inchStr(x.offsetIn)))].join(', ')}) — draw these as Slab areas</span>`:''}
       </div></div>`;
   };
-  const any=elevProposal.some(wantsChange);
+  const any=elevProposal.some(wantsChange)&&!kept;
   const nNew=elevProposal.filter(isNew).length;
-  box.innerHTML=`<div class="ep-box"><div class="ep-head">${elevProposal.length} floor plan${elevProposal.length>1?'s':''} in this set${nNew?` · ${nNew} not in your levels yet`:''} — ticked rows will be written</div>
+  box.innerHTML=`<div class="ep-box"><div class="ep-head">${elevProposal.length} floor plan${elevProposal.length>1?'s':''} in this set${nNew?` · ${nNew} not in your levels yet`:''} — ${kept?'your levels are kept; tick a row to take the sheet’s value instead':'ticked rows will be written'}</div>
     ${elevProposal.map(row).join('')}
     <div class="ep-actions">
-      <button class="btn btn-sm btn-primary" id="epApply"${any?'':' disabled'}>${any?'Apply ticked':'Nothing to change'}</button>
-      <button class="btn btn-sm" id="epClose">Close</button>
+      <button class="btn btn-sm btn-primary" id="epApply"${any?'':' disabled'}>${any?'Apply ticked':(kept?'Apply ticked':'Nothing to change')}</button>
+      <button class="btn btn-sm" id="epClose">${kept?'Keep my levels':'Close'}</button>
     </div></div>`;
-  box.querySelector('#epClose').addEventListener('click',()=>{box.innerHTML='';elevProposal=null});
+  box.querySelector('#epClose').addEventListener('click',()=>{box.innerHTML='';elevProposal=null;state.ui.epOpen=false});
   const ap=box.querySelector('#epApply');
+  // on a kept job the button wakes with the first tick and says how many
+  if(kept&&ap)box.querySelectorAll('input[data-eppage]').forEach(cb=>cb.addEventListener('change',()=>{
+    const n=box.querySelectorAll('input[data-eppage]:checked').length;
+    ap.disabled=!n;ap.textContent=n?`Apply ${n} ticked`:'Apply ticked';
+  }));
   if(ap)ap.addEventListener('click',()=>{
     const picks=new Set([...box.querySelectorAll('input[data-eppage]:checked')].map(i=>+i.dataset.eppage));
     const r=applyLevelDrawingProposals(elevProposal,picks);
-    box.innerHTML='';elevProposal=null;
+    box.innerHTML='';elevProposal=null;state.ui.epOpen=false;
     toast(r.created?`${r.created} level${r.created>1?'s':''} added from the drawings${r.changed?` · ${r.changed} value${r.changed>1?'s':''} set`:''}`
                    :(r.changed?`${r.changed} value${r.changed>1?'s':''} set from the drawings`:'Nothing changed'),3600);
     refreshFlow();
@@ -12037,6 +12090,7 @@ function installFloorSpec(f){
     hs.length===1?esc(feetToStr(hs[0])):esc(feetToStr(hs[0])+'–'+feetToStr(hs[hs.length-1]))}</span>`);
   if(f.general!=null&&f.generalAppliedSF)bits.push(`<span class="rs-dim">over ${fmtArea(f.generalAppliedSF)}</span>`);
   else if(f.shoredSF)bits.push(`<span class="rs-dim">${fmtArea(f.shoredSF)}</span>`);
+  else if(f.beams&&f.beams.length)bits.push(`<span class="rs-dim" title="Only beam rows under this floor — no slab area to pattern">beams only · ${f.beams.length} row${f.beams.length>1?'s':''}</span>`);   // never "— 0 SF"
   const notes=[];
   if(f.exceptions&&f.exceptions.length)notes.push(`Tighten to ${excChips(f,f.key||f.name)} — that patch only, not the floor; click one to see where.`);
   if(f.pending)notes.push(`<span class="inst-note warn">${f.pending} row${f.pending>1?'s':''} still need a shore${
@@ -12258,7 +12312,7 @@ function floorChip(r,f,L,active){
     case 'pending':{
       const thru=isThrough(q.st),okd=thru&&throughAccepted(q.st.choiceKey);
       return `<span class="${cls} pend${thru&&!okd?' thru':''}" title="Reshore under ${esc(f.name)}: shore not chosen yet${thru?` · ${esc(feetToStr(q.st.shoreHeightFt))} through to ${esc(q.st.supportLevel.name)}`:''}">${who}pick a shore${thru?`<i class="pc-thru">\u2193${esc(q.st.supportLevel.name)}</i>`:''}</span>`;}
-    case 'nofit':return `<span class="${cls} warn" title="Reshore under ${esc(f.name)}: ${q.st.supportLevel?'no shore in the catalog reaches':'no floor below to stand on'}">${who}${q.st.supportLevel?'no shore reaches':'nothing below'}</span>`;
+    case 'nofit':return `<span class="${cls} warn" title="Reshore under ${esc(f.name)}: ${q.st.supportLevel?'no shore in the catalog reaches':(q.st.shaft?`the opening under it continues ${q.st.shaft} floors down — a shaft, nothing to stand on`:'no floor below to stand on')}">${who}${q.st.supportLevel?'no shore reaches':(q.st.shaft?'shaft below':'nothing below')}</span>`;
     case 'absorbed':return `<span class="${cls} quiet" title="${esc(f.name)} carries this on its own — no shores under it here">${who}absorbed</span>`;
     case 'grade':return `<span class="${cls} quiet" title="${esc(f.name)} is on grade here">${who}SOG</span>`;
     case 'open':return `<span class="${cls} quiet" title="${esc(f.name)} has an opening here — the shore above spans past">${who}opening</span>`;
@@ -12409,6 +12463,18 @@ function goOutstanding(L,dir){
 }
 // ARE-13: a floor needing no shores says why — and a floor only PARTLY on
 // grade says so, with the suspended part's share, not "on grade" whole
+// consecutive floors with nothing to install, for the same reason, read as
+// one row on screen and in print
+function installFloorGroups(floors){
+  const out=[];
+  for(const f of floors){
+    const why=f.needsShores?null:floorRestText(f);
+    const last=out[out.length-1];
+    if(why&&last&&last.why===why){last.floors.push(f);continue}
+    out.push(why?{why,floors:[f]}:{f});
+  }
+  return out;
+}
 function floorRestText(f){
   const sf=x=>fmtArea(x);
   const part=f.gradeSF&&(f.absorbedSF||f.openSF);
@@ -12426,13 +12492,16 @@ function renderInstallSummary(L,host){
   const need=plan.floors.filter(f=>f.needsShores);
   const flName=f=>`${esc(f.name)}${f.zone?` <span class="inst-zone">${esc(f.zone)}</span>`:''}`;
   const tabF=resultsFloor(L);                 // on a floor's tab, that floor's row alone
-  const rows=plan.floors.filter(f=>!tabF||f.key===tabF.key).map(f=>{
-    const lit=hl&&hl.regionKey==='floor:'+f.key&&hl.pour===plan.pour;
-    if(!f.needsShores){
-      const why=floorRestText(f);
-      return`<div class="inst-row none"><div class="inst-fl">${flName(f)}</div>
-        <div class="inst-spec"><span class="rs-dim">${esc(why)}</span></div></div>`;
+  // RES-11: floors with nothing to install and the same reason are ONE row
+  // ("ROOF to 2 · 37 floors: no slab here …"), not a row each (Kalae, Oct 15
+  // 2026: 35 rows of "no slab here" buried the five that mattered)
+  const rows=installFloorGroups(plan.floors.filter(f=>!tabF||f.key===tabF.key)).map(g=>{
+    if(g.why){
+      const a=g.floors[0],b=g.floors[g.floors.length-1],n=g.floors.length;
+      return`<div class="inst-row none"><div class="inst-fl">${flName(a)}${n>1?` to ${flName(b)}<small>${n} floors</small>`:''}</div>
+        <div class="inst-spec"><span class="rs-dim">${esc(g.why)}</span></div></div>`;
     }
+    const f=g.f,lit=hl&&hl.regionKey==='floor:'+f.key&&hl.pour===plan.pour;
     return`<div class="inst-row${lit?' lit':''}" data-fl="${esc(f.key)}"
       title="Show everything that needs reshoring under ${esc(installFloorName(f))}, on its own sheet">
       <div class="inst-fl">${flName(f)}<small>${f.rowCount} region${f.rowCount===1?'':'s'} above</small></div>
@@ -13678,7 +13747,8 @@ function renderSequence(){
           }
           return `<div class="seq-floor"><span class="seq-tag seq-keep">leave</span> under <b>${esc(o.level.name)}</b> — ${patStr(f&&f.general)} already in (installed for ${esc(f&&f.installBefore||'?')})${beamTxt}</div>`;
         }).join('');
-        return `<tr><td class="sched-num">${i+1}</td>
+        return `<tr data-seqrow="${esc(e.pour.name)}"${schedSolve&&schedSolve.levels[schedPourIdx]&&schedSolve.levels[schedPourIdx].pour.name===e.pour.name?' class="lit"':''} title="Show this placement's sheet on the plan">
+          <td class="sched-num">${i+1}</td>
           <td><b>${esc(e.pour.name)}</b><div class="lm-dim">${inchStr(e.pour.slabThickness)} slab · ${fmtArea(e.areaSF)}</div></td>
           <td class="sched-num">${load}</td>
           <td>${rows||'<span class="lm-dim">no reshoring required</span>'}</td>
@@ -13701,6 +13771,16 @@ function renderSequence(){
   const pr=document.getElementById('seqPrint');
   if(pr)pr.addEventListener('click',printSequence);
   bindExcChips(host,name=>(P.floors||[]).find(f=>f.name===name),renderSequence);
+  // SEQ-02: the plan follows the table — a placement's row opens its sheet
+  // (Kalae, Oct 15 2026: the plan sat on the ROOF sheet from the last pick)
+  host.querySelectorAll('tr[data-seqrow]').forEach(tr=>tr.addEventListener('click',e=>{
+    if(e.target.closest('button'))return;
+    const i=schedSolve&&schedSolve.levels?schedSolve.levels.findIndex(L=>L.pour.name===tr.dataset.seqrow):-1;
+    if(i<0)return;
+    schedPourIdx=i;
+    host.querySelectorAll('tr[data-seqrow]').forEach(t=>t.classList.toggle('lit',t===tr));
+    if(typeof showPourSheet==='function')showPourSheet();
+  }));
   host.querySelectorAll('button[data-seqlater]').forEach(b=>b.addEventListener('click',e=>{
     e.stopPropagation();
     const [pour,floor]=b.dataset.seqlater.split('|');
@@ -13822,15 +13902,17 @@ function printPourHtml(L,planImg){
   const iPlan=s.spatial?pourInstallPlan(L):null;
   const install=iPlan&&iPlan.floors.some(f=>f.needsShores)?`<h3>What goes in under each floor</h3>
     <table><thead><tr><th>Reshore under</th><th>Pattern</th><th>Shore</th><th>Clear height</th><th>Covers</th><th>Local exceptions</th></tr></thead><tbody>${
-      iPlan.floors.map(f=>{
-        if(!f.needsShores)return `<tr><td>${esc(installFloorName(f))}</td><td colspan="5"><i>${
-          floorRestText(f)}</i></td></tr>`;
+      installFloorGroups(iPlan.floors).map(g=>{
+        // RES-11 / PRT-01: floors with nothing to install, same reason, one line
+        if(g.why){const a=g.floors[0],b=g.floors[g.floors.length-1],n=g.floors.length;
+          return `<tr><td>${esc(installFloorName(a))}${n>1?` to ${esc(installFloorName(b))} <i>(${n} floors)</i>`:''}</td><td colspan="5"><i>${esc(g.why)}</i></td></tr>`}
+        const f=g.f;
         const hs=[...f.heights].sort((a,b)=>a-b);
         return `<tr><td>${esc(installFloorName(f))}</td>
           <td><b>${f.general!=null?esc(f.general):'<i>shore not chosen</i>'}</b></td>
           <td>${f.shoreList.length?esc(f.shoreList.join(' / ')):'<i>not chosen</i>'}${f.padShores&&f.padShores.size?`<br><b>WOOD PAD under every ${esc([...f.padShores].join(' / '))} base</b> — on slab on grade${f.padOn.size?` (${esc([...f.padOn].join(', '))})`:''}; ${esc(PAD_SPEC)}`:''}</td>
           <td>${hs.length?esc(hs.length===1?feetToStr(hs[0]):feetToStr(hs[0])+'–'+feetToStr(hs[hs.length-1])):'—'}</td>
-          <td>${fmtArea(f.general!=null&&f.generalAppliedSF?f.generalAppliedSF:f.shoredSF)}</td>
+          <td>${(f.general!=null&&f.generalAppliedSF)||f.shoredSF?fmtArea(f.general!=null&&f.generalAppliedSF?f.generalAppliedSF:f.shoredSF):(f.beams&&f.beams.length?`<i>beams only · ${f.beams.length} row${f.beams.length>1?'s':''}</i>`:'—')}</td>
           <td>${f.exceptions&&f.exceptions.length?f.exceptions.map(e=>`${esc(e.pattern)} over ${fmtArea(e.areaSF)}`).join('; '):'—'}${
             f.beams.length?`${f.exceptions&&f.exceptions.length?'; ':''}beam lines: ${f.beams.map(bm=>
               `${bm.row.beamChosen?esc(bm.row.beamChosen.shore.name):'shore not picked yet'}${bm.row.beamSpacingFt!=null?' at '+esc(feetToStr(bm.row.beamSpacingFt))+' o.c.':''}`).join(', ')}`:''}</td></tr>`;
@@ -14230,9 +14312,22 @@ function typicalOnlyCount(){
 // Returned as {step,label} rather than prose so the rail, the step footer
 // and the Results panel can all send the user straight at the first one
 // instead of describing a dead end.
+// JOB-02: a set that cannot be the job's. `all` adds the softer case — a set
+// with a different page count from the one the job was saved with — which is
+// said once when the set loads, not kept on the step.
+function drawingSetMismatch(all){
+  if(!state.pdf.pages||!state.levels.length)return '';
+  const pages=[...state.levels.flatMap(l=>levelSheets(l).map(s=>s.page)),...skippedPages()].filter(p=>p>0);
+  const top=pages.length?Math.max(...pages):0;
+  const set=state.project.drawingSet?` (${state.project.drawingSet})`:'';
+  if(top>state.pdf.pages)return `This set has ${state.pdf.pages} page${state.pdf.pages>1?'s':''}, but the job's sheets go up to page ${top} — it is not the set the job was built on${set}. Open that set, or place the sheets again in the Sheets table.`;
+  const saved=state.project.drawingSetPages;
+  if(all&&saved&&saved!==state.pdf.pages)return `This set has ${state.pdf.pages} pages; the job was saved with a ${saved}-page set${set}. Check that the sheets are the same before going on.`;
+  return '';
+}
 function stepBlockers(id){
   const b=[];
-  const needDrawings=()=>{if(!state.pdf.pages)b.push({step:'drawings',label:'a drawing set'})};
+  const needDrawings=()=>{if(!state.pdf.pages)b.push({step:'drawings',label:state.project.drawingSet?`the drawing set ${state.project.drawingSet}`:'a drawing set'})};
   const needLevels=()=>{if(!state.levels.length)b.push({step:'levels',label:'at least one level'})};
   switch(id){
     case 'sheets': needDrawings();needLevels();break;
@@ -14329,7 +14424,7 @@ function renderStepFoot(){
   const reviewing=typeof beamScan!=='undefined'&&beamScan&&beamScan.view!=='list'&&curGroup().id==='areas'&&typeof scanQueue==='function'&&scanQueue().length;
   const tracing=typeof autoTrace!=='undefined'&&autoTrace&&autoTrace.queue&&curGroup().id==='areas';
   if(tracing){const n=traceQueue().length;now=n?`${pillHtml('need','Reviewing')}<span class="sf-txt"><b>${n} loading area${n===1?'':'s'}</b> from the load map still to accept or skip, in the card above</span>`:`${pillHtml('need','Reviewing')}<span class="sf-txt">Load map reviewed — <b>Add</b> the accepted areas or Cancel, in the card above</span>`}
-  else if(reviewing)now=`${pillHtml('need','Reviewing')}<span class="sf-txt"><b>${scanQueue().length} shape${scanQueue().length===1?'':'s'}</b> from the sheets still to accept or skip, in the card above</span>`;
+  else if(reviewing){const rv=scanLeft();now=`${pillHtml('need','Reviewing')}<span class="sf-txt"><b>${rv.n} shape${rv.n===1?'':'s'}</b> on ${rv.floors} floor${rv.floors===1?'':'s'} still to accept or skip, in the card above</span>`}
   else if(!act)now=`${pillHtml('ok','Done')}<span class="sf-txt">${esc(t.gate.text||'Ready to continue')}</span>`;
   else if(act.st.locked)now=`${pillHtml('lock',stepTitle(act.sec))}<span class="sf-txt">${esc(act.st.text)}</span>`;
   else now=`${pillHtml('need',stepTitle(act.sec))}<span class="sf-txt"><b>Now:</b> ${esc(act.st.text)}</span>`;
@@ -14346,10 +14441,12 @@ function renderStepFoot(){
 
 function stepStatus(id){
   switch(id){
-    case 'drawings':
-      return state.pdf.pages>0
-        ?{done:true,text:`${state.pdf.pages} page${state.pdf.pages>1?'s':''} loaded`}
-        :{done:false,text:'Upload a PDF drawing set'};
+    case 'drawings':{
+      if(!(state.pdf.pages>0))return{done:false,text:state.project.drawingSet?`Open the drawing set ${state.project.drawingSet}`:'Upload a PDF drawing set'};
+      const mis=drawingSetMismatch();
+      if(mis)return{done:false,text:mis.replace(/\. Open that set.*$/,'')};
+      return{done:true,text:`${state.pdf.pages} page${state.pdf.pages>1?'s':''} loaded`};
+    }
     case 'levels':{
       const n=state.levels.length,e=state.levels.filter(hasElev).length;
       if(n<2)return{done:false,text:n?'Add at least one more level':'Add your levels'};
@@ -14388,6 +14485,11 @@ function stepStatus(id){
       const s=scheduleShape();
       if(s==='none')return{done:false,text:state.pdf.pages?'Read loads from the drawings':'Load drawings first'};
       if(!scheduleUsable())return{done:false,text:'Enter the first mark\'s loads'};
+      // LOD-09: a mark with no number is not confirmed, whatever its row says
+      // (Kalae, Oct 15 2026: a blanked SDL left "27 marks confirmed · Done")
+      const blank=s==='split'?llSchedule().filter(r=>r.load==null||isNaN(r.load)).length+sdlSchedule().filter(r=>r.load==null||isNaN(r.load)).length
+                             :getConditions().filter(c=>!isConcOnly(c)&&conditionCapacity(c)==null).length;
+      if(blank)return{done:false,text:`${blank} mark${blank>1?'s':''} without a value`};
       const un=s==='split'?unconfirmedMarkCount():getConditions().filter(needsConfirm).length;
       if(un)return{done:false,text:`${un} mark${un>1?'s':''} to confirm`};
       // the marks are only half of it: a floor with no typical capacity is a
@@ -14433,9 +14535,16 @@ function stepStatus(id){
       // every floor the load passes through needs a capacity from somewhere
       const bare=levelsWithoutCapacity();
       if(bare.length)return{done:false,text:`No capacity on ${bare.slice(0,3).join(', ')}${bare.length>3?'…':''}`};
+      // ARE-28: a review in progress is the step's state, across every floor
+      // it still has to walk, not a Done pill beside a "1 shape still to
+      // accept" foot (Kalae, Oct 15 2026)
+      const rv=scanLeft();
+      if(rv.n)return{done:false,text:`Reviewing: ${rv.n} shape${rv.n>1?'s':''} on ${rv.floors} floor${rv.floors>1?'s':''} still to accept or skip — or Stop here`};
       const bits=[];
       if(n)bits.push(`${n} area${n>1?'s':''} tagged`);
       if(typ)bits.push(`${typ} floor${typ>1?'s':''} on the typical`);
+      const stopped=state.ui.scanStopped;
+      if(stopped&&stopped.n)bits.push(`${stopped.n} shape${stopped.n>1?'s':''} on ${stopped.floors} floor${stopped.floors>1?'s':''} not reviewed`);
       return{done:true,text:bits.join(' · ')||'ready'};
     }
     case 'sequence':{
@@ -14533,7 +14642,15 @@ function sectionNext(s){
   // UI-32: sections after this one that are already done are not stops on
   // the way — once the rest of the step is done, Next is the next step
   const restDone=i>=0&&g.mode!=='tabs'&&g.sections.slice(i+1).every(x=>stepStatus(x).done);
-  if(i>=0&&i<g.sections.length-1&&!restDone)return{kind:'section',id:g.sections[i+1],title:stepTitle(g.sections[i+1]),gate:stepStatus(s)};
+  if(i>=0&&i<g.sections.length-1&&!restDone){
+    const st=stepStatus(s);
+    // UI-32: a tab beside this one (Results → Sequence) is a view, not a
+    // gate — it opens as soon as there is a solve to show, with the picks
+    // still to make said on the row (Kalae, Oct 15 2026: "Next: Sequence"
+    // disabled over "577 shores to choose" while the tab opened in one click)
+    const gate=g.mode==='tabs'&&!st.locked&&typeof resultsCurrent==='function'&&resultsCurrent()?{done:true,text:st.text}:st;
+    return{kind:'section',id:g.sections[i+1],title:stepTitle(g.sections[i+1]),gate};
+  }
   const gi=GROUPS.findIndex(x=>x.id===g.id);
   if(gi>=0&&gi<GROUPS.length-1)return{kind:'group',id:GROUPS[gi+1].id,title:GROUPS[gi+1].title,gate:g.mode==='tabs'?stepStatus(s):groupStatus(g)};
   return null;
@@ -14549,7 +14666,7 @@ function renderSectionNexts(){
     if(panel.lastElementChild!==foot)panel.appendChild(foot);
     const st=stepStatus(s),ready=!!t.gate.done;
     const why=ready?(st.text||''):(t.gate.text||st.text||'Finish this section to continue');
-    foot.innerHTML=`<span class="sn-status">${st.locked?pillHtml('lock',stepTitle(s)):pillHtml(ready?'ok':'need',ready?'Done':'To do')}<span class="sn-txt">${esc(why)}</span></span>`
+    foot.innerHTML=`<span class="sn-status">${st.locked?pillHtml('lock',stepTitle(s)):pillHtml(st.done?'ok':'need',st.done?'Done':'To do')}<span class="sn-txt">${esc(why)}</span></span>`
       +`<button class="btn btn-sm btn-primary sn-btn" data-nextkind="${t.kind}" data-nextid="${esc(t.id)}"${ready?'':' disabled'} title="${esc(ready?'Continue to '+t.title:why)}">Next: ${esc(t.title)} \u2192</button>`;
     const b=foot.querySelector('.sn-btn');
     if(b&&!b._bound){b._bound=true;b.addEventListener('click',()=>{const k=b.dataset.nextkind,id=b.dataset.nextid;if(k==='section'){secOverride.clear();setStep(id)}else gotoGroup(id)})}
@@ -14801,7 +14918,11 @@ async function autoScanAreas(){
 function setStep(id){
   if(!STEPS.some(s=>s.id===id))return;
   if(id!==curStep&&typeof secOverride!=='undefined')secOverride.clear();
+  const wasGroup=curStep?groupOf(curStep).id:null;
   curStep=id;
+  // UI-26: a step is arrived at from its top (Kalae, Oct 15 2026: Loads
+  // opened at the foot of the chart, Results with the Pour row scrolled away)
+  if(groupOf(id).id!==wasGroup){const sp=document.getElementById('stepPanels');if(sp)sp.scrollTop=0}
   state.ui.assumptionOverlay=null;
   if(groupOf(id).id!=='loads')state.ui.sourceBox=null;
   // the scan review is paused, not thrown away, while the user is on another
@@ -14841,7 +14962,7 @@ function setStep(id){
   // RES-18: a solve that still matches the inputs is shown, not run again
   // (Kalae, Oct 15 2026: every return to Results cost 12 s with nothing changed)
   if(id==='results'){if(resultsCurrent())renderSchedule();else runSchedule();if(typeof showPourSheet==='function')showPourSheet()}
-  if(id==='sequence')runSequence();
+  if(id==='sequence'){runSequence();if(typeof showPourSheet==='function')showPourSheet()}
   if(grp.id==='areas')prefillTypicals();       // never arrive on a floor with a silent 0 PSF
   // UI-35 / UI-36 / ARE-03: Floor edge, Match floors and Areas work on floor
   // plans — arriving on a load map, detail or elevation sheet, open the
@@ -14937,15 +15058,21 @@ function renderDrawingsPanel(){
     el.innerHTML=`<p class="step-help">Drop the structural drawing set here or use the button. The sheet with the <b>load schedule</b> and the <b>floor plans</b> should both be in it.</p>`;
     return;
   }
-  const pageLevel=state.levels.map(l=>{const s=levelSheets(l);
-    return s.length?`<li>${esc(l.name)} &rarr; ${s.map(x=>esc(sheetTag(l,x.page))).join(', ')}</li>`:''}).join('');
+  // UI-15 / UI-32: one summary line, not a bullet per floor — on Kalae 42
+  // lines pushed the way forward under the foot bar (Oct 15 2026). The
+  // floor-by-floor list is the Sheets table.
+  const placed=state.levels.filter(l=>levelSheets(l).length).length;
+  const nSheets=state.levels.reduce((n,l)=>n+levelSheets(l).length,0);
   const nSk=skippedPages().length;
   const unclaimed=[];
   for(let p=1;p<=state.pdf.pages;p++)if(levelForPage(p)<0&&!pageIsSkipped(p))unclaimed.push(p);
+  const mis=drawingSetMismatch();
   el.innerHTML=`<p class="step-help">${state.pdf.pages} page${state.pdf.pages>1?'s':''} loaded${state.project.drawingSet?` (${esc(state.project.drawingSet)})`:''}. ${levelsConfirmed()?'The levels are confirmed; every sheet gets its floor and zone in <b>Sheets</b>.':'The levels were read off the plan sheets — confirm them in <b>Levels</b>, then give every sheet its floor and zone in <b>Sheets</b>.'}</p>
-    ${pageLevel?`<ul class="step-list">${pageLevel}</ul>`:'<p class="step-help dim">No pages assigned to floors yet.</p>'}
-    ${nSk?`<p class="step-help dim">${nSk} sheet${nSk>1?'s':''} marked not a floor plan.</p>`:''}
-    ${unclaimed.length?`<p class="step-help dim">${unclaimed.length} sheet${unclaimed.length>1?'s':''} still unanswered (${unclaimed.slice(0,8).join(', ')}${unclaimed.length>8?'…':''}).</p>`:''}`;
+    ${mis?`<p class="step-help"><span class="lm-warn">${esc(mis)}</span></p>`:''}
+    <p class="step-help dim">${nSheets?`${nSheets} plan sheet${nSheets>1?'s':''} on ${placed} of ${state.levels.length} floor${state.levels.length>1?'s':''}`:'No pages assigned to floors yet'}${nSk?` · ${nSk} marked not a floor plan`:''}${unclaimed.length?` · ${unclaimed.length} still unanswered (${unclaimed.slice(0,8).join(', ')}${unclaimed.length>8?'…':''})`:''}${nSheets?' — the floor-by-floor list is in <b>Sheets</b>':''}.</p>`;
+  // the set is in: choosing another is a plain button, not the one thing to do
+  const up=document.getElementById('btnUpload');
+  if(up){up.classList.toggle('btn-primary',!state.pdf.pages);up.textContent=state.pdf.pages?'Choose another drawing set…':'Choose drawing set…'}
 }
 
 // UI-34: what a proposed fit says on its own sheet's row — stats, the
@@ -19003,15 +19130,22 @@ function pendingAction(){
       nav:{i:Q.i,n:Q.rows.length,text:pos},
       actions:[{id:'qhand',label:'Draw by hand',primary:true},{id:'qskip',label:'Skip'}]};
     const what=`${r.polygon.length} corners${r.areaSF!=null?' · '+fmtArea(r.areaSF):''}`;
-    const vd=r.verdict==='good'?'reads well':r.verdict?'look closely':'';
+    // UI-22 / UI-35: a re-read over a confirmed edge says in the bar what it
+    // would change; one that covers less or leaves drawn areas outside is
+    // not "reads well", and Keep current is the primary (Kalae, Oct 15 2026:
+    // "reads well" plus a red Use this one on an outline 10.7k SF smaller)
+    const worse=!!(r.had&&((r.areaBefore!=null&&r.areaAfter!=null&&r.areaAfter<r.areaBefore-Math.max(50,r.areaBefore*0.02))||r.outside));
+    const vd=worse?'look closely — it covers less than the edge in place':r.verdict==='good'?'reads well':r.verdict?'look closely':'';
     const why=r.why&&r.why!==what&&!(r.verdict==='good')?' · '+r.why:'';
+    const change=r.had?' · '+edgeChangeText(r).replace(/<[^>]+>/g,''):'';
+    const use={id:'quse',label:r.had?'Use this one':'Confirm'},keep={id:'qskip',label:r.had?'Keep current':'Skip'};
     return{id:'edgeq',queue:true,
       title:`Floor edge for ${who}`,
-      hint:`the cyan outline is the slab edge as read — ${what}${vd?' · '+vd:''}${why}${(r.notes&&r.notes.length)?' · '+r.notes.join(' · '):''}${r.had?' · replaces the edge already there':''}`,
+      hint:`the cyan outline is the slab edge as read — ${what}${vd?' · '+vd:''}${why}${(r.notes&&r.notes.length)?' · '+r.notes.join(' · '):''}${change}`,
       nav:{i:Q.i,n:Q.rows.length,text:pos},
-      actions:[{id:'quse',label:r.had?'Use this one':'Confirm',primary:true},{id:'qadjust',label:'Adjust'}]
+      actions:(worse?[{...keep,primary:true},use]:[{...use,primary:true}]).concat([{id:'qadjust',label:'Adjust'}])
         .concat(nC>1?[{id:'qnext',label:`Try the next outline (${(r.candIdx||0)+1} of ${nC})`}]:[])
-        .concat([{id:'qhand',label:'Draw by hand'},{id:'qskip',label:r.had?'Keep current':'Skip'}])};
+        .concat([{id:'qhand',label:'Draw by hand'}]).concat(worse?[]:[keep])};
   }
   if(edgeCandActive()){
     const P=edgeProposal,lv=state.levels[P.levelIdx],n=edgeCands().length;
@@ -19801,15 +19935,21 @@ async function runAutoDetect(opt){
     // joining the queue as they arrive, with the progress said in the head.
     // ARE-28 (Sep 25): bottom floor first, the way the review walks
     targets.sort((a,b)=>scanFloorRank(a.levelIdx)-scanFloorRank(b.levelIdx)||(a.page-b.page));
-    const token={};scanToken=token;
+    const token={};scanToken=token;state.ui.scanStopped=null;
     const what=opt.beams&&opt.openings?'both':(opt.openings?'openings':'beams');
     beamScan={page:targets.length===1?targets[0].page:null,levelIdx:targets[0].levelIdx,startLevelIdx:targets[0].levelIdx,
               floorLi:targets[0].levelIdx,targets:targets.map(t=>({levelIdx:t.levelIdx,page:t.page,read:false})),
               items:[],sel:-1,multi:targets.length>1,what,view:'queue',
               progress:{done:0,total:targets.length,page:targets[0].page},notes:{outside:0,crossings:0,skipped,drawn:0}};
     renderBeamPanel();
+    // UI-23: the progress pill has to reach the screen between sheets — the
+    // detectors are CPU work, so without a breath the step sits frozen (Kalae,
+    // Oct 15 2026: 10.8 s with nothing moving over 42 sheets)
+    const breathe=()=>new Promise(r=>requestAnimationFrame(()=>setTimeout(r,0)));
+    await breathe();
     let n=0;
     for(const t of targets){
+      if(scanToken!==token||!beamScan)return;
       const lv=state.levels[t.levelIdx];
       const found=[];
       if(opt.beams){
@@ -19833,6 +19973,8 @@ async function runAutoDetect(opt){
       const nx=targets[n];
       beamScan.progress=n<targets.length?{done:n,total:targets.length,page:nx&&nx.page}:null;
       renderBeamPanel();renderCanvas();
+      await breathe();
+      if(scanToken!==token||!beamScan)return;
       // the first candidate is shown at once only when it sits on the sheet
       // already on screen — a zoom, never a page flip under the user's hands
       if(!beamScan.shownAny&&beamScan.view==='queue'&&scanMayJump()){const cur=scanCurrent();if(cur&&(cur.page!=null?cur.page:beamScan.page)===state.pdf.current){beamScan.shownAny=true;scanShow(cur)}}
@@ -19843,7 +19985,10 @@ async function runAutoDetect(opt){
     if(nt.drawn)notes.push(`${nt.drawn} already drawn on the floor, not offered again`);
     if(nt.crossings)notes.push(`${nt.crossings} crossing${nt.crossings>1?'s':''} of dimension or grid lines with no outline round them not offered as openings`);
     if(nt.skipped)notes.push(`${nt.skipped} sheet${nt.skipped>1?'s':''} without a confirmed edge not read`);
-    if(notes.length)toast(notes.join(' · ')+'.',6000);
+    // UI-26: what the read left out is plumbing — a dim line on the card, not
+    // a pop-up ("155 already drawn … 187 crossings …", Kalae, Oct 15 2026)
+    beamScan.notesText=notes.length?notes.join(' · ')+'.':'';
+    if(beamScan.notesText)renderBeamPanel();
     if(!beamScan.items.some(it=>!it.done)){
       beamScan=null;renderBeamPanel();renderCanvas();
       toast('Nothing found to propose on '+(targets.length>1?'those sheets':'this sheet')+'.',4200);
@@ -19879,7 +20024,18 @@ async function startBeamScan(){
   scanDropDrawn(beamScan.items);
   scanAdvance();
 }
-function cancelBeamScan(){beamScan=null;scanToken=null;renderBeamPanel();renderSidebar();renderCanvas()}
+// what a review still holds, over every floor it has yet to walk
+function scanLeft(){
+  if(typeof beamScan==='undefined'||!beamScan||beamScan.view==='list'||typeof scanPending!=='function')return{n:0,floors:0};
+  const left=scanPending();
+  return{n:left.length,floors:new Set(left.map(scanFloorOf)).size};
+}
+// ARE-28: stopping the review remembers what it left, so the step can say so
+function cancelBeamScan(){
+  const left=scanLeft();
+  state.ui.scanStopped=left.n?left:null;
+  beamScan=null;scanToken=null;renderBeamPanel();renderSidebar();renderCanvas();
+}
 function beamFtPerPx(it){
   if(!beamScan)return null;
   const li=it&&it.levelIdx!=null?it.levelIdx:beamScan.levelIdx;
@@ -20111,7 +20267,8 @@ function scanAcceptAllType(){
 function scanQueueHtml(){
   const q=scanQueue(),it=scanCurrent();
   const pr=beamScan.progress;
-  const progress=pr?`<div class="sq-progress" role="status">${pillHtml('read',`reading sheet ${pr.done+1} of ${pr.total}`)} <span class="lm-dim">${pr.page?`sheet ${pr.page} — `:''}shapes join the queue as each sheet is read</span></div>`:'';
+  const progress=(pr?`<div class="sq-progress" role="status">${pillHtml('read',`reading sheet ${pr.done+1} of ${pr.total}`)} <span class="lm-dim">${pr.page?`sheet ${pr.page} — `:''}shapes join the queue as each sheet is read</span></div>`:'')
+    +(beamScan.notesText?`<div class="sq-notes lm-dim" title="What the read left out, so nothing is offered twice or from outside the floor">${esc(beamScan.notesText)}</div>`:'');
   const sf=x=>{const f=beamFtPerPx(x);return f?fmtArea(x.areaPx2*f*f):`${Math.round(x.areaPx2/1000)}k px&sup2;`};
   const tally=beamScan.tally||{added:0,skipped:0};
   const listBtn=`<button type="button" class="btn btn-sm" id="bsList" title="Every candidate as a list with tick boxes">List</button>`;
@@ -20896,7 +21053,7 @@ const collapsedAnswerGroups=new Set();
 // levels, the shore catalog and the project settings, and nothing else.
 // zones, the sheets still to check and the levels confirmation are bookkeeping
 // for the Building step, not inputs to the calculation
-const NON_INPUT_PROJECT_KEYS=['drawingSet','shoreChoices','regionLabels','name','zones','sheetUnsure','levelsConfirmed','beamBreakout','handTools','autoScan','loadsStartedBlank'];
+const NON_INPUT_PROJECT_KEYS=['drawingSet','drawingSetPages','shoreChoices','regionLabels','name','zones','sheetUnsure','levelsConfirmed','beamBreakout','handTools','autoScan','loadsStartedBlank'];
 function calculationKey(doc){
   const d=doc||serializeDoc();
   // project is small: sort it, and drop the empty maps lazy getters leave
@@ -21089,7 +21246,8 @@ function assumptionItems(L){
   if(!L||!L.solve||!L.solve.spatial)return [];
   return (L.solve.assumptions||[]).map(a=>({...a,
     areaSF:a.areaSF!=null?a.areaSF:a.cells.length/2*L.solve.step*L.solve.step,
-    cells:(a.cells&&a.cells.length)?a.cells:(a.mp?mpCells(a.mp,L.solve.step):[])}));
+    cells:(a.cells&&a.cells.length)?a.cells:(a.mp?mpCells(a.mp,L.solve.step):[])}))
+    .filter(a=>a.areaSF>=1);     // RES-11: an assumption over no area says nothing ("· 0 SF", Kalae, Oct 15 2026)
 }
 function assumptionText(a){
   const titles={extent:'No floor edge: slab assumed to extend everywhere',edge:`Overhang of ${OVERHANG_BEAR_FT} ft or less taken as bearing on the floor below`,capacity:'Typical capacity used outside tagged loading areas'};
@@ -21180,7 +21338,10 @@ function beamAnswerStrip(b){
 function loadSourceTag(c){
   const source=condSource(c);
   if(source==='manual')return '<span class="lm-hand">Typed manually</span>';
-  if(source==='import')return `<span class="lm-hand" title="${esc(c.sourceFile||'Spreadsheet')}">Imported: ${esc(c.sourceFile||'Spreadsheet')}${c.sourceSheet?' · '+esc(c.sourceSheet):''}</span>`;
+  // UI-38: the badge is one word — the file and sheet are in its tooltip and
+  // in the table head (Kalae, Oct 15 2026: "IMPORTED: KALAE LOAD CHART.XLSX ·
+  // SHEET1" wrapped every row to four lines)
+  if(source==='import')return `<span class="lm-hand" title="Imported from ${esc(c.sourceFile||'a spreadsheet')}${c.sourceSheet?' · '+esc(c.sourceSheet):''}">Imported</span>`;
   // The row's own box on the sheet is recorded at scan time, so verifying a
   // value means putting a box round the printed row — without leaving Loads.
   if(c.src&&c.src.page)
@@ -22242,6 +22403,11 @@ function adAfterDraw(lv,z,layer){
       else if(sr.src.length&&!notes.some(n=>/from the sheet/.test(n)))notes.push('the sheet agrees with these values');
       if(sr.tosFt!=null&&hasElev(lv)){const o=Math.round((sr.tosFt-lv.elevation)*12*8)/8;if(o!==slabOffsetOf(z)){z.offsetIn=o;notes.push(`T.O.S. ${ftInStr(sr.tosFt)} from the sheet`)}}
       if(sr.src.length)z.adSheet={tIn:sr.tIn,tosFt:sr.tosFt};
+    }
+    // ARE-14: a slab the same as the floor's typical changes nothing — say so
+    // (Kalae, Oct 15 2026: a 5" slab at typical on a 5" floor went in silently)
+    if(k==='slab'&&lv.slabThickness!=null&&Math.abs(+slabThicknessOf(lv,z)-+lv.slabThickness)<1e-6&&!slabOffsetOf(z)){
+      notes.push(`same thickness and T.O.S. as the floor's typical slab, so it changes nothing — keep it as a label, or Delete removes it`);warn=true;
     }
   }
   // gaps and laps under 3"

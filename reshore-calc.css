@@ -984,8 +984,11 @@ select.sched-shore option,select.sel-styled option{background:var(--surface-rais
 .dg-calc{font:12px/1 var(--font-mono);fill:var(--dg-text)}.dg-strong{font-weight:700}.dg-shore-name{fill:var(--dg-shore);font-weight:700}.dg-pend-txt{fill:var(--dg-pend);font-weight:600}.dg-sub2{fill:var(--dg-sub);font-size:var(--fs-sm)}
 .dg-toggle{padding:1px 7px;font-size:var(--fs-sm);margin-left:6px}.dg-toggle.on{background:var(--accent-light)}
 .seq-table td{vertical-align:top}
-.seq-wrap{overflow-x:auto;max-width:100%}
-.seq-wrap .seq-table{min-width:620px}
+.seq-wrap{max-width:100%}
+.seq-wrap .seq-table{width:100%;table-layout:fixed}
+.seq-table td,.seq-table th{white-space:normal;overflow-wrap:anywhere}
+.seq-table th:nth-child(1),.seq-table td:nth-child(1){width:26px}.seq-table th:nth-child(3),.seq-table td:nth-child(3){width:52px}
+.seq-table tr[data-seqrow]{cursor:pointer}.seq-table tr[data-seqrow].lit td{background:var(--sel-bg,rgba(0,140,130,.08))}
 .seq-actions{margin:6px 0 8px}
 .seq-floor{margin:2px 0 6px;line-height:1.45}
 .seq-tag{display:inline-block;font-size:var(--fs-sm);font-weight:700;letter-spacing:.4px;text-transform:uppercase;padding:1px 5px;border-radius:3px;margin-right:5px;vertical-align:1px}
