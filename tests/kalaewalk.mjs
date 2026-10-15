@@ -262,14 +262,16 @@ console.log('K. The plan bar asks nothing on Levels (UI-20)');
 {
   const page = await openJob();
   const K = await page.evaluate(async () => {
-    setStep('levels'); state.activeLevelIdx = 0; await goToPage(1); renderPageBar();
+    setStep('levels'); renderPageBar();
     const a = document.getElementById('pageBar').classList.contains('visible');
+    const arrived = { page: state.pdf.current, active: state.activeLevelIdx, here: levelForPage(state.pdf.current) };
     setStep('areas'); state.activeLevelIdx = 0; await goToPage(1); renderPageBar();
     const b = document.getElementById('pageBar').classList.contains('visible');
-    return { levels: a, areas: b, here: levelForPage(1) };
+    return { levels: a, areas: b, arrived };
   });
-  ok(!K.levels, 'no "Go to sheet 42 / Work on 1" bar on arrival at Levels');
-  ok(K.areas, 'on Areas, where it matters, the bar still keeps sheet and floor honest');
+  ok(K.arrived.here >= 0 && K.arrived.active === K.arrived.here, 'the floor of the sheet on screen is the working floor on arrival: ' + JSON.stringify(K.arrived));
+  ok(!K.levels, 'so no "Go to sheet 42 / Work on 1" bar on arrival at Levels');
+  ok(K.areas, 'working on another floor, the bar still keeps sheet and floor honest');
   await page.close();
 }
 

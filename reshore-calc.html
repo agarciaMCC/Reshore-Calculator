@@ -1125,12 +1125,10 @@ function renderPageBar(){
   const bar=document.getElementById('pageBar');
   if(!bar)return;
   const p=state.pdf.current;
-  // the bar keeps sheet and floor honest where areas are drawn; on Drawings,
-  // Levels and Sheets nothing is drawn, so it asks nothing (Kalae, Oct 15
+  // (opening a job onto its set makes the sheet on screen's floor the
+  // working floor, so this bar has nothing to say on arrival — Kalae, Oct 15
   // 2026: "MECH ROOF's areas are on sheet 42 — Go to sheet 42 / Work on 1"
-  // on arrival at Levels, before anything was asked for)
-  // (an unplaced or skipped sheet still asks everywhere — that bar is the
-  // "Assign to" picker, BLD-04)
+  // at Levels before anything was asked for)
   if(!state.pdf.pages||!state.levels.length||state.align.active||(typeof autoTrace!=='undefined'&&autoTrace)||(typeof curGroup==='function'&&(curGroup().id==='answer'||curGroup().id==='loads'))){bar.classList.remove('visible');return}
   const here=levelForPage(p);
   const lv=getActiveLevel();
@@ -1139,8 +1137,7 @@ function renderPageBar(){
   // a load map under review is not a floor plan and does not need claiming
   if(autoTraceOn(p)){bar.classList.remove('visible');return}
   if(here>=0){
-    const drawingStep=!(typeof curStep!=='undefined'&&(curStep==='drawings'||curStep==='levels'||curStep==='sheets'));
-    if(lv&&state.activeLevelIdx!==here&&drawingStep){
+    if(lv&&state.activeLevelIdx!==here){
       const mine=levelSheets(lv).map(s=>s.page);
       const zHere=sheetZoneName(state.levels[here],p);
       html=`<span>Sheet ${p} is <b>${nm(state.levels[here])}</b>${zHere?` &middot; ${esc(zHere)}`:''}. ${nm(lv)}'s areas are ${mine.length?`on ${esc(sheetListLabel(lv))}`:'not on any sheet yet'}.</span>`
@@ -1797,6 +1794,8 @@ async function loadFile(file){
       // "42 sheets matched" with no word)
       const mis=drawingSetMismatch(true);
       state.project.drawingSetPages=doc.numPages;
+      // UI-20: the first sheet's floor is the working floor on arrival
+      if(state.levels.length){const h=levelForPage(1);if(h>=0)state.activeLevelIdx=h}
       document.getElementById('upload-prompt').style.display='none';
       document.getElementById('pageNav').style.display='flex';
       await renderPdfPage(1);
@@ -15067,9 +15066,12 @@ function renderDrawingsPanel(){
   const unclaimed=[];
   for(let p=1;p<=state.pdf.pages;p++)if(levelForPage(p)<0&&!pageIsSkipped(p))unclaimed.push(p);
   const mis=drawingSetMismatch();
+  // the first few floors inline, by zone where a floor has them (BLD-11)
+  const withSheets=state.levels.filter(l=>levelSheets(l).length);
+  const inline=withSheets.slice(0,8).map(l=>`${esc(l.name)} → ${esc(sheetListLabel(l))}`).join(' · ');
   el.innerHTML=`<p class="step-help">${state.pdf.pages} page${state.pdf.pages>1?'s':''} loaded${state.project.drawingSet?` (${esc(state.project.drawingSet)})`:''}. ${levelsConfirmed()?'The levels are confirmed; every sheet gets its floor and zone in <b>Sheets</b>.':'The levels were read off the plan sheets — confirm them in <b>Levels</b>, then give every sheet its floor and zone in <b>Sheets</b>.'}</p>
     ${mis?`<p class="step-help"><span class="lm-warn">${esc(mis)}</span></p>`:''}
-    <p class="step-help dim">${nSheets?`${nSheets} plan sheet${nSheets>1?'s':''} on ${placed} of ${state.levels.length} floor${state.levels.length>1?'s':''}`:'No pages assigned to floors yet'}${nSk?` · ${nSk} marked not a floor plan`:''}${unclaimed.length?` · ${unclaimed.length} still unanswered (${unclaimed.slice(0,8).join(', ')}${unclaimed.length>8?'…':''})`:''}${nSheets?' — the floor-by-floor list is in <b>Sheets</b>':''}.</p>`;
+    <p class="step-help dim">${nSheets?`${nSheets} plan sheet${nSheets>1?'s':''} on ${placed} of ${state.levels.length} floor${state.levels.length>1?'s':''}`:'No pages assigned to floors yet'}${nSk?` · ${nSk} marked not a floor plan`:''}${unclaimed.length?` · ${unclaimed.length} still unanswered (${unclaimed.slice(0,8).join(', ')}${unclaimed.length>8?'…':''})`:''}.${inline?` ${inline}${withSheets.length>8?` · and ${withSheets.length-8} more in <b>Sheets</b>`:''}`:''}</p>`;
   // the set is in: choosing another is a plain button, not the one thing to do
   const up=document.getElementById('btnUpload');
   if(up){up.classList.toggle('btn-primary',!state.pdf.pages);up.textContent=state.pdf.pages?'Choose another drawing set…':'Choose drawing set…'}
@@ -21617,6 +21619,9 @@ function applyOpenedJob(d,what){
   state.activeLevelIdx=state.levels.length?0:null;state.activeZoneIdx=null;state.results=null;
   if(typeof lodInvalidate==='function')lodInvalidate();
   sortLevelsByElevation();
+  // UI-20: the floor of the sheet on screen is the working floor, so the
+  // sheet-and-floor bar has nothing to ask on arrival
+  if(state.pdf.pages){const h=levelForPage(state.pdf.current);if(h>=0)state.activeLevelIdx=h}
   renderSidebar();updatePageInfo();renderCanvas();persist();
   if(typeof refreshFlow==='function')refreshFlow();
   const set=state.project.drawingSet;
