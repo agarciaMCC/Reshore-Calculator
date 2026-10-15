@@ -310,15 +310,15 @@
       </table>
       <div id="lmSplit"></div>
     </div>
-    <div class="prov-note" id="lmNoteCombined">
+    <div class="prov-note info" id="lmNoteCombined">
       <b>How capacity is worked out</b>
       <ul>
-        <li><code>capacity = SDL + 1.6/1.3 &times; LL</code>, with <code>&times; 0.6</code> on the live load where it is reduced per code. Rounded down.</li>
-        <li>This drawing does not say which live loads were reduced, so every row starts <b>assumed reduced</b> (the safe reading) and stays flagged until you confirm it against the structural capacity chart.</li>
+        <li><code>capacity = SDL + 1.6/1.3 &times; LL</code>, with <code>&times; 0.6</code> on the live load where it is reduced per code. Rounded down. (1.6/1.3: the live load's design factor, 1.6, over McClone's construction factor, 1.3.)</li>
+        <li>This drawing does not say which live loads were reduced, so every row starts <b>assumed reduced</b> (the safe reading) and is marked <b>assumed</b> until you confirm it against the structural capacity chart.</li>
         <li>The gray figure beside each capacity is what it would be on the other basis. Editing a value or ticking the box confirms that row.</li>
       </ul>
     </div>
-    <div class="prov-note" id="lmNoteSplit" style="display:none">
+    <div class="prov-note info" id="lmNoteSplit" style="display:none">
       <b>How capacity is worked out</b>
       <ul>
         <li>An area tagged <b>C2</b> takes live load <b>C</b> and dead load <b>2</b>: <code>capacity = SDL + 1.6/1.3 &times; LL</code>, with <code>&times; 0.6</code> on the live load where the drawing prints <b>(R)</b>. Rounded down.</li>
@@ -3643,7 +3643,7 @@ function renderLoadStart(){
   const empty=scheduleShape()==='none';
   const hide=(sel,on)=>{const e=document.querySelector(sel);if(e)e.style.display=on?'none':''};
   hide('#lmCombined',empty);hide('.lm-bulk',empty);
-  hide('#lmNoteCombined',empty);
+  hide('#lmNoteCombined',empty||scheduleShape()==='split');
   if(empty)hide('#lmNoteSplit',true);
   if(!empty){el.style.display='none';el.innerHTML='';return}
   // a job with no drawings: start the chart rather than ask
@@ -4005,6 +4005,9 @@ function renderLoadsByHand(){
   const pl=document.getElementById('p-loads');if(!pl)return;
   const box=byHandBox('loads','or read again / import / add by hand'),body=box.querySelector('.by-hand-body');
   const shape=scheduleShape();
+  // LOD-01: a chosen shape stands — once the chart has marks in it or in
+  // use, the switch is not offered at all (not offered and then refused)
+  const locked=shape!=='none'&&(marksInUse()||scheduleHasValues());
   // the re-read button and the bulk "set all as" control are the originals
   // from the panel head, moved here with their bindings; the rest is rebuilt
   const rescan=document.getElementById('lmRescan'),bulk=document.querySelector('.lm-bulk');
@@ -4012,10 +4015,10 @@ function renderLoadsByHand(){
       <button class="btn btn-sm" id="lmImport">Import from Excel / CSV…</button>
       <button class="btn btn-sm" id="lmTemplate" title="A blank .csv with the right columns, to fill in and bring back">Blank template</button>
     </div>
-    <div class="lm-acts">${shape==='combined'
+    ${locked?'':`<div class="lm-acts">${shape==='combined'
       ?`<button class="btn btn-sm" id="lsSplit" title="The drawings keep two mark systems: live-load marks (A, B, C) and dead-load marks (1, 2, 3), so an area is tagged C2">Use split LL + SDL schedules instead</button>`
       :`<button class="btn btn-sm" id="lsCombined" title="One mark per condition (1, 2, 3), the way a capacity chart is written">Use one combined chart instead</button>`}
-      <span class="lm-dim">${shape==='combined'?'A combined chart tags an area with one mark (1, 2, 3…).':'Split schedules tag an area with one of each (C2 = live load C on dead load 2).'} Switching is possible while the chart is empty.</span></div>
+      <span class="lm-dim">${shape==='combined'?'A combined chart tags an area with one mark (1, 2, 3…).':'Split schedules tag an area with one of each (C2 = live load C on dead load 2).'} Switching is possible while the chart is empty.</span></div>`}
     <div class="lm-acts" id="lmByHandRow3"></div>`;
   const r1=body.querySelector('#lmByHandRow1');
   if(rescan){rescan.textContent='Read again from drawings';rescan.title='Read the load schedule off the drawings again; rows you confirmed are kept';r1.insertBefore(rescan,r1.firstChild)}
@@ -11435,7 +11438,88 @@ function runSchedule(){
   calculatedInputKey=calculationKey();seqPlan=null;sequenceInputKey=null;
   state.ui.assumptionOverlay=null;
   if(schedPourIdx>=schedSolve.levels.length)schedPourIdx=0;
+  reattachPicks(schedSolve);
+  notePickLoss(schedSolve);
   renderSchedule();
+}
+
+// ── PICKS ARE NEVER DROPPED SILENTLY (RES-17, JOB-04) ──
+// A pick is stored under its row's key: pour, the stack of conditions under
+// it, and the floor. Two things move that key without the row changing: a
+// solver that writes the key more fully than the one the job was saved with
+// (the minimum second level added "grade" to the end of every key that
+// reaches the ground), and the inputs themselves. The first is the same row
+// under a longer name, so the pick follows it — only where exactly one row
+// matches and the saved shore is still a legal choice there. The second is a
+// different answer, and RES-01 says the app never picks for you: those rows
+// ask again, and Results says how many picks no longer match and why.
+function pickRows(S){
+  const rows=[];
+  for(const L of (S&&S.levels)||[]){const s=L.solve;if(!s||!s.spatial)continue;
+    s.regions.forEach(r=>r.steps.forEach(st=>{if(st.choiceKey)rows.push({L,key:st.choiceKey,st,opts:st.options||[],chosen:!!st.chosen,beam:false})}));
+    (s.beams||[]).forEach(b=>(b.rows||[]).forEach(row=>{if(row.beamKey)rows.push({L,key:row.beamKey,st:row,opts:row.options||[],chosen:!!row.beamChosen,beam:true})}));
+  }
+  return rows;
+}
+const PICK_SUFFIX=/(\|W|N)$/;
+function reattachPicks(S){
+  const ch=shoreChoices(),rows=pickRows(S),live=new Set(rows.map(r=>r.key));
+  const orphans=Object.keys(ch).filter(k=>!PICK_SUFFIX.test(k)&&!live.has(k));
+  if(!orphans.length)return 0;
+  const body=k=>{const p=k.split('|');return{pour:p[0],lvl:p[p.length-1],mid:p.slice(1,-1)}};
+  const extends_=(a,b)=>a.length!==b.length&&a.slice(0,Math.min(a.length,b.length)).every((x,i)=>x===b[i]);
+  let n=0;const touched=new Set();
+  for(const o of orphans){
+    const O=body(o);
+    const hits=rows.filter(r=>{if(r.chosen)return false;const K=body(r.key);
+      return K.pour===O.pour&&K.lvl===O.lvl&&(K.mid[0]==='beam')===(O.mid[0]==='beam')&&extends_(K.mid,O.mid)
+        &&(K.mid[0]!=='beam'||K.mid[1]===O.mid[1])});
+    if(hits.length!==1)continue;
+    const r=hits[0];if(!r.opts.some(x=>x.shoreId===ch[o]))continue;
+    ch[r.key]=ch[o];
+    for(const suf of ['N','|W'])if(ch[o+suf]!=null&&ch[r.key+suf]==null)ch[r.key+suf]=ch[o+suf];
+    if(!r.beam)r.st.chosen=chosenOption(r.opts,r.key);
+    r.chosen=true;touched.add(r.L);n++;
+  }
+  if(!n)return 0;
+  // beams are regrouped from the picks; slab rows were set in place
+  for(const L of touched){
+    const s=L.solve;
+    if(s.rawBeams&&typeof regroupBeamsOf==='function')regroupBeamsOf(L);
+    else s.pendingChoices=s.regions.reduce((m,r)=>m+r.steps.filter(x=>stNeeds(x)&&!x.chosen&&x.options.length).length,0)
+      +(s.beams||[]).reduce((m,b)=>m+b.rows.filter(x=>x.beamKey&&x.beamNet>0&&!x.beamChosen&&x.options.length).length,0);
+  }
+  persist();
+  return n;
+}
+// Which picks the last solve used; a pick in use then and no longer
+// matching a row now is a pick the user has lost sight of.
+let _picksInUse=null,pickLoss=null;
+function notePickLoss(S){
+  const ch=shoreChoices(),rows=pickRows(S);
+  const now=new Set(rows.filter(r=>r.chosen).map(r=>r.key));
+  const pours=new Set(((S&&S.levels)||[]).map(L=>L.pour.name));
+  // just opened: what the job was saved with is what it should come back with
+  // a loss stands until its rows are picked again or the change is put back
+  const before=_picksInUse?new Set([..._picksInUse,...((pickLoss&&pickLoss.keys)||[])]):new Set(Object.keys(ch).filter(k=>!PICK_SUFFIX.test(k)&&pours.has(k.split('|')[0])));
+  // lost = a pick nothing uses any more, where a row of the same placement
+  // and floor now asks for a shore (a leftover key with nothing asking is
+  // just history, and says nothing about the job)
+  const asking=new Set(rows.filter(r=>!r.chosen&&r.opts.length).map(r=>{const p=r.key.split('|');return p[0]+'|'+p[p.length-1]}));
+  const lost=[...before].filter(k=>{if(now.has(k)||ch[k]==null)return false;const p=k.split('|');return asking.has(p[0]+'|'+p[p.length-1])});
+  if(lost.length){
+    const opened=!_picksInUse;
+    const byPour=[...new Set(lost.map(k=>k.split('|')[0]))];
+    pickLoss={n:lost.length,opened:opened||!!(pickLoss&&pickLoss.opened),pours:byPour,keys:lost};
+  }else pickLoss=null;
+  _picksInUse=now;
+}
+function pickLossHtml(){
+  if(!pickLoss)return '';
+  const {n,opened,pours}=pickLoss,pl=n>1;
+  const where=pours.map(p=>levelTagName(p)).join(', ');
+  return `<span class="lm-warn">${n} shore pick${pl?'s':''} ${opened?'saved with this job':'made earlier'} no longer match${pl?'':'es'} a row (${esc(where)} placement${pours.length>1?'s':''}) — ${
+    opened?'the areas or loads under them read differently now':'the loads or areas under them changed'}, so ${pl?'those rows ask':'that row asks'} again. Put the change back and ${pl?'they return':'it returns'}.</span>`;
 }
 
 function fmtArea(sf){
@@ -11799,10 +11883,14 @@ function applyBulkShore(shoreId,rows,what){
   const ch=shoreChoices();
   for(const r of fit)ch[r.key]=r.options.find(o=>String(o.shoreId)===String(shoreId)).shoreId;
   persist();runSchedule();renderCanvas();
-  const miss=rows.length-fit.length;
-  toast(`${name} set on ${fit.length} row${fit.length>1?'s':''} ${what}`
-    +(miss?` — ${miss} row${miss>1?'s':''} it does not reach ${miss>1?'were':'was'} left alone`:'')
-    +'. Ctrl+Z puts them back.',4200);
+  // UI-18: say it in the same terms as the "still to choose" count — rows
+  // that already had a shore are not rows waiting for one
+  const missed=rows.filter(r=>!fit.includes(r)),open=missed.filter(r=>!r.chosen).length,kept=missed.length-open;
+  const pl=n=>n>1?'s':'';
+  toast(`${name} set on ${fit.length} row${pl(fit.length)} ${what}`
+    +(missed.length?` — it does not reach ${missed.length} other row${pl(missed.length)}: `
+      +[kept?`${kept} kept the shore ${kept>1?'they':'it'} had`:'',open?`${open} still to choose`:''].filter(Boolean).join(', '):'')
+    +'. Ctrl+Z puts them back.',5200);
 }
 // Show everything that needs reshoring under one floor, on that floor's sheet.
 // "3", or "3 · North" on a pour split across zone sheets
@@ -12154,7 +12242,19 @@ function outstandingItems(L){
 }
 function nextHtml(L){
   const items=outstandingItems(L);
-  if(!items.length)return '';
+  if(!items.length){
+    // RES-02 / UI-18: picks left on another placement — the way there stays
+    // the one primary button, not a hunt through the Pour list
+    const all=(schedSolve&&schedSolve.levels)||[],me=all.indexOf(L);
+    const order=all.map((x,i)=>i).filter(i=>i!==me).sort((a,b)=>((a<me)-(b<me))||a-b);
+    const pi=order.find(i=>outstandingItems(all[i]).length);
+    if(pi==null)return '';
+    const n=outstandingPickTotal();
+    return `<div class="rs-next">${pillHtml('need',`${n} shore pick${n>1?'s':''} left on other placements`)}
+      <span class="rs-next-n">none left on this one</span>
+      <button type="button" class="btn btn-sm btn-primary rs-next-go" id="rsNextPour" data-pi="${pi}" title="Open the ${esc(levelTagName(all[pi].pour.name))} placement at its first row still needing a shore">Next pick: ${esc(levelTagName(all[pi].pour.name))} placement ▸</button>
+    </div>`;
+  }
   const ord=state.ui.nextOrd;
   const at=ord==null?0:items.filter(x=>x.ord<=ord).length;
   return `<div class="rs-next" title="Step through the rows that still need a shore: each one opens its card, lands on the plan and focuses the picker">
@@ -12428,7 +12528,8 @@ function renderSchedule(){
   if(!s.spatial)warnBits.push(`<span class="lm-warn">Cannot lay this out spatially — ${esc(s.reason||'')}${s.unaligned&&s.unaligned.length?': '+esc(s.unaligned.join(', ')):''}.</span>`);
   if(unconf.length)warnBits.push(`<span class="lm-warn">Loading mark${unconf.length>1?'s':''} ${unconf.join(', ')} still assumed.</span>`);
   const bare=(typeof levelsWithoutCapacity==='function')?levelsWithoutCapacity():[];
-  if(bare.length)warnBits.push(`<span class="lm-warn">${esc(bare.join(', '))} ${bare.length>1?'have':'has'} no capacity — ${bare.length>1?'they count':'it counts'} as 0 PSF here. Set a typical capacity, or tag areas, on ${bare.length>1?'them':'it'} in step 5.</span>`);
+  if(bare.length)warnBits.push(`<span class="lm-warn">${esc(bare.join(', '))} ${bare.length>1?'have':'has'} no capacity — ${bare.length>1?'they count':'it counts'} as 0 PSF here. Set a typical capacity on Loads, or tag areas on Areas.</span>`);
+  if(pickLoss)warnBits.push(pickLossHtml());
   if(s.spatial&&s.anyUnresolved)warnBits.push(`<span class="lm-warn">Load still remains at the bottom of the defined stack — add the floors below${s.hasGrade?'':', or mark the lowest floor as slab on grade (▨ on its level row) if it is'}.</span>`);
   if(s.spatial&&s.openAreaSF>0)warnBits.push(`<span class="lm-dim">${fmtArea(s.openAreaSF)} of the pour level is drawn as openings and carries no placement load.</span>`);
   if(s.spatial&&s.outsideEdgeSF>0)warnBits.push(`<span class="lm-dim">${fmtArea(s.outsideEdgeSF)} of the pour level's loading areas lies outside its floor edge and is not counted as poured.</span>`);
@@ -12500,6 +12601,12 @@ function renderSchedule(){
     });
     const nx=sumHost.querySelector('#rsNext'),pv=sumHost.querySelector('#rsPrev');
     if(nx)nx.addEventListener('click',()=>goOutstanding(L,1));
+    const np=sumHost.querySelector('#rsNextPour');
+    if(np)np.addEventListener('click',()=>{
+      schedPourIdx=+np.dataset.pi;state.ui.assumptionOverlay=null;state.ui.resultsFloor=null;state.ui.nextOrd=null;
+      renderSchedule();renderCanvas();
+      const L2=schedSolve.levels[schedPourIdx];if(L2)goOutstanding(L2,1);
+    });
     if(pv)pv.addEventListener('click',()=>goOutstanding(L,-1));
     sumHost.querySelectorAll('.inst-row[data-fl]').forEach(el=>el.addEventListener('click',()=>{
       const plan=pourInstallPlan(L);
@@ -13918,6 +14025,9 @@ function levelsWithoutCapacity(){
                                &&!(levelDefaultCapacity(l)>0)).map(l=>isRange(l)?rangeLabel(l):l.name);
 }
 // a bare slab-on-grade level counts as matched — it has no plan to place
+// ARE-25: beams with no usable width or depth, across the job
+function beamSizeMissing(z){return isBeam(z)&&!(z.widthIn>0&&z.depthIn>0)}
+function beamsWithoutSize(){return state.levels.reduce((n,l)=>n+zonesOf(l,'slab').filter(beamSizeMissing).length,0)}
 function alignedCount(){return state.levels.filter(l=>levelFullyMatched(l)||!levelNeedsAlignment(l)).length}
 function areasCount(){return state.levels.reduce((n,l)=>n+zonesOf(l,'loading').length,0)}
 // A floor has said its piece when it says where the slab is AND what it
@@ -13972,6 +14082,11 @@ function stepBlockers(id){
       if(!loadsReady())b.push({step:'loads',label:'a load schedule'});
       if(state.levels.length&&alignedCount()<state.levels.length)b.push({step:'match',label:'every floor matched to a sheet'});
       if(!pourableCount())b.push({step:'areas',label:'somewhere to put the concrete'});
+      // LOD-10 / JOB-01: a floor with no capacity at all is a missing input,
+      // not 0 PSF — the gate holds Results the way Loads' own Next does
+      {const bare=levelsWithoutCapacity();if(bare.length)b.push({step:'loads',label:`a typical capacity on ${bare.join(', ')}`})}
+      // ARE-25: a beam with no depth carries nothing; it never solves as 0 PLF
+      {const nb=beamsWithoutSize();if(nb)b.push({step:'areas',label:`a size for ${nb} beam${nb>1?'s':''} (no depth read)`})}
       break;
   }
   return b;
@@ -14568,7 +14683,9 @@ function setStep(id){
   if(grp.id==='areas'&&typeof beamScan!=='undefined'&&beamScan&&typeof renderBeamPanel==='function')renderBeamPanel();   // a paused review comes back
   if(typeof renderPageBar==='function')renderPageBar();
   if(id==='loads'&&scheduleShape()==='none'&&state.pdf.doc)openLoadMapModal(false);
-  if(id==='loads'){if(scheduleShape()!=='none')prefillTypicals();renderLoadActions()}
+  // UI-38: a chart that came in with the job (or before this step was built)
+  // is drawn on arrival — never a table head standing over no rows
+  if(id==='loads'){if(scheduleShape()!=='none'){prefillTypicals();renderLoadMapTable();renderLoadStart()}renderLoadActions()}
   renderStepper();
   renderStepPanel();
   // a stacked step puts several sections down one pane: bring the one in
@@ -21144,6 +21261,7 @@ function applyOpenedJob(d,what){
   history.record('Open job');
   importImpact=null;
   deserializeDoc(d);
+  _picksInUse=null;pickLoss=null;      // JOB-04: the next solve checks the picks it was saved with
   state.activeLevelIdx=state.levels.length?0:null;state.activeZoneIdx=null;state.results=null;
   if(typeof lodInvalidate==='function')lodInvalidate();
   sortLevelsByElevation();
@@ -21986,9 +22104,11 @@ function adTagText(lv,z,layer){
     return{t:`${code}${c&&c.desc?' · '+c.desc:''} · ${psf}${om}`,short:`${code} · ${psf}${om}`};
   }
   const k=slabKind(z),el=o=>hasElev(lv)?ftInStr(lv.elevation+o/12):(o?offsetStr(o):'typ.');
-  if(k==='beam'){const t=adBeamTop(lv,z);
-    if(t.state==='conflict')return{t:`${z.widthIn}×${z.depthIn} · verify top`,warn:true};
-    return{t:`${z.widthIn}×${z.depthIn} · T.O.B. ${el(t.off)}`,short:`${z.widthIn}×${z.depthIn}`};}
+  if(k==='beam'){const t=adBeamTop(lv,z),sz=`${z.widthIn>0?z.widthIn:'?'}×${z.depthIn>0?z.depthIn:'?'}`;
+    // ARE-21 / ARE-25: a size not read says so — never "×undefined"
+    if(beamSizeMissing(z))return{t:`${sz} · size needed`,short:sz,warn:true};
+    if(t.state==='conflict')return{t:`${sz} · verify top`,warn:true};
+    return{t:`${sz} · T.O.B. ${el(t.off)}`,short:sz};}
   if(k==='slab'){const o=slabOffsetOf(z);return{t:`${inchStr(slabThicknessOf(lv,z))} Slab · T.O.S. ${el(o)}`,short:`T.O.S. ${el(o)}`}}
   if(k==='grade'){const o=slabOffsetOf(z);return{t:`${inchStr(slabThicknessOf(lv,z))} SOG · T.O.S. ${el(o)}`,short:`SOG ${el(o)}`}}
   if(k==='opening')return{t:'OPENING',short:'OPEN'};
@@ -22265,7 +22385,8 @@ function adChecks(lv){
     arr.filter(isBeam).forEach(b=>{
       const t=adBeamTop(lv,b);
       if(t.state==='conflict')out.push({type:'verify',rings:[adP(b.polygon)],ids:[b.id],text:`${nm(b)} crosses ${t.parts.map(p=>adElevStr(lv,p.off)).join(' and ')} — verify its top`,verify:t.parts});
-      if(b.adSizeSrc==='default')out.push({type:'size',rings:[adP(b.polygon)],ids:[b.id],text:`${nm(b)} — size not read from a BM label (${b.widthIn}×${b.depthIn} assumed)`});
+      if(beamSizeMissing(b))out.push({type:'size',rings:[adP(b.polygon)],ids:[b.id],text:`${nm(b)} — no ${b.widthIn>0?'depth':'size'} read, so it would carry nothing. Type its size (the sheet's BM label) before Results`});
+      else if(b.adSizeSrc==='default')out.push({type:'size',rings:[adP(b.polygon)],ids:[b.id],text:`${nm(b)} — size not read from a BM label (${b.widthIn}×${b.depthIn} assumed)`});
     });
     arr.filter(z=>['slab','grade'].includes(slabKind(z))&&z.adSheet).forEach(z=>{
       const s=z.adSheet,d=[];

@@ -708,7 +708,8 @@
      "fromSheet": true,
      "srcPage": 6,
      "page": 6,
-     "widthIn": 23.3
+     "widthIn": 22,
+     "depthIn": 17
     },
     {
      "id": "q10utebe",
