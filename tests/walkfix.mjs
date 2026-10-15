@@ -1,4 +1,4 @@
-// @rules UI-38, LOD-01, LOD-10, ARE-21, ARE-25, RES-02, RES-17, JOB-04, UI-18  (see DECISIONS.md)
+// @rules UI-38, LOD-01, LOD-10, ARE-21, ARE-25, RES-02, RES-17, JOB-04, UI-18, ARE-13, RES-07, RES-11, PRT-01, MDL-04  (see DECISIONS.md)
 // THE BOTHELL WALKTHROUGH (Oct 15 2026). An estimator's walk of the 1175
 // Bothell Stem 4 job through all four steps found places where the app said
 // one thing and showed another, or dropped work without a word. Each section
@@ -173,6 +173,52 @@ console.log('E. Next pick stays the way forward across placements (RES-02, UI-18
   ok(!/left alone/.test(G.msg) && /it does not reach/.test(G.msg), 'bulk apply says what it did not reach: ' + G.msg);
   const m = G.msg.match(/(\d+) still to choose/);
   ok(m ? +m[1] === G.todo : G.todo === 0, 'and its "still to choose" agrees with the count: ' + G.msg + ' / ' + G.todo);
+  await page.close();
+}
+
+console.log('F. Results says what it means (ARE-13, RES-07, RES-11, MDL-04)');
+{
+  const page = await openJob();
+  await toResults(page);
+  const F = await page.evaluate(async () => {
+    const at = name => { schedPourIdx = schedSolve.levels.findIndex(L => L.pour.name === name); state.ui.resultsFloor = null; renderSchedule(); };
+    at('Roof');
+    const pane = () => document.getElementById('schedHead').parentElement.innerText;
+    const roof = { head: document.getElementById('schedHead').innerText, body: pane(),
+      tabs: [...document.querySelectorAll('.rs-tab')].map(t => t.textContent.replace(/\s+/g, ' ').trim()) };
+    at('3');
+    const l3 = { head: document.getElementById('schedHead').innerText };
+    return { roof, l3, src: document.body.innerText };
+  });
+  ok(/partly on grade/.test(F.roof.body), 'floor 1 reads partly on grade, not on grade whole');
+  ok(/over openings on every floor down to L1, on grade: no reshores there/.test(F.roof.head), 'roof slab over openings down to grade is named: ' + F.roof.head.slice(0, 400));
+  ok(F.roof.tabs.slice(1).every(t => /^Under \d+/.test(t)) && F.roof.tabs.some(t => /\d+ to pick$/.test(t)), 'tab badges read "N to pick": ' + JSON.stringify(F.roof.tabs));
+  ok(!/add the floors below/.test(F.l3.head) && /down to grade, so nothing below can take its load/.test(F.l3.head), 'a stack already on grade is not told to add floors: ' + F.l3.head.slice(0, 300));
+  ok(!/t\.b\.c\.|legal\) —|spacing waits on a shore/.test(F.src), 'no "t.b.c.", "legal" or "waits on a shore" on screen');
+  await page.close();
+}
+
+console.log('G. print the whole job, under its name (PRT-01)');
+{
+  const page = await openJob();
+  await toResults(page);
+  const G = await page.evaluate(() => {
+    const grab = all => {
+      let html = '';
+      const w = { document: { write: s => { html += s; }, close() {}, querySelector: () => null, querySelectorAll: () => [] }, print() {} };
+      const real = window.openPrintWindow; window.openPrintWindow = () => w;
+      try { printSchedule(all); } finally { window.openPrintWindow = real; }
+      return html;
+    };
+    const html = grab(true), one = grab();
+    return { name: state.project.name, field: document.getElementById('projectName').value,
+             sections: (html.match(/class="pour-sec/g) || []).length, pours: schedSolve.levels.length,
+             head: /all placements/.test(html), named: html.includes(state.project.name),
+             oneSections: (one.match(/class="pour-sec/g) || []).length, btn: !!document.getElementById('schedPrintAll') };
+  });
+  ok(G.name === '1175 Bothell Stem 4' && G.field === G.name, 'a job saved without a name takes its file\'s: ' + G.name);
+  ok(G.btn && G.sections === G.pours && G.head && G.named, 'Print all puts every placement in one document under the job name: ' + [G.sections, G.pours]);
+  ok(G.oneSections === 0, 'Print still prints the one on screen');
   await page.close();
 }
 

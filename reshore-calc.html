@@ -2147,10 +2147,13 @@ function drawFrame(){
       drawCtx.lineWidth=1.2/zoom;
       drawCtx.stroke(path);
       drawCtx.setLineDash([]);
-      const c=typicalLabelAt(lv);
+      // MDL-14 / LOD-08: the top floor and a floor on grade need no capacity,
+      // so they carry no "not set" label; a floor that does is sent to Loads
+      const needs=lv.id!==topLevelId()&&!levelOnGrade(lv);
+      const c=(set||needs)?typicalLabelAt(lv):null;
       if(c){
         const txt=set?`TYPICAL ${code?code+' · ':''}${Math.round(cap)} PSF`
-                     :'NO TYPICAL CAPACITY — set it on this step';
+                     :'NO TYPICAL CAPACITY — set it on Loads';
         drawCtx.font=`600 ${Math.max(10,12/zoom)}px ${F_MONO}`;
         drawCtx.textAlign='center';drawCtx.textBaseline='middle';
         drawCtx.lineWidth=4/zoom;drawCtx.strokeStyle='rgba(255,255,255,.9)';
@@ -11913,10 +11916,10 @@ function installFloorSpec(f){
   const bits=[];
   if(f.general!=null){
     bits.push(`<span class="rs-pat">${esc(f.general)}</span>`);
-    const sh=f.generalShores.length?f.generalShores.join(' / '):(f.shoreList.join(' / ')||'shore t.b.c.');
+    const sh=f.generalShores.length?f.generalShores.join(' / '):(f.shoreList.join(' / ')||'shore not picked yet');
     bits.push(`<span class="rs-shore">${esc(sh)}</span>`);
   }else if(f.cells.size){
-    bits.push(`<span class="rs-pat pend">spacing waits on a shore</span>`);
+    bits.push(`<span class="rs-pat pend">pick a shore to get the spacing</span>`);
   }
   const hs=[...f.heights].sort((a,b)=>a-b);
   if(hs.length)bits.push(`<span class="rs-dim" title="Clear height from the floor below's top of slab up to this soffit">${
@@ -11931,7 +11934,7 @@ function installFloorSpec(f){
   // MDL-18: stiff shores standing on slab on grade
   if(f.padShores&&f.padShores.size)notes.push(`<span class="inst-note pad" title="${esc(padText([...f.padShores].join(' / '),[...f.padOn].join(', ')))}">\u26a0 <b>Wood pad under every ${esc([...f.padShores].join(' / '))} base</b> — these stand on slab on grade${f.padOn.size?` (${esc([...f.padOn].join(', '))})`:''}; ${esc(PAD_SPEC)}, so the slabs above can deflect and share the load.</span>`);
   for(const bm of f.beams)notes.push(`Beam ${esc(String(bm.b.widthIn)+'×'+bm.b.depthIn)}: ${
-    bm.row.beamChosen?esc(bm.row.beamChosen.shore.name):'<b>shore t.b.c.</b>'}${
+    bm.row.beamChosen?esc(bm.row.beamChosen.shore.name):'<b>shore not picked yet</b>'}${
     bm.row.beamPerCluster>1?` · ${bm.row.beamPerCluster} per cluster`:''}${
     bm.row.beamSpacingFt!=null?` at ${esc(feetToStr(bm.row.beamSpacingFt))} o.c.`:''} along its line.`);
   if(f.absorbedSF)notes.push(`<span class="rs-dim">${fmtArea(f.absorbedSF)} of the placement is absorbed here.</span>`);
@@ -12167,7 +12170,7 @@ function resultsTabsHtml(L){
     ${floors.map(f=>{
       const sc=floorPatternScale(L,f);
       const picks=Math.max(0,f.pending-f.noOptions);
-      const pend=(picks?`<i class="rs-tab-pend" title="${picks} shore pick${picks>1?'s':''} outstanding">${picks}</i>`:'')
+      const pend=(picks?`<i class="rs-tab-pend" title="${picks} shore pick${picks>1?'s':''} outstanding">${picks} to pick</i>`:'')
         +(f.noOptions?`<i class="rs-tab-warn" title="${f.noOptions} row${f.noOptions>1?'s':''} with nothing to shore against">!</i>`:'');
       return `<button type="button" class="rs-tab${cur===f.key?' active':''}" data-rsf="${esc(f.key)}" title="What goes in under ${esc(installFloorName(f))}: the plan shaded by spacing, the regions that decide it">Under <b>${esc(f.name)}</b>${f.zone?` <small>${esc(f.zone)}</small>`:''}${f.general!=null?` <span class="rs-tab-pat" style="--pc:${patColor(L,f,f.general)}">${esc(f.general)}</span>`:''}${pend}</button>`;
     }).join('')}
@@ -12176,7 +12179,7 @@ function resultsTabsHtml(L){
 function floorLegendHtml(L,f){
   const sc=floorPatternScale(L,f);
   if(!sc)return '';
-  const items=sc.list.map(e=>`<span class="lg-item" title="${esc(e.shores.join(' / ')||'shore t.b.c.')}${e.tighter?' — tighter than the floor\u2019s general pattern':e.general?' — the general pattern for this floor':' — looser than the general pattern'}"><i class="lg-sw" style="background:${e.color}"></i><b>${esc(e.pattern)}</b> <span class="lm-dim">${fmtArea(e.sf)}${e.shores.length?' · '+esc(e.shores.join(' / ')):''}${e.general?' · general':e.tighter?' · tighter':''}</span></span>`);
+  const items=sc.list.map(e=>`<span class="lg-item" title="${esc(e.shores.join(' / ')||'shore not picked yet')}${e.tighter?' — tighter than the floor\u2019s general pattern':e.general?' — the general pattern for this floor':' — looser than the general pattern'}"><i class="lg-sw" style="background:${e.color}"></i><b>${esc(e.pattern)}</b> <span class="lm-dim">${fmtArea(e.sf)}${e.shores.length?' · '+esc(e.shores.join(' / ')):''}${e.general?' · general':e.tighter?' · tighter':''}</span></span>`);
   if(sc.pendSF>0)items.push(`<span class="lg-item"><i class="lg-sw lg-pend"></i><b>no shore yet</b> <span class="lm-dim">${fmtArea(sc.pendSF)}</span></span>`);
   if(sc.absorbSF>0)items.push(`<span class="lg-item"><i class="lg-sw" style="background:${PAT_ABSORB}"></i><b>absorbed</b> <span class="lm-dim">${fmtArea(sc.absorbSF)} — no shores</span></span>`);
   const laterSF=laterItems(L).filter(x=>x.st.level.name===f.name&&regionOnFloorTab(x.r,f,L)).reduce((n,x)=>n+x.g.sf,0);
@@ -12293,6 +12296,18 @@ function goOutstanding(L,dir){
     renderSchedule();
   });
 }
+// ARE-13: a floor needing no shores says why — and a floor only PARTLY on
+// grade says so, with the suspended part's share, not "on grade" whole
+function floorRestText(f){
+  const sf=x=>fmtArea(x);
+  const part=f.gradeSF&&(f.absorbedSF||f.openSF);
+  if(f.gradeSF&&!part)return `on grade — takes the remaining ${f.gradePsf.toFixed(1)} PSF, nothing below it`;
+  if(part)return `partly on grade: ${sf(f.gradeSF)} on grade takes the remaining ${f.gradePsf.toFixed(1)} PSF`
+    +(f.absorbedSF?`; the suspended ${sf(f.absorbedSF)} carries what reaches it`:'')
+    +(f.openSF?`; ${sf(f.openSF)} has no slab`:'')+' — nothing to install';
+  if(f.openSF&&!f.absorbedSF)return 'no slab here — the load passes through to the floor below';
+  return 'nothing to install — this floor carries the placement on its own';
+}
 function renderInstallSummary(L,host){
   const plan=pourInstallPlan(L);
   if(!plan){host.innerHTML='';return null}
@@ -12303,9 +12318,7 @@ function renderInstallSummary(L,host){
   const rows=plan.floors.filter(f=>!tabF||f.key===tabF.key).map(f=>{
     const lit=hl&&hl.regionKey==='floor:'+f.key&&hl.pour===plan.pour;
     if(!f.needsShores){
-      const why=f.gradeSF?`on grade — takes the remaining ${f.gradePsf.toFixed(1)} PSF, nothing below it`
-        :f.openSF&&!f.absorbedSF?'no slab here — the load passes through to the floor below'
-        :`nothing to install — this floor carries the placement on its own`;
+      const why=floorRestText(f);
       return`<div class="inst-row none"><div class="inst-fl">${flName(f)}</div>
         <div class="inst-spec"><span class="rs-dim">${esc(why)}</span></div></div>`;
     }
@@ -12530,7 +12543,28 @@ function renderSchedule(){
   const bare=(typeof levelsWithoutCapacity==='function')?levelsWithoutCapacity():[];
   if(bare.length)warnBits.push(`<span class="lm-warn">${esc(bare.join(', '))} ${bare.length>1?'have':'has'} no capacity — ${bare.length>1?'they count':'it counts'} as 0 PSF here. Set a typical capacity on Loads, or tag areas on Areas.</span>`);
   if(pickLoss)warnBits.push(pickLossHtml());
-  if(s.spatial&&s.anyUnresolved)warnBits.push(`<span class="lm-warn">Load still remains at the bottom of the defined stack — add the floors below${s.hasGrade?'':', or mark the lowest floor as slab on grade (▨ on its level row) if it is'}.</span>`);
+  // where the stack already ends on grade, "add the floors below" is not the
+  // answer: the load is unresolved because no floor down to grade has slab
+  // there (an overhang or a shaft). Say where, and how much.
+  const bottomOnGrade=state.levels.length&&levelOnGrade(state.levels[state.levels.length-1]);
+  const allOpen=r=>r.steps.length&&r.steps.every(st=>st.open);
+  if(s.spatial&&s.anyUnresolved){
+    const usf=s.regions.filter(r=>r.unresolved).reduce((t,r)=>t+r.areaSF,0);
+    const noSlab=s.regions.filter(r=>r.unresolved&&allOpen(r));
+    if(bottomOnGrade&&noSlab.length){
+      const sf=noSlab.reduce((t,r)=>t+r.areaSF,0),why=noSlab.some(r=>r.steps.some(st=>st.noSlab))?'past the floor edges below':'over openings';
+      warnBits.push(`<span class="lm-warn">${fmtArea(sf)} of this placement is ${why} on every floor down to grade, so nothing below can take its load — check the floor edges and openings on ${esc(noSlab[0].steps.map(st=>st.level.name).join(', '))}${usf-sf>1?`; ${fmtArea(usf-sf)} more is still carrying load at the bottom of the stack`:''}.</span>`);
+    }else warnBits.push(`<span class="lm-warn">Load still remains at the bottom of the defined stack — add the floors below${s.hasGrade||bottomOnGrade?'':', or mark the lowest floor as slab on grade (▨ on its level row) if it is'}.</span>`);
+  }
+  // RES-07: open all the way down to grade is not a missing input, but it is
+  // a field condition — no reshores there, the pour's falsework stands on grade
+  if(s.spatial){
+    const toGrade=s.regions.filter(r=>!r.unresolved&&r.steps.length>1&&r.steps[r.steps.length-1].grade&&r.steps.slice(0,-1).every(st=>st.open));
+    if(toGrade.length){
+      const sf=toGrade.reduce((t,r)=>t+r.areaSF,0),gl=toGrade[0].steps[toGrade[0].steps.length-1].level.name;
+      warnBits.push(`<span class="lm-warn">${fmtArea(sf)} of this placement is over openings on every floor down to ${esc(levelTagName(gl))}, on grade: no reshores there — the falsework under it stands on grade${toGrade.length>1?' (regions '+toGrade.map(r=>r.index+1).join(', ')+')':` (region ${toGrade[0].index+1})`}.</span>`);
+    }
+  }
   if(s.spatial&&s.openAreaSF>0)warnBits.push(`<span class="lm-dim">${fmtArea(s.openAreaSF)} of the pour level is drawn as openings and carries no placement load.</span>`);
   if(s.spatial&&s.outsideEdgeSF>0)warnBits.push(`<span class="lm-dim">${fmtArea(s.outsideEdgeSF)} of the pour level's loading areas lies outside its floor edge and is not counted as poured.</span>`);
   if(s.spatial&&s.gradeAreaSF>0)warnBits.push(`<span class="lm-dim">${fmtArea(s.gradeAreaSF)} of the pour level is placed on grade and needs no reshoring.</span>`);
@@ -12556,7 +12590,8 @@ function renderSchedule(){
       <label>Pour <select id="schedPour">${sel}</select></label>
       <!-- regions are exact polygons now; there is no grid to choose -->
       <span class="sched-stat">${s.spatial?`${fmtArea(s.areaSF)} · ${s.regions.length} region${s.regions.length>1?'s':''}`:''}</span>
-      <button class="btn btn-sm" id="schedPrint">Print / PDF</button>
+      <button class="btn btn-sm" id="schedPrint" title="Print this placement">Print / PDF</button>
+      ${schedSolve.levels.length>1?`<button class="btn btn-sm" id="schedPrintAll" title="Every placement of the job in one document">Print all ${schedSolve.levels.length}</button>`:''}
     </div>
     ${warns.length?`<div class="lm-conflicts">${warns.join('<br>')}</div>`:''}
     ${assumptionsHtml(L,false,notes)}
@@ -12574,7 +12609,8 @@ function renderSchedule(){
   if(stepSel)stepSel.addEventListener('change',e=>{
     state.project.solveStepFt=+e.target.value;persist();runSchedule();
   });
-  document.getElementById('schedPrint').addEventListener('click',printSchedule);
+  document.getElementById('schedPrint').addEventListener('click',()=>printSchedule());
+  {const pa=document.getElementById('schedPrintAll');if(pa)pa.addEventListener('click',()=>printSchedule(true))}
 
   const sumHost=schedSummaryHost();
   if(!s.spatial){host.innerHTML='';if(sumHost)sumHost.innerHTML='';return}
@@ -12646,7 +12682,7 @@ function renderSchedule(){
         +`${esc(o.shore.name)} — ${o.capacityAtHeight.toLocaleString()} lb → ${o.minLevel?o.pattern+' (minimum level)':Math.round(o.sfPerShore)+' SF → '+o.pattern}</option>`).join('');
       const pick=st.options.length
         ? `<select class="sched-shore" data-key="${esc(st.choiceKey)}">
-             <option value="">— choose (${st.options.length} legal) —</option>${opts}</select>`
+             <option value="">— pick a shore (${st.options.length} fit${st.options.length>1?'':'s'}) —</option>${opts}</select>`
         : `<span class="lm-warn">${st.supportLevel?`no shore in the catalog reaches ${st.shoreHeightFt!=null?esc(feetToStr(st.shoreHeightFt)):'this height'}`:'no floor below to stand on'}</span>`;
       const later=laterGoverns(L,r,st);
       const laterHtml=later?`<div class="ra-later">\u2191 <b>${esc(later.pattern)} goes in here</b> — this placement needs ${esc(st.chosen.pattern)}, but the ${esc(levelTagName(later.pour))} placement needs ${esc(later.pattern)} under ${esc(st.level.name)} over ${later.whole?'this whole area':fmtArea(later.sf)+' of it'}, and the reshoring goes in once for both
@@ -12994,7 +13030,7 @@ function beamBlock(b,bi,L,hl){
       <td title="${r.supportLevel?`stands on ${esc(r.supportLevel.name)}${r.spansOpen?' through an open floor':''}${b.below&&b.below[r.levelIdx]?` · to the soffit of the ${b.below[r.levelIdx].widthIn}" beam below`:''}`:'nothing below to stand on'}">${r.shoreHeightFt!=null?feetToStr(r.shoreHeightFt):'—'}${b.below&&b.below[r.levelIdx]&&r.beamPerCluster>=2&&b.below[r.levelIdx].widthIn<b.widthIn?` <span class="lm-warn" title="outer shores may stand on the slab beside the ${b.below[r.levelIdx].widthIn}\u2033 beam below">\u26a0</span>`:''}${r.spansOpen&&r.supportLevel?` <span class="${throughAccepted(r.beamKey)?'lm-dim':'lm-warn'}">↓${esc(r.supportLevel.name)}</span>${
           throughAccepted(r.beamKey)?` <button type="button" class="ss-undo" data-thru="${esc(r.beamKey)}" data-thru-on="0" title="Flag this through-shore again">recheck</button>`
           :` <button type="button" class="btn btn-sm ss-ok" data-thru="${esc(r.beamKey)}" data-thru-on="1" title="Accept that these beam shores run through the open floor down to ${esc(r.supportLevel.name)}">OK</button>`}`:''}</td>
-      <td>${r.options.length?`<select class="sched-shore" data-key="${esc(r.beamKey)}"><option value="">— choose (${r.options.length} legal) —</option>${opts}</select>`:`<span class="lm-warn">${r.supportLevel?'no shore fits this height':'no floor below to stand on'}</span>`}</td>
+      <td>${r.options.length?`<select class="sched-shore" data-key="${esc(r.beamKey)}"><option value="">— pick a shore (${r.options.length} fit${r.options.length>1?'':'s'}) —</option>${opts}</select>`:`<span class="lm-warn">${r.supportLevel?'no shore fits this height':'no floor below to stand on'}</span>`}</td>
       <td><select class="sched-beam-n sel-styled" data-key="${esc(r.beamKey)}">${nOpts}</select></td>
       <td class="sched-num"><b>${r.beamSpacingFt!=null?feetToStr(r.beamSpacingFt)+' o.c.':'—'}</b></td></tr>${
       beamNeedsPad(r)?`<tr class="sched-pad-row sched-go" ${rowAttr}><td colspan="8"><div class="ra-pad">\u26a0 <b>Wood pad required under every ${esc(r.beamChosen.shore.name)} base</b> \u2014 ${esc(padText(r.beamChosen.shore.name,r.supportLevel&&r.supportLevel.name))}</div></td></tr>`:''}`;
@@ -13456,7 +13492,7 @@ function bindExcChips(host,floorOf,after){
 function seqFloorSpec(f){
   if(!f)return '—';
   if(f.general==null)return `<span class="lm-warn">no shore chosen yet${f.pendingSF?` (${fmtArea(f.pendingSF)})`:''}</span>`;
-  const shore=f.generalShores.length===1?esc(f.generalShores[0]):(f.generalShores.length?esc(f.generalShores.join(' / ')):'shore t.b.c.');
+  const shore=f.generalShores.length===1?esc(f.generalShores[0]):(f.generalShores.length?esc(f.generalShores.join(' / ')):'shore not picked yet');
   const hs=[...f.heights].sort((a,b)=>a-b);
   const h=hs.length?(hs.length===1?feetToStr(hs[0]):`${feetToStr(hs[0])}–${feetToStr(hs[hs.length-1])}`):null;
   let out=`<b>${patStr(f.general)}</b> · ${shore}${h?` · ${h}`:''}${f.generalAppliedSF?` · over ${fmtArea(f.generalAppliedSF)}`:''}`;
@@ -13500,7 +13536,7 @@ function renderSequence(){
   if(P.pending)warn.push(`<span class="lm-warn">${P.pending} row${P.pending>1?'s':''} in Results still need${P.pending>1?'':'s'} a shore chosen — ${P.pending>1?'those floors have':'that floor has'} no pattern yet.</span>`);
   for(const m of P.mixed)warn.push(`<span class="lm-warn">Under ${esc(m.floor)} different placements chose different shores (${esc(m.shores.join(', '))}). Only one type gets installed — pick the same shore on every row under that floor, or accept the governing one below.</span>`);
   host.innerHTML=`<p class="step-help">Placements in construction order. The reshoring under a floor goes in <b>once</b> and must cover every placement that loads it, so the pattern shown is the tightest any placement asks for. Small areas needing tighter spacing are called out separately &mdash; they govern their own footprint, not the floor. Reshoring under a floor comes out once <b>no placement above it still needs it</b> and <b>the falsework of the last placement that loaded it has been stripped</b> — until that falsework is out, the fresh slab is still sending its weight down through the stack. Dates are not modeled, so the sequence is stated in placements.</p>
-    <label class="adv-row" title="Areas needing a tighter pattern than the general one may total up to this share of the floor before the general pattern is tightened instead.">Local exceptions up to <input id="seqPct" type="number" min="0" max="100" step="5" style="width:52px" value="${P.thrPct}"> % of the floor</label>
+    <label class="adv-row" title="Areas needing a tighter pattern than the general one may total up to this share of the floor before the general pattern is tightened instead.">Tighten small patches on their own while they are under <input id="seqPct" type="number" min="0" max="100" step="5" style="width:52px" value="${P.thrPct}"> % of the floor; above that, tighten the whole floor</label>
     ${warn.length?`<div class="lm-conflicts">${warn.join('<br>')}</div>`:''}
     <div class="seq-actions"><button class="btn btn-sm" id="seqPrint">Print / PDF</button></div>
     <div class="seq-wrap"><table class="sched-table seq-table">
@@ -13513,7 +13549,7 @@ function renderSequence(){
         const rows=e.floors.map(o=>{
           const f=o.floorPlan;
           const bms=e.beams.filter(b=>b.floor===o.level.name);
-          const beamTxt=bms.length?`<div class="seq-beam">${bms.map(b=>`beam ${esc(b.label.replace(/^B\d+ · /,''))}: ${b.shore?esc(b.shore):'<span class="lm-warn">shore t.b.c.</span>'}${b.per>1?` · ${b.per} per cluster`:''}${b.spacingFt!=null?` at ${feetToStr(b.spacingFt)} o.c.`:''}`).join('<br>')}</div>`:'';
+          const beamTxt=bms.length?`<div class="seq-beam">${bms.map(b=>`beam ${esc(b.label.replace(/^B\d+ · /,''))}: ${b.shore?esc(b.shore):'<span class="lm-warn">shore not picked yet</span>'}${b.per>1?` · ${b.per} per cluster`:''}${b.spacingFt!=null?` at ${feetToStr(b.spacingFt)} o.c.`:''}`).join('<br>')}</div>`:'';
           if(o.firstInstall){
             return `<div class="seq-floor"><span class="seq-tag seq-install">install</span> under <b>${esc(o.level.name)}</b> — ${seqFloorSpec(f)}
               ${o.tighterThanNeeded||o.later?`<div class="seq-note seq-later">\u2191 this placement alone would need only ${patStr(o.own.general)}; the ${esc((o.later&&o.later.pours.length?o.later.pours:(f.governedBy||[])).join(', '))} placement governs${
@@ -13639,13 +13675,26 @@ function printSequence(){
 }
 
 // ── print view: schedule + the plan as drawn ──
-function printSchedule(){
+// PRT-01: the placement on screen, or (all) every placement of the job in
+// one document, each from its own page, so the job prints once, not four times
+function printSchedule(all){
   if(!checkPrintFreshness(false))return;
   const L=schedSolve.levels[schedPourIdx];
-  const s=L.solve;
   const win=openPrintWindow();
   if(!win){toast('Allow pop-ups to print the schedule.',3200);return}
   const planImg=capturePlanImage();
+  const idx=all===true?schedSolve.levels.map((_,i)=>i):[schedPourIdx];
+  const body=idx.length===1?printPourHtml(L,planImg)
+    :idx.map((pi,n)=>{const P=schedSolve.levels[pi];
+      return `<section class="pour-sec${n?' pagebreak':''}" data-pour="${pi}"><h2 class="pour-h">Placing ${esc(levelTagName(P.pour.name))} &middot; ${inchStr(P.pour.slabThickness)} slab</h2>${printPourHtml(P,pi===schedPourIdx?planImg:null)}</section>`}).join('');
+  printWrite(win,L,body,idx.length>1);
+  // the snippets are drawn after the page is open, then it prints
+  const fill=idx.length===1?fillPrintSnippets(win,L)
+    :idx.reduce((p,pi)=>p.then(()=>{let el=null;try{el=win.document.querySelector(`section[data-pour="${pi}"]`)}catch(e){}return el?fillPrintSnippets(win,schedSolve.levels[pi],el):null}),Promise.resolve());
+  fill.then(()=>setTimeout(()=>{try{win.print()}catch(e){}},350));
+}
+function printPourHtml(L,planImg){
+  const s=L.solve;
   // THE FIELD'S ANSWER FIRST. The region tables are the trail; the crew
   // installs reshoring under a floor, once, tight enough for every region
   // above it. That table leads the printed sheet for the same reason it
@@ -13655,9 +13704,7 @@ function printSchedule(){
     <table><thead><tr><th>Reshore under</th><th>Pattern</th><th>Shore</th><th>Clear height</th><th>Covers</th><th>Local exceptions</th></tr></thead><tbody>${
       iPlan.floors.map(f=>{
         if(!f.needsShores)return `<tr><td>${esc(installFloorName(f))}</td><td colspan="5"><i>${
-          f.gradeSF?`slab on grade — takes the remaining ${f.gradePsf.toFixed(1)} PSF`
-          :f.openSF&&!f.absorbedSF?'no slab here — the load passes through'
-          :'nothing to install — this floor carries the placement'}</i></td></tr>`;
+          floorRestText(f)}</i></td></tr>`;
         const hs=[...f.heights].sort((a,b)=>a-b);
         return `<tr><td>${esc(installFloorName(f))}</td>
           <td><b>${f.general!=null?esc(f.general):'<i>shore not chosen</i>'}</b></td>
@@ -13666,7 +13713,7 @@ function printSchedule(){
           <td>${fmtArea(f.general!=null&&f.generalAppliedSF?f.generalAppliedSF:f.shoredSF)}</td>
           <td>${f.exceptions&&f.exceptions.length?f.exceptions.map(e=>`${esc(e.pattern)} over ${fmtArea(e.areaSF)}`).join('; '):'—'}${
             f.beams.length?`${f.exceptions&&f.exceptions.length?'; ':''}beam lines: ${f.beams.map(bm=>
-              `${bm.row.beamChosen?esc(bm.row.beamChosen.shore.name):'shore t.b.c.'}${bm.row.beamSpacingFt!=null?' at '+esc(feetToStr(bm.row.beamSpacingFt))+' o.c.':''}`).join(', ')}`:''}</td></tr>`;
+              `${bm.row.beamChosen?esc(bm.row.beamChosen.shore.name):'shore not picked yet'}${bm.row.beamSpacingFt!=null?' at '+esc(feetToStr(bm.row.beamSpacingFt))+' o.c.':''}`).join(', ')}`:''}</td></tr>`;
       }).join('')}</tbody></table>
     <p class="note">The reshoring under a floor is installed once and must satisfy every region above it, so the pattern is the tightest any region asks for. An area needing tighter spacing governs its own footprint, not the floor; anything over ${iPlan.thrPct}% of the floor tightens the floor instead.</p>`:'';
   // PRT-01: a page per floor that gets reshoring — the plan shaded by the
@@ -13715,9 +13762,16 @@ function printSchedule(){
       ${b.beamUnresolved?'<p><b>Not absorbed within the defined stack.</b></p>':''}
       <div class="dg-print">${beamPathSvg({...b,index:bi},L)}</div>`;
   }).join('')):`<p><b>Not laid out spatially:</b> ${esc(s.reason||'')}</p>`;
-
+  return `${install}
+  ${overviews}
+  ${assumptionsHtml(L,true)}
+  ${legend}
+  ${rows}
+  ${planImg?`<div class="pagebreak"><h3>Plan &mdash; ${esc(L.pour.name)}</h3><img src="${planImg}"></div>`:''}`;
+}
+function printWrite(win,L,body,all){
   win.document.write(`<!doctype html><html><head><meta charset="utf-8">
-  <title>Reshore schedule — ${esc(state.project.name||'')} — ${esc(L.pour.name)}</title>
+  <title>Reshore schedule — ${esc(state.project.name||'')} — ${all?'all placements':esc(L.pour.name)}</title>
   <style>${mccPrintCss()}
     .dg-print{margin:6px 0 14px;page-break-inside:avoid}
     .dg-print svg{max-width:100%;height:auto;--dg-bar:#c9ccd3;--dg-bar-line:#555;--dg-open:#b04030;--dg-arrow:#3b6fd6;--dg-shore:#4a7fb5;--dg-pend:#d08a00;--dg-dim:#333;--dg-earth:#7a5a2a;--dg-text:#111;--dg-sub:#444}
@@ -13732,15 +13786,10 @@ function printSchedule(){
     .snip-ov img{max-width:100%;max-height:150mm;border:1px solid #bbb}.snip-wait{font-size:10px;color:#888}
     .ov-legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11px;margin:4px 0 6px}.ov-legend .lg-item{display:inline-flex;align-items:center;gap:5px}.ov-legend .lg-sw{display:inline-block;width:12px;height:12px;border:1px solid #333;print-color-adjust:exact;-webkit-print-color-adjust:exact}.ov-legend .lg-pend{background:#9a9a9a}.ov-legend .lg-later{background:repeating-linear-gradient(45deg,#c96 0 2px,transparent 2px 5px)}.ov-legend .rs-legend-h{flex:1 0 100%;color:#555}.ov-legend .lm-dim{color:#777}
   </style></head><body>
-  ${mccPrintHead(`Reshore schedule &mdash; ${esc(L.pour.name)}`,
-    `${esc(state.project.name||'Untitled project')} &middot; placing ${inchStr(L.pour.slabThickness)} slab`
+  ${mccPrintHead(all?`Reshore schedule &mdash; all placements`:`Reshore schedule &mdash; ${esc(L.pour.name)}`,
+    `${esc(state.project.name||'Untitled project')}${all?'':` &middot; placing ${inchStr(L.pour.slabThickness)} slab`}`
     +` &middot; construction DL ${projectDL()} PSF &middot; ${new Date().toLocaleDateString()}`)}
-  ${install}
-  ${overviews}
-  ${assumptionsHtml(L,true)}
-  ${legend}
-  ${rows}
-  ${planImg?`<div class="pagebreak"><h3>Plan &mdash; ${esc(L.pour.name)}</h3><img src="${planImg}"></div>`:''}
+  ${body}
   <p class="note">Capacity = SDL + 1.6/1.3 &times; LL (&times; 0.6 on the live-load term where reduced per code), truncated.
      Placement load = slab thickness / 12 &times; 150 + construction dead load. Shore spacing capped at 10 &times; 10 ft.
      "Reshore under LX" is the shore between the T.O.S. of the floor below and the underside of the LX slab; its height is measured that way.
@@ -13755,8 +13804,6 @@ function printSchedule(){
      A steel or aluminum shore standing on slab on grade must sit on a wood pad (${PAD_SPEC}): a stiff shore chain to grade holds the slabs flat, so they cannot deflect and take their share, and the bottom shores would otherwise carry the full stack. Rows needing pads are marked "+ wood pad". Verify against the structural drawings before installation.</p>
   </body></html>`);
   win.document.close();
-  // the snippets are drawn after the page is open, then it prints
-  fillPrintSnippets(win,L).then(()=>setTimeout(()=>{try{win.print()}catch(e){}},350));
 }
 // ── PLAN SNIPPETS FOR THE PRINT (PRT-01) ──
 // Adolfo, Sep 21 2026: "the PDF should have screenshots of the area in
@@ -13869,11 +13916,11 @@ async function floorOverviewImages(L,f){
   }
   return out;
 }
-async function fillPrintSnippets(win,L){
+async function fillPrintSnippets(win,L,root){
   let doc;try{doc=win&&win.document}catch(e){return}
   if(!doc||typeof doc.querySelectorAll!=='function')return;
   const s=L.solve;if(!s||!s.spatial)return;
-  const slots=[...doc.querySelectorAll('[data-snip]')];
+  const slots=[...(root||doc).querySelectorAll('[data-snip]')];
   for(const el of slots){
     const key=el.dataset.snip||'';
     try{
@@ -14084,7 +14131,11 @@ function stepBlockers(id){
       if(!pourableCount())b.push({step:'areas',label:'somewhere to put the concrete'});
       // LOD-10 / JOB-01: a floor with no capacity at all is a missing input,
       // not 0 PSF — the gate holds Results the way Loads' own Next does
-      {const bare=levelsWithoutCapacity();if(bare.length)b.push({step:'loads',label:`a typical capacity on ${bare.join(', ')}`})}
+      // (MDL-04: the BOTTOM floor is exempt — left bare, Results keeps its
+      // "mark the lowest floor as slab on grade" hint instead)
+      {const bot=state.levels[state.levels.length-1],botName=bot?(isRange(bot)?rangeLabel(bot):bot.name):null;
+       const bare=levelsWithoutCapacity().filter(n=>n!==botName);
+       if(bare.length)b.push({step:'loads',label:`a typical capacity on ${bare.join(', ')}`})}
       // ARE-25: a beam with no depth carries nothing; it never solves as 0 PLF
       {const nb=beamsWithoutSize();if(nb)b.push({step:'areas',label:`a size for ${nb} beam${nb>1?'s':''} (no depth read)`})}
       break;
@@ -21261,6 +21312,12 @@ function applyOpenedJob(d,what){
   history.record('Open job');
   importImpact=null;
   deserializeDoc(d);
+  // PRT-01: the printed header names the job; one saved without a name (or
+  // still called the placeholder "New Project") takes its file's
+  if((!state.project.name||state.project.name==='New Project')&&what&&/\.json$/i.test(what)){
+    state.project.name=String(what).replace(/\.reshore\.json$|\.json$/i,'').replace(/_+/g,' ').trim();
+    const pn=document.getElementById('projectName');if(pn)pn.value=state.project.name;
+  }
   _picksInUse=null;pickLoss=null;      // JOB-04: the next solve checks the picks it was saved with
   state.activeLevelIdx=state.levels.length?0:null;state.activeZoneIdx=null;state.results=null;
   if(typeof lodInvalidate==='function')lodInvalidate();
