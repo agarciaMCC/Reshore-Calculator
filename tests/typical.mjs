@@ -124,11 +124,23 @@ const lvRow = await page.evaluate(() => { renderLevelList(); const r = document.
 ok(!lvRow.ro && lvRow.edits === 0 && !lvRow.psf && !lvRow.capHead, 'the Levels row carries nothing about loads (BLD-14): ' + JSON.stringify(lvRow));
 
 const unset = await page.evaluate(() => {
-  state.activeLevelIdx = 0; renderSidebar();          // Level 3 has no default
+  state.activeLevelIdx = 0; renderSidebar();          // Level 3 has no default — but it is the top floor
   const r = document.querySelector('#zoneList .typ-row');
   return r && { unset: r.classList.contains('unset'), text: r.textContent.replace(/\s+/g, ' ').trim() };
 });
-ok(unset && unset.unset && /not set/.test(unset.text), 'a floor with none is flagged: ' + JSON.stringify(unset && unset.text));
+// MDL-14 (Oct 15 2026): the top floor needs no capacity, so it is not flagged
+ok(unset && !unset.unset && /not needed/.test(unset.text), 'the top floor with none reads "not needed", not flagged: ' + JSON.stringify(unset && unset.text));
+const unset2 = await page.evaluate(() => {
+  const i = state.levels.findIndex((l, k) => k > 0 && !levelOnGrade(l));
+  const l = state.levels[i], keep = { c: l.defaultCapacity, m: l.defMark, ll: l.defLL, sd: l.defSDL };
+  l.defaultCapacity = 0; l.defMark = null; l.defLL = null; l.defSDL = null;
+  state.activeLevelIdx = i; renderSidebar();
+  const r = document.querySelector('#zoneList .typ-row');
+  const out = r && { unset: r.classList.contains('unset'), text: r.textContent.replace(/\s+/g, ' ').trim() };
+  l.defaultCapacity = keep.c; l.defMark = keep.m; l.defLL = keep.ll; l.defSDL = keep.sd; renderSidebar();
+  return out;
+});
+ok(unset2 && unset2.unset && /not set/.test(unset2.text), 'a carrying floor with none is flagged: ' + JSON.stringify(unset2 && unset2.text));
 
 const onSlab = await page.evaluate(() => { setLayer('slab'); renderSidebar();
   return !document.querySelector('#zoneList .typ-row') });

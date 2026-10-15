@@ -1,4 +1,4 @@
-// @rules UI-38, LOD-01, LOD-10, ARE-21, ARE-25, RES-02, RES-17, JOB-04, UI-18, ARE-13, RES-07, RES-11, PRT-01, MDL-04  (see DECISIONS.md)
+// @rules UI-38, LOD-01, LOD-10, ARE-21, ARE-25, RES-02, RES-17, JOB-04, UI-18, ARE-13, RES-07, RES-11, PRT-01, MDL-04, BLD-04, UI-32, UI-02, UI-29, ARE-03, MDL-14, JOB-02, UI-24, UI-26, BLD-19, UI-35  (see DECISIONS.md)
 // THE BOTHELL WALKTHROUGH (Oct 15 2026). An estimator's walk of the 1175
 // Bothell Stem 4 job through all four steps found places where the app said
 // one thing and showed another, or dropped work without a word. Each section
@@ -220,6 +220,69 @@ console.log('G. print the whole job, under its name (PRT-01)');
   ok(G.btn && G.sections === G.pours && G.head && G.named, 'Print all puts every placement in one document under the job name: ' + [G.sections, G.pours]);
   ok(G.oneSections === 0, 'Print still prints the one on screen');
   await page.close();
+}
+
+console.log('H. Building and Areas say where you are and do not ask twice (BLD-04, UI-32, UI-02, UI-29, ARE-03, MDL-14, JOB-02)');
+{
+  const page = await openJob();
+  const H = await page.evaluate(async () => {
+    const w = ms => new Promise(r => setTimeout(r, ms)); const o = {};
+    await w(800);
+    o.skipped = skippedPages().slice();
+    // an unread sheet: no floor pre-picked, "Not a floor plan" is the obvious button
+    setSheetLevel(7, ''); goToPage(7); await w(400);
+    o.picker = document.getElementById('pageLevel').selectedOptions[0].text;
+    o.barPrimary = (document.querySelector('#pageBar .btn-primary') || {}).textContent;
+    o.barSel = document.getElementById('pageBarSel') && document.getElementById('pageBarSel').value;
+    setStep('sheets'); await w(200);
+    o.markBtn = !!document.getElementById('stSkipOpen');
+    document.getElementById('stSkipOpen').click(); await w(200);
+    o.picker2 = document.getElementById('pageLevel').selectedOptions[0].text;
+    const nb = document.querySelector('.step-panel[data-step="sheets"] .sec-next .sn-btn');
+    o.sheetsNext = nb && nb.textContent;
+    // arriving on Floor edge and Areas from a non-plan sheet opens a plan
+    goToPage(1); await w(300); setStep('edge'); await w(900); o.edgePage = state.pdf.current;
+    goToPage(1); await w(300); setStep('areas'); await w(900); o.areasPage = state.pdf.current;
+    o.floorHead = (document.querySelector('.sb-floor-head') || {}).innerText;
+    // the Roof (top floor) on the Loading tab
+    state.activeLevelIdx = 0; goToPage(6); await w(400); setLayer('loading'); renderSidebar(); renderAreasPrimary(); await w(200);
+    o.roofTyp = (document.querySelector('.typ-row') || {}).innerText;
+    o.roofCard = (document.getElementById('areasPrimary') || {}).innerText;
+    // Levels: in part, order kept, Ctrl+Z from a clean field
+    setStep('levels'); await w(300);
+    o.inPart = /slab on grade in part/.test(document.getElementById('p-levels').innerText);
+    const two = state.levels.find(l => l.name === '2'); const before = state.levels.map(l => l.name).join();
+    history.record('Clear elevation'); two.elevation = null; sortLevelsByElevation(); renderLevelList();
+    o.order = [before, state.levels.map(l => l.name).join()];
+    const inp = document.querySelector('#p-levels input'); inp.focus();
+    inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    await w(200);
+    o.undone = state.levels.find(l => l.name === '2').elevation != null;
+    o.scale = (document.querySelector('.mp-name') || {}).innerText || '';
+    o.pillShrink = (() => { const p = document.querySelector('.step-foot .sf-now .pill'); return p ? getComputedStyle(p).flexShrink : '0'; })();
+    o.toasts = [...document.querySelectorAll('.toast')].map(t => t.textContent).join(' | ');
+    return o;
+  });
+  ok([10, 11].every(p => H.skipped.includes(p)), 'sheets titled as elevations and sections are marked not a floor plan on opening: ' + H.skipped);
+  ok(H.picker === '— not assigned —', 'the picker under the plan says "not assigned", as the table does: ' + H.picker);
+  ok(H.barPrimary === 'Not a floor plan' && H.barSel === '', 'an unread sheet gets no floor pre-picked; "Not a floor plan" is the primary: ' + H.barPrimary);
+  ok(H.markBtn && H.picker2 === 'not a floor plan', 'one click marks the unplaced sheets, and the picker follows: ' + H.picker2);
+  ok(/Next: Loads/.test(H.sheetsNext || ''), 'with Floor edge and Match floors done, Sheets leads straight to Loads: ' + H.sheetsNext);
+  ok(H.edgePage !== 1 && H.areasPage !== 1, 'Floor edge and Areas open a plan sheet, not the load map: ' + [H.edgePage, H.areasPage]);
+  ok(/^Floor \S+ · sheet \d+/.test(H.floorHead || ''), 'the Areas list names its floor and sheet: ' + H.floorHead);
+  ok(/not needed/.test(H.roofTyp || '') && !/not set/.test(H.roofTyp || ''), 'the top floor\'s typical capacity reads "not needed": ' + H.roofTyp);
+  ok(/top floor/.test(H.roofCard || '') && /anyway/.test(H.roofCard || ''), 'and its load map is not pressed as a job to review: ' + H.roofCard);
+  ok(H.inPart, 'floor 1, with an on-grade area drawn, reads "in part" on Levels');
+  ok(H.order[0] === H.order[1], 'clearing an elevation keeps the row in place: ' + H.order.join(' / '));
+  ok(H.undone, 'Ctrl+Z in a field with nothing typed undoes the clear');
+  ok(!/1" = 10' 1" = 10'/.test(H.scale), 'the plan scale is said once: ' + H.scale);
+  ok(H.pillShrink === '0', 'the status pill in the foot is never squeezed');
+  ok(!/Snap geometry ready/.test(H.toasts), 'no technical pop-ups');
+  await page.close();
+}
+{
+  const src = fs.readFileSync(path.resolve(here, '..', 'reshore-calc.html'), 'utf8');
+  ok(/now open its drawing set/.test(src) && /state\.project\.drawingSet=file\.name/.test(src), 'opening a job names the drawing set it was built on (JOB-02)');
 }
 
 await browser.close();
