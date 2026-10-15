@@ -94,9 +94,12 @@ eq(await shape(), 'combined', 'back at the start');
 
 console.log('   a chart in use does not switch');
 await page.evaluate(() => { getConditions()[0].sdl = 25; getConditions()[0].ll = 40; afterConditionChange(); });
-await page.click('#lsSplit');
-eq(await shape(), 'combined', 'the switch is refused once a value is typed');
-ok(/in use/.test(await lastToast()), 'and says why: ' + await lastToast());
+// LOD-01 (Oct 15 2026): a chosen shape stands — the switch is not offered
+// once a value is typed, and the guard still refuses it if called
+ok(!(await page.$('#lsSplit')), 'the switch is not offered once a value is typed');
+await page.evaluate(() => switchScheduleShape('split'));
+eq(await shape(), 'combined', 'and is refused if asked for anyway');
+ok(/in use/.test(await lastToast()), 'saying why: ' + await lastToast());
 ok(await page.evaluate(() => loadsReady()), 'a priced condition opens Results');
 
 // ── B. typing the chart in ──────────────────────────────────────────────

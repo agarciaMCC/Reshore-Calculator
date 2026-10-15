@@ -41,6 +41,9 @@ await page.evaluate(async ([b64, d]) => {
   resetGeometry(); if (typeof resetPageTextCache === 'function') resetPageTextCache();
   state.pdf.doc = doc; state.pdf.pages = doc.numPages; state.pdf.current = 1; state.pdf.pageImages = {};
   deserializeDoc(d); sortLevelsByElevation();
+  // ARE-25 (Oct 15 2026): two scanned beams on level 2 were saved with no
+  // depth, and an unsized beam now holds Results; size them as the checks ask
+  state.levels.forEach(l => zonesOf(l, 'slab').forEach(z => { if (isBeam(z) && !(z.depthIn > 0)) z.depthIn = 24; }));
   document.getElementById('upload-prompt').style.display = 'none';
   await warmSheetSizes(state.levels.flatMap(l => levelSheets(l).map(s => s.page)));
   setStep('results');

@@ -57,6 +57,8 @@ console.log('A. one button, a row per sheet');
 // the whole-job read is a button on the FLOOR EDGE section of the Building
 // step (Sep 17 2026), where the edges are picked and confirmed before the
 // Areas detectors are let loose inside them
+// arriving from sheet 1 (a load map) opens a plan sheet first (ARE-03, Oct 15 2026)
+await page.waitForTimeout(1000);
 ok(await page.$eval('#edgeDetectAll', b => b.offsetParent !== null && /every sheet/.test(b.textContent)), 'the whole-job button is on the Floor edge section');
 ok(await page.evaluate(() => document.getElementById('edgeRows').closest('.step-panel').dataset.step === 'edge'), 'and the rows it reads into are on the same step');
 ok(await page.evaluate(() => { const p = document.getElementById('edgeSweepPanel'); return !p || p.style.display === 'none' }),

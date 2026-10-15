@@ -132,7 +132,8 @@ const firstRow=await page.$eval('#zoneList .sb-item',e=>e.textContent.replace(/\
 ok(/Floor edge/.test(firstRow),'it is the first row under Slab areas: '+firstRow);
 ok(/slab inside this outline/.test(firstRow),'and its note says what the slab is: '+firstRow);
 const order=await page.$$eval('#zoneList > *',n=>n.map(x=>x.className.split(' ')[0]));
-ok(order[0]==='ad-checks'&&order[1]==='sb-group','the list starts with the checks (ARE-25), then a group header: '+order.slice(0,3));
+// ARE-03 (Oct 15 2026): a line naming the floor and sheet heads the pane, then the checks
+ok(order[0]==='sb-floor-head'&&order[1]==='ad-checks'&&order[2]==='sb-group','the floor line, then the checks (ARE-25), then a group header: '+order.slice(0,3));
 ok(await page.evaluate(()=>{setLayer('loading');return document.querySelectorAll('#zoneList .sb-group').length===0}),'the loading list stays flat');
 // copy dialog defaults to the layer
 ok(await page.evaluate(()=>{setLayer('slab');openCopyFrom();const r={l:document.getElementById('cpLoading').checked,s:document.getElementById('cpSlab').checked};document.getElementById('cpCancel').click();return !r.l&&r.s}),'copy dialog ticks the slab layer when you are on it');
