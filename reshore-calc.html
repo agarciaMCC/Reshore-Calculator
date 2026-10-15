@@ -527,6 +527,14 @@ const history=(function(){
   }
   function undo(){
     if(!undoStack.length){toast('Nothing to undo');return}
+    // UI-02: opening a job is a boundary, not an edit. Undoing it takes every
+    // level off the screen, so it asks first (Kalae, Oct 15 2026: Ctrl+Z after
+    // a sheet change that was cancelled wiped the job, with only a toast)
+    const top=undoStack[undoStack.length-1];
+    if(/^(Open job|New job)$/.test(top.label)){
+      const n=state.levels.length;
+      if(!confirm(`Undo "${top.label}"? This takes the whole job${n?` (${state.project.name}, ${n} level${n>1?'s':''})`:''} off the screen.\n\nRedo (Ctrl+Y) brings it back. Continue?`))return;
+    }
     const cur=snap(),e=undoStack.pop();
     redoStack.push({s:cur,label:e.label});
     deserializeDoc(JSON.parse(e.s));
@@ -557,6 +565,17 @@ const history=(function(){
       try{renderLoadMapTable()}catch(e){}
     }
     renderSidebar();updatePageInfo();renderCanvas();persist();
+    // UI-02: the Results screen follows the document. A pick undone with the
+    // inputs unchanged leaves the last solve standing, so its rows are read
+    // again from the picks; an input change cleared it (persist above) and
+    // the "recalculate" banner is up. (Kalae, Oct 15 2026: after undoing a
+    // bulk apply every row still showed the shore while the file had none.)
+    if(typeof curStep!=='undefined'&&(curStep==='results'||curStep==='sequence')&&typeof resultsCurrent==='function'&&resultsCurrent()){
+      if(typeof refreshPicks==='function')refreshPicks(schedSolve);
+      if(curStep==='sequence'&&typeof runSequence==='function')runSequence();
+      else if(typeof renderSchedule==='function')renderSchedule();
+      if(typeof refreshFlow==='function')refreshFlow();
+    }
     updateHistoryUI();
     toast(verb+': '+label);
   }
@@ -11554,6 +11573,29 @@ function reattachPicks(S){
   persist();
   return n;
 }
+// Read the picks into the last solve again without solving: a step's shore
+// is only `chosenOption` of its options, and a beam's rows are regrouped from
+// the picks. Used after an undo or redo on Results with the inputs unchanged.
+function refreshPicks(S){
+  if(!S||!S.levels)return;
+  for(const L of S.levels){
+    const s=L.solve;if(!s||!s.spatial)continue;
+    s.regions.forEach(r=>r.steps.forEach(st=>{if(st.choiceKey)st.chosen=chosenOption(st.options||[],st.choiceKey)}));
+    // beam rows in place (a lone beam keeps the rows it was solved with, so a
+    // regroup would not touch them); the spacing follows the pick as beamChain writes it
+    (s.beams||[]).forEach(b=>(b.rows||[]).forEach(row=>{
+      if(!row.beamKey)return;
+      const c=row.beamNet>0?chosenOption(row.options||[],row.beamKey):null;
+      row.beamChosen=c;
+      row.beamSpacingFt=(row.beamNet>0&&c)?Math.min(10,Math.floor(((row.beamPerCluster||1)*c.capacityAtHeight/row.beamNet)*4)/4):null;
+    }));
+    s.pendingChoices=s.regions.reduce((m,r)=>m+r.steps.filter(x=>stNeeds(x)&&!x.chosen&&x.options.length).length,0)
+      +(s.beams||[]).reduce((m,b)=>m+b.rows.filter(x=>x.beamKey&&x.beamNet>0&&!x.beamChosen&&x.options.length).length,0);
+    if(s._cellIdx)s._cellIdx=null;
+  }
+  _regionNameCache=null;
+  if(typeof seqPlan!=='undefined'){seqPlan=null;sequenceInputKey=null}
+}
 // Which picks the last solve used; a pick in use then and no longer
 // matching a row now is a pick the user has lost sight of.
 let _picksInUse=null,pickLoss=null;
@@ -11578,10 +11620,18 @@ function notePickLoss(S){
 }
 function pickLossHtml(){
   if(!pickLoss)return '';
-  const {n,opened,pours}=pickLoss,pl=n>1;
-  const where=pours.map(p=>levelTagName(p)).join(', ');
-  return `<span class="lm-warn">${n} shore pick${pl?'s':''} ${opened?'saved with this job':'made earlier'} no longer match${pl?'':'es'} a row (${esc(where)} placement${pours.length>1?'s':''}) — ${
-    opened?'the areas or loads under them read differently now':'the loads or areas under them changed'}, so ${pl?'those rows ask':'that row asks'} again. Put the change back and ${pl?'they return':'it returns'}.</span>`;
+  const {n,opened,pours,keys}=pickLoss,pl=n>1;
+  // RES-17: name the rows (floor and placement) and the change, so "put the
+  // change back" says what to put back (Kalae, Oct 15 2026)
+  const stack=(schedSolve&&schedSolve.stack)||[];
+  const rows=[...new Set((keys||[]).map(k=>{const p=k.split('|'),lv=stack[+p[p.length-1]];
+    return `under ${levelTagName(lv?lv.name:'?')} on the ${levelTagName(p[0])} placement`}))];
+  const where=rows.length?(rows.length<=4?rows.join(', '):rows.slice(0,3).join(', ')+` and ${rows.length-3} more`)
+    :pours.map(p=>levelTagName(p)).join(', ')+` placement${pours.length>1?'s':''}`;
+  const why=opened?'the areas or loads under them read differently now'
+    :(typeof calculationChange==='string'&&/^Changed: /.test(calculationChange)?'the change to '+calculationChange.replace(/^Changed: /,'')+' moved them':'the loads or areas under them changed');
+  return `<span class="lm-warn">${n} shore pick${pl?'s':''} ${opened?'saved with this job':'made earlier'} no longer match${pl?'':'es'} a row (${esc(where)}) — ${
+    esc(why)}, so ${pl?'those rows ask':'that row asks'} again. Put the change back and ${pl?'they return':'it returns'}.</span>`;
 }
 
 function fmtArea(sf){
@@ -11877,7 +11927,9 @@ function pourInstallPlan(L){
       const f=F(row.level,zp);
       f.levelIdx=Math.min(f.levelIdx,row.levelIdx==null?99:row.levelIdx);
       f.beams.push({b,bi,row});
-      if(!row.beamChosen)f.pending++;
+      // UI-18: a beam row nothing in the catalog reaches is listed, not
+      // counted as a pick to make — the same as a slab row
+      if(!row.beamChosen){f.pending++;if(row.noOptions||!(row.options&&row.options.length))f.noOptions++}
       if(beamNeedsPad(row)){f.padShores.add(row.beamChosen.shore.name);if(row.supportLevel)f.padOn.add(row.supportLevel.name)}   // MDL-18
     }
   });
@@ -11941,7 +11993,7 @@ function applyBulkShore(shoreId,rows,what){
   const fit=rows.filter(r=>r.options.some(o=>String(o.shoreId)===String(shoreId)));
   if(!fit.length){toast('That shore is not legal on any of those rows.',3000);return}
   const name=fit[0].options.find(o=>String(o.shoreId)===String(shoreId)).shore.name;
-  history.record('Apply shore to '+what);
+  history.record('Apply shore '+what);
   const ch=shoreChoices();
   for(const r of fit)ch[r.key]=r.options.find(o=>String(o.shoreId)===String(shoreId)).shoreId;
   persist();runSchedule();renderCanvas();
@@ -12230,7 +12282,7 @@ function resultsTabsHtml(L){
       const sc=floorPatternScale(L,f);
       const picks=Math.max(0,f.pending-f.noOptions);
       const pend=(picks?`<i class="rs-tab-pend" title="${picks} shore pick${picks>1?'s':''} outstanding">${picks} to pick</i>`:'')
-        +(f.noOptions?`<i class="rs-tab-warn" title="${f.noOptions} row${f.noOptions>1?'s':''} with nothing to shore against">!</i>`:'');
+        +(f.noOptions?`<i class="rs-tab-warn" title="${f.noOptions} row${f.noOptions>1?'s':''} with nothing to shore against: no shore in the catalog reaches, or there is no slab under the pour — marked in red on the rows below">${f.noOptions} nothing reaches</i>`:'');
       return `<button type="button" class="rs-tab${cur===f.key?' active':''}" data-rsf="${esc(f.key)}" title="What goes in under ${esc(installFloorName(f))}: the plan shaded by spacing, the regions that decide it">Under <b>${esc(f.name)}</b>${f.zone?` <small>${esc(f.zone)}</small>`:''}${f.general!=null?` <span class="rs-tab-pat" style="--pc:${patColor(L,f,f.general)}">${esc(f.general)}</span>`:''}${pend}</button>`;
     }).join('')}
   </div>`;
@@ -12436,7 +12488,16 @@ function bindBulkBar(L){
     const id=document.getElementById('rsBulkShore').value;
     const scope=document.getElementById('rsBulkScope').value;
     if(!id){toast('Pick a shore first.');return}
-    applyBulkShore(id,bulkRowsFor(scope,L,null),scope==='job'?'across the job':`on ${L.pour.name}`);
+    const rows=bulkRowsFor(scope,L,null);
+    // UI-18 / RES-01: one click answering every placement is asked about
+    // first — on Kalae it set 586 rows in one go, with no way to see it
+    // coming (Oct 15 2026)
+    if(scope==='job'){
+      const sel=document.getElementById('rsBulkShore'),name=sel&&sel.options[sel.selectedIndex]?sel.options[sel.selectedIndex].text.replace(/ — fits.*$/,''):'this shore';
+      const n=schedSolve&&schedSolve.levels?schedSolve.levels.length:0,had=rows.filter(r=>r.chosen).length;
+      if(!confirm(`Set ${name} on every row it fits across all ${n} placements (${rows.length} rows${had?`, ${had} of them already answered`:''})?\n\nRows it does not reach are left alone. Ctrl+Z puts them all back. Continue?`))return;
+    }
+    applyBulkShore(id,rows,scope==='job'?'across the job':`on ${L.pour.name}`);
   });
 }
 
@@ -14777,7 +14838,9 @@ function setStep(id){
     state.activeZoneIdx=null;state.ui.vertexIdx=null;
     state.ui.hover=null;state.ui.hoverKey='';
   }
-  if(id==='results'){runSchedule();if(typeof showPourSheet==='function')showPourSheet()}
+  // RES-18: a solve that still matches the inputs is shown, not run again
+  // (Kalae, Oct 15 2026: every return to Results cost 12 s with nothing changed)
+  if(id==='results'){if(resultsCurrent())renderSchedule();else runSchedule();if(typeof showPourSheet==='function')showPourSheet()}
   if(id==='sequence')runSequence();
   if(grp.id==='areas')prefillTypicals();       // never arrive on a floor with a silent 0 PSF
   // UI-35 / UI-36 / ARE-03: Floor edge, Match floors and Areas work on floor
