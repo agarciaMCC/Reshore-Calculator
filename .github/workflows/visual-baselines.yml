@@ -1,0 +1,35 @@
+# Makes the Linux screenshot baselines for tests/visual.mjs on the same kind of
+# machine the Tests workflow uses (same pinned Ubuntu). Run it by hand (Actions > Visual baselines >
+# Run workflow), download the "visual-baselines-linux" artifact, look at the
+# pictures, and commit them to tests/baselines/linux/ in a pull request.
+# It never commits anything itself, so every baseline is reviewed by a person.
+name: Visual baselines
+
+on:
+  workflow_dispatch:
+
+jobs:
+  baselines:
+    runs-on: ubuntu-24.04  # pinned: screenshots change between Ubuntu versions
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Take the screenshots
+        run: node tests/visual.mjs --update
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: visual-baselines-linux
+          path: tests/baselines/linux/*.png
+          if-no-files-found: error

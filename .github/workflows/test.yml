@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # pinned: screenshots change between Ubuntu versions
     timeout-minutes: 15
 
     steps:
@@ -29,6 +29,14 @@ jobs:
           RESHORE_JOBS: 4
           RESHORE_BUDGET: 600
           RESHORE_TIMEOUT: 300
+
+      - name: Keep the screenshots that differ from the baselines
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-actual-linux
+          path: tests/baselines/linux/actual/
+          if-no-files-found: ignore
 
       - name: Check rule coverage
         run: node tests/rules.mjs

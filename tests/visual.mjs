@@ -1,6 +1,8 @@
 // @rules none
 // Visual regression: screenshots of every step, compared against baselines.
 // First run generates baselines; subsequent runs compare with a tolerance.
+// In CI a missing baseline is a failure, never created on the spot: CI baselines
+// come from the "Visual baselines" workflow and are reviewed before being committed.
 //
 //   node tests/visual.mjs                 compare (or generate baselines)
 //   node tests/visual.mjs --update        regenerate all baselines
@@ -19,15 +21,15 @@ const root = path.resolve(here, '..');
 // Fonts render differently per operating system, so each keeps its own baselines.
 const BASELINES = path.join(here, 'baselines', process.platform);
 const ACTUALS = path.join(BASELINES, 'actual');
-if (process.env.CI && !fs.existsSync(BASELINES)) {
-  console.log(`skip: no ${process.platform} baselines (made on a dev machine with --update)`);
+const argv = process.argv.slice(2);
+const update = argv.includes('--update');
+if (process.env.CI && !update && !fs.existsSync(BASELINES)) {
+  console.log(`skip: no ${process.platform} baselines (make them with --update, or the Visual baselines workflow)`);
   console.log('\n0 passed, 0 failed');  // the summary run.mjs reads; without it the skip counts as a crash
   process.exit(0);
 }
 fs.mkdirSync(BASELINES, { recursive: true });
 
-const argv = process.argv.slice(2);
-const update = argv.includes('--update');
 const names = argv.filter(a => !a.startsWith('--'));
 const want = s => !names.length || names.includes(s);
 
@@ -72,6 +74,10 @@ for (const s of STEPS) {
   const actual = await page.screenshot();
   const baseline = path.join(BASELINES, s + '.png');
 
+  if (!update && !fs.existsSync(baseline) && process.env.CI) {
+    ok(false, `${s}: no baseline at tests/baselines/${process.platform}/${s}.png`);
+    continue;
+  }
   if (update || !fs.existsSync(baseline)) {
     fs.writeFileSync(baseline, actual);
     console.log(`  ${update ? 'updated' : 'created'} baseline: ${s}.png`);
@@ -127,7 +133,7 @@ for (const s of STEPS) {
   } else {
     fs.mkdirSync(ACTUALS, { recursive: true });
     fs.writeFileSync(path.join(ACTUALS, s + '.png'), actual);
-    ok(false, `${s}: ${(diff.mismatch * 100).toFixed(2)}% pixels differ (${diff.diffPx} of ${diff.total}). Actual saved to tests/baselines/actual/${s}.png`);
+    ok(false, `${s}: ${(diff.mismatch * 100).toFixed(2)}% pixels differ (${diff.diffPx} of ${diff.total}). Actual saved to tests/baselines/${process.platform}/actual/${s}.png`);
   }
 }
 
