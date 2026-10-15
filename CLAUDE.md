@@ -73,6 +73,15 @@ Environment variables:
 - `solvePourLevel(stack, pourIdx, opts)` — solve one pour level
 - `solveAll(opts)` — full job solve
 
+## Agents for flow and UI work (`.claude/agents/`)
+
+1. **walkthrough-tester** — walks a job through the four steps, reports friction with screenshots
+2. **rules-keeper** — lists the DECISIONS.md rules a change touches, conflicts, draft wording
+3. **screen-designer** — 2-3 layout options as light/dark pictures; never edits the app
+4. **change-checker** — rule/code/test together, touched-rule tests, screenshots, commit IDs
+
+All four only read the app; the main session makes the change.
+
 ## Workflow (four steps)
 
 1. **Building** — Import PDF set, define levels/elevations/slab thickness, assign sheets, detect floor edges, match gridlines
