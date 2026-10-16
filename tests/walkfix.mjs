@@ -282,7 +282,7 @@ console.log('H. Building and Areas say where you are and do not ask twice (BLD-0
 }
 {
   const src = fs.readFileSync(path.resolve(here, '..', 'reshore-calc.html'), 'utf8');
-  ok(/now open its drawing set/.test(src) && /state\.project\.drawingSet=file\.name/.test(src), 'opening a job names the drawing set it was built on (JOB-02)');
+  ok(/now open its drawing set/.test(src) && /state\.project\.drawingSet=state\.pdf\.fileName/.test(src), 'opening a job names the drawing set it was built on (JOB-02)');
 }
 
 await browser.close();
