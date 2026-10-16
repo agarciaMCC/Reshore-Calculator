@@ -1,0 +1,275 @@
+// @rules UI-02, UI-18, RES-01, RES-17, RES-18, JOB-04, BLD-09, JOB-02, UI-15, UI-32, UI-19, UI-20, BLD-04, BLD-05  (see DECISIONS.md)
+// THE KALAE WALKTHROUGH (Oct 15 2026). An estimator's walk of the 1268 Kalae
+// job (42 levels, 27 marks, 41 placements) through all four steps found the
+// places where the app and the saved job disagreed, where a key did more than
+// it said, and where the same count read three ways.
+//
+// Kalae is the largest job: opening it with its 42-page set and solving it
+// is the expensive part, so the sections share a page where their checks do
+// not disturb each other — one page solved once for Results, one for
+// Building, one for the wrong set, one with no set at all. (On CI a page per
+// section took 282 s and starved the suites running beside it.)
+import { createRequire } from 'node:module';
+const { chromium } = await (async () => {
+  try { return await import('playwright'); }
+  catch { return createRequire('/home/claude/x.js')('playwright'); }
+})();
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+const here = fileURLToPath(new URL('.', import.meta.url));
+let pass = 0, fail = 0;
+const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };
+
+const browser = await chromium.launch();
+const job = fs.readFileSync(path.resolve(here, '..', 'Revit export', '1268_KALAE.reshore.json'), 'utf8');
+const pdf = fs.readFileSync(path.resolve(here, '..', 'Revit export', '1268_KALAE-revit-plans.pdf')).toString('base64');
+const wrongSet = fs.readFileSync(path.resolve(here, '..', 'Kalae PDF Set.pdf')).toString('base64');
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+// a fresh page with the job and its drawing set open, as File → Open does it.
+// `dlg` records every confirm() the app raises; set dlg.dismiss to answer No.
+// `set` null opens the job with no drawing set.
+async function openJob(dlg = {}, set = pdf) {
+  const page = await browser.newPage({ viewport: { width: 1500, height: 950 } });
+  page.on('pageerror', e => { fail++; console.log('  PAGEERROR', e.message); });
+  page.on('dialog', d => { dlg.last = d.message(); dlg.all = (dlg.all || []).concat(d.message()); dlg.dismiss ? d.dismiss() : d.accept(); });
+  await page.goto('file://' + path.resolve(here, '..', 'reshore-calc.html'));
+  await page.waitForFunction(() => typeof solveAll === 'function');
+  await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+  await page.evaluate(async ([j, p]) => {
+    window.__solves = 0; const real = solveAll; window.solveAll = o => { window.__solves++; return real(o); };
+    applyOpenedJob(JSON.parse(j), '1268_KALAE.reshore.json');
+    if (p === null) return;
+    const bin = atob(p); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    await loadFile(new File([u8], '1268_KALAE-revit-plans.pdf', { type: 'application/pdf' }));
+  }, [job, set]);
+  await wait(1500);
+  return page;
+}
+const toResults = async p => { await p.evaluate(() => { setStep('loads'); setStep('results'); }); await wait(600); };
+// the places the "still to choose" count is written
+const counts = p => p.evaluate(() => {
+  const txt = el => (el ? el.innerText : '');
+  const rail = txt(document.getElementById('stepRail')).match(/(\d+) shores? to choose/);
+  const head = txt(document.getElementById('schedSummary')).match(/(\d+) shore picks? outstanding/);
+  const strip = txt(document.getElementById('schedSummary')).match(/(\d+) shore picks? to make/);
+  const tabs = [...document.querySelectorAll('.rs-tab-pend')].map(e => +e.innerText.match(/\d+/)[0]).reduce((a, b) => a + b, 0);
+  const noReach = [...document.querySelectorAll('.rs-tab-warn')].map(e => e.innerText);
+  const L = schedSolve.levels[schedPourIdx];
+  return { rail: rail ? +rail[1] : 0, head: head ? +head[1] : 0, strip: strip ? +strip[1] : 0, tabs, noReach,
+           items: outstandingItems(L).length, total: outstandingPickTotal(), pour: L.pour.name,
+           beamNoReach: (L.solve.beams || []).reduce((n, b) => n + b.rows.filter(r => r.beamKey && r.beamNet > 0 && !r.beamChosen && !(r.options && r.options.length)).length, 0) };
+});
+
+// ── the job with no drawing set: A, J ──
+{
+  const dlg = { dismiss: true };
+  const page = await openJob(dlg, null);
+
+  console.log('A. Undoing "Open job" asks first (UI-02)');
+  await page.keyboard.press('Control+z');
+  await wait(300);
+  const A = await page.evaluate(() => ({ n: state.levels.length, name: state.project.name, canUndo: history.canUndo() }));
+  ok(/Undo "Open job"/.test(dlg.last || ''), 'Ctrl+Z on a freshly opened job asks before taking it away: ' + (dlg.last || '').slice(0, 80));
+  ok(/42 levels/.test(dlg.last || '') && /1268 KALAE/.test(dlg.last || ''), 'the question names the job and its 42 levels');
+  ok(A.n === 42 && A.name === '1268 KALAE' && A.canUndo, 'answering No keeps the job on screen with its undo step: ' + [A.n, A.name]);
+  dlg.dismiss = false;
+  await page.keyboard.press('Control+z');
+  await wait(300);
+  const A2 = await page.evaluate(() => state.levels.length);
+  ok(A2 === 0, 'answering Yes undoes the open: ' + A2 + ' levels');
+  await page.keyboard.press('Control+y');
+  await wait(300);
+  ok(await page.evaluate(() => state.levels.length) === 42, 'Redo brings the job back');
+
+  console.log('J. A job without its set names the set it needs (JOB-02)');
+  const J = await page.evaluate(() => {
+    state.project.drawingSet = '1268_KALAE-revit-plans.pdf';
+    return { label: stepBlockers('results').map(b => b.label).join(', '), st: stepStatus('drawings').text };
+  });
+  ok(/the drawing set 1268_KALAE-revit-plans\.pdf/.test(J.label), 'Results says which set: ' + J.label);
+  ok(/Open the drawing set 1268_KALAE/.test(J.st), 'Drawings says which set: ' + J.st);
+  await page.close();
+}
+
+// ── Results, solved once: B, D, E, C, F ──
+{
+  const dlg = {};
+  const page = await openJob(dlg);
+  await toResults(page);
+
+  console.log('B. Results follows an undone pick (UI-02, UI-18)');
+  const before = await counts(page);
+  ok(before.items > 0, `the ${before.pour} placement has picks to make: ` + before.items);
+  // bulk-apply the shore that fits most rows on this placement
+  await page.evaluate(() => {
+    const sel = document.getElementById('rsBulkShore'); sel.value = sel.options[1].value;
+    document.getElementById('rsBulkScope').value = 'pour';
+    document.getElementById('rsBulkGo').click();
+  });
+  await wait(600);
+  const applied = await counts(page);
+  ok(applied.items < before.items, 'the bulk apply answered rows: ' + before.items + ' → ' + applied.items);
+  const toasts = [];
+  await page.exposeFunction('__t', m => toasts.push(m));
+  await page.evaluate(() => { const h = document.getElementById('toastHost'); new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => window.__t(n.textContent)))).observe(h, { childList: true }); });
+  await page.keyboard.press('Control+z');
+  await wait(800);
+  const undone = await counts(page);
+  ok(undone.items === before.items, 'after Ctrl+Z the rows ask again on screen: ' + undone.items + ' (was ' + before.items + ')');
+  ok(undone.rail === before.rail && undone.strip === before.strip, 'the rail and the strip went back with them: ' + [undone.rail, undone.strip]);
+  ok(toasts.some(t => /^Undo: Apply shore on /.test(t)), 'the undo toast reads "Undo: Apply shore on <pour>": ' + toasts.join(' | '));
+  await page.keyboard.press('Control+y');
+  await wait(800);
+  const redone = await counts(page);
+  ok(redone.items === applied.items, 'Redo puts the picks back on screen: ' + redone.items);
+
+  console.log('D. One count everywhere (UI-18)');
+  // the ELEV MECH RM placement has beam rows nothing in the catalog reaches
+  const D = await page.evaluate(() => {
+    const i = schedSolve.levels.findIndex(L => /ELEV MECH/i.test(L.pour.name));
+    if (i >= 0) { schedPourIdx = i; renderSchedule(); refreshFlow(); }
+    return i;
+  });
+  await wait(300);
+  const c = await counts(page);
+  ok(D >= 0, 'the ELEV MECH RM placement is in the job: ' + D);
+  ok(c.beamNoReach > 0, 'it has beam rows nothing reaches: ' + c.beamNoReach);
+  ok(c.strip === c.items && c.head === c.items && c.tabs === c.items, `head (${c.head}), strip (${c.strip}) and tabs (${c.tabs}) all say ${c.items}`);
+  ok(c.rail === c.total, `the rail says the job total (${c.rail} = ${c.total})`);
+  ok(c.noReach.every(t => /nothing reaches/.test(t)), 'the tab marks a row nothing reaches in words: ' + c.noReach.join(' | '));
+
+  console.log('E. "On every placement" asks first (UI-18, RES-01)');
+  await page.evaluate(() => { schedPourIdx = 0; renderSchedule(); });
+  const totalBefore = await page.evaluate(() => outstandingPickTotal());
+  dlg.dismiss = true; dlg.last = '';
+  await page.evaluate(() => {
+    const sel = document.getElementById('rsBulkShore'); sel.value = sel.options[1].value;
+    document.getElementById('rsBulkScope').value = 'job';
+    document.getElementById('rsBulkGo').click();
+  });
+  await wait(400);
+  dlg.dismiss = false;
+  ok(/every row it fits across all 41 placements/.test(dlg.last || ''), 'applying across the job asks, naming the placements: ' + (dlg.last || '').slice(0, 90));
+  ok(/Ctrl\+Z puts them all back/.test(dlg.last || ''), 'the question says undo puts it back');
+  ok(await page.evaluate(() => outstandingPickTotal()) === totalBefore, 'answering No sets nothing: ' + totalBefore);
+
+  console.log('C. A current solve is shown, not run again (RES-18)');
+  const n1 = await page.evaluate(() => window.__solves);
+  for (const s of ['sequence', 'results', 'areas', 'results']) {
+    await page.evaluate(s => { if (s === 'areas') { const a = autoScanDone(); for (const r of planSheetRows()) if (!a.includes(r.page)) a.push(r.page); } setStep(s); }, s);
+    await wait(300);
+  }
+  const n2 = await page.evaluate(() => window.__solves);
+  ok(n1 >= 1 && n2 === n1, 'leaving and returning with nothing changed solves nothing again: ' + [n1, n2]);
+  ok(await page.evaluate(() => !!document.querySelector('#schedSummary .inst-list')), 'the schedule is on screen on return');
+  // an input change still clears it and solves again on return. The change
+  // is the pour's own slab under a fresh pick: the pour's thickness is part
+  // of the row's key, so the pick no longer matches while the row still
+  // asks — section F reads that from the same solve.
+  await page.evaluate(() => {
+    const L = schedSolve.levels.find(x => outstandingItems(x).some(i => i.kind === 'slab'));
+    const it = outstandingItems(L).find(i => i.kind === 'slab');
+    schedPourIdx = schedSolve.levels.indexOf(L);
+    shoreChoices()[it.key] = it.region.steps[it.si].options[0].shoreId;
+    refreshPicks(schedSolve); notePickLoss(schedSolve);      // the pick is in use, as a solve would leave it
+    state.levels.find(l => l.id === (L.pour.defId || L.pour.id)).slabThickness += 2; persist();
+  });
+  await page.evaluate(() => { setStep('loads'); setStep('results'); });
+  await wait(300);
+  const n3 = await page.evaluate(() => window.__solves);
+  ok(n3 === n2 + 1, 'a changed input solves again on return: ' + [n2, n3]);
+
+  console.log('F. A pick that no longer matches is named (RES-17, JOB-04)');
+  const F = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('#schedHead .lm-warn, #schedSummary .lm-warn')].find(e => /no longer match/.test(e.innerText));
+    return { loss: pickLoss, text: el ? el.innerText : '' };
+  });
+  ok(F.loss && /under .+ on the .+ placement/.test(F.text), 'a lost pick names its floor and placement: ' + F.text.slice(0, 160));
+  ok(/the change to levels, areas or matches/.test(F.text), 'and the change that moved it: ' + F.text.slice(0, 220));
+  await page.close();
+}
+
+// ── Building, no solve: G, K, L, I, M ──
+{
+  const page = await openJob();
+  await page.evaluate(() => setStep('levels'));
+  await wait(2500);
+
+  console.log('G. A confirmed job keeps its levels; the read is folded (BLD-09)');
+  const G = await page.evaluate(() => {
+    const box = document.getElementById('elevProposal');
+    return { confirmed: levelsConfirmed(), text: box.innerText, boxes: box.querySelectorAll('input[data-eppage]').length, show: !!box.querySelector('#epShow') };
+  });
+  ok(G.confirmed, 'the Kalae levels are confirmed');
+  ok(G.boxes === 0 && /Your levels are kept/.test(G.text), 'the read sits folded on one line, nothing ticked: ' + G.text.slice(0, 120));
+  if (G.show) {
+    await page.evaluate(() => document.getElementById('epShow').click());
+    await wait(2500);
+    const G2 = await page.evaluate(() => {
+      const box = document.getElementById('elevProposal'), ap = box.querySelector('#epApply');
+      return { ticked: box.querySelectorAll('input[data-eppage]:checked').length, boxes: box.querySelectorAll('input[data-eppage]').length, disabled: ap && ap.disabled, close: (box.querySelector('#epClose') || {}).innerText };
+    });
+    ok(G2.boxes > 0 && G2.ticked === 0 && G2.disabled, 'opened, no row is ticked and Apply waits for a tick: ' + [G2.boxes, G2.ticked, G2.disabled]);
+    ok(G2.close === 'Keep my levels', 'the way out says the levels stay: ' + G2.close);
+  }
+
+  console.log('K. The plan bar asks nothing on arrival (UI-20)');
+  const K = await page.evaluate(() => {
+    renderPageBar();
+    const arrived = { page: state.pdf.current, active: state.activeLevelIdx, here: levelForPage(state.pdf.current), bar: document.getElementById('pageBar').classList.contains('visible') };
+    // working on another floor than the sheet on screen, it speaks
+    const keep = state.activeLevelIdx;
+    state.activeLevelIdx = arrived.here === 0 ? 1 : 0; renderPageBar();
+    const other = document.getElementById('pageBar').classList.contains('visible');
+    state.activeLevelIdx = keep; renderPageBar();
+    return { arrived, other };
+  });
+  ok(K.arrived.here >= 0 && K.arrived.active === K.arrived.here, 'the floor of the sheet on screen is the working floor on arrival: ' + JSON.stringify(K.arrived));
+  ok(!K.arrived.bar, 'so no "Go to sheet 42 / Work on 1" bar on arrival');
+  ok(K.other, 'working on another floor, the bar still keeps sheet and floor honest');
+
+  console.log('L. Alike floors are pointed out once (UI-19)');
+  const L = await page.evaluate(() => (document.querySelector('.lvl-run-hint') || {}).innerText || '');
+  ok(/Floors .+ to .+ \(\d+\) are alike/.test(L) && /left as they are, the answer is the same/.test(L), 'the hint names the run and says leaving it is fine: ' + L.slice(0, 140));
+
+  console.log('I. The Drawings panel is one paragraph and the set button steps back (UI-15, UI-32)');
+  await page.evaluate(() => setStep('drawings'));
+  await wait(300);
+  const I = await page.evaluate(() => ({ list: document.querySelectorAll('#drawingsInfo ul.step-list li').length, text: document.getElementById('drawingsInfo').innerText, primary: document.getElementById('btnUpload').classList.contains('btn-primary'), label: document.getElementById('btnUpload').textContent }));
+  ok(I.list === 0 && /42 plan sheets on 42 of 42 floors/.test(I.text), 'one summary paragraph instead of 42 bullets: ' + I.text.slice(0, 160).replace(/\n/g, ' / '));
+  ok(!I.primary && /another/.test(I.label), 'with a set loaded the set button is plain: ' + I.label);
+
+  console.log('M. Moving a sheet off a floor is flagged, and undone in one step (BLD-04, BLD-05, UI-02)');
+  const M = await page.evaluate(() => {
+    setStep('sheets');
+    const i19 = state.levels.findIndex(l => l.name === '19');
+    setSheetLevel(21, String(i19));
+    const l20 = state.levels.find(l => l.name === '20');
+    return { st: stepStatus('sheets'), l20: levelSheets(l20).map(s => s.page) };
+  });
+  ok(M.l20.length === 0, 'page 21 left floor 20: ' + JSON.stringify(M.l20));
+  ok(!M.st.done && /No sheet for 20/.test(M.st.text), 'Sheets is no longer done and names the bare floor: ' + M.st.text);
+  await page.keyboard.press('Control+z');
+  await wait(300);
+  const M2 = await page.evaluate(() => ({ n: state.levels.length, l20: levelSheets(state.levels.find(l => l.name === '20')).map(s => s.page), st: stepStatus('sheets') }));
+  ok(M2.n === 42 && M2.l20.includes(21) && M2.st.done, 'Ctrl+Z puts the sheet back without touching the job: ' + [M2.n, M2.l20, M2.st.text]);
+  await page.close();
+}
+
+// ── the wrong set: H ──
+{
+  console.log('H. The wrong drawing set is said at once (JOB-02)');
+  const page = await openJob({}, wrongSet);
+  const H = await page.evaluate(() => ({ pages: state.pdf.pages, st: stepStatus('drawings'), mis: drawingSetMismatch(), saved: state.project.drawingSetPages }));
+  ok(H.pages === 12, 'the 12-page set loaded: ' + H.pages);
+  ok(!H.st.done && /go up to page 42/.test(H.st.text), 'Drawings is not done and says why: ' + H.st.text);
+  ok(/not the set the job was built on/.test(H.mis), 'the mismatch names the problem: ' + H.mis.slice(0, 100));
+  ok(H.saved === 12, 'the page count is saved with the job for next time: ' + H.saved);
+  await page.close();
+}
+
+await browser.close();
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);

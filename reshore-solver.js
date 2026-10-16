@@ -414,6 +414,11 @@ function throughOk(){
   if(!state.project.throughOk)state.project.throughOk={};
   return state.project.throughOk;
 }
+// MDL-10: a shore runs on past an open floor to the next slab — but an
+// opening that continues more than this many floors down is a shaft, and a
+// shore does not stand 391 ft down an elevator shaft (Kalae, Oct 15 2026).
+// Such a row has nothing below to stand on: no height, no options, flagged.
+const SHAFT_OPEN_FLOORS=2;
 function isThrough(st){return !!(st&&!st.open&&!st.grade&&stNeeds(st)&&st.spansOpen>0&&st.supportLevel)}
 function throughAccepted(key){return !!throughOk()[key]}
 // the open floors a through-shore passes: the steps between this one and its support
@@ -525,6 +530,7 @@ function cascadeAtPoint(stack,pourIdx,thickIn,dl,shores){
     // the floor this shore stands on: next one down with slab here
     let sj=-1;
     for(let m=j+1;m<stack.length;m++){const t=stack[m]._slabAt;if(!t||!t.open){sj=m;break}}
+    let shaft=0;if(sj>=0&&sj-j-1>SHAFT_OPEN_FLOORS){shaft=sj-j-1;sj=-1}   // MDL-10: a shaft, not a through-shore
     const sup=sj>=0?stack[sj]:null;
     const needShores=resultant>0;
     const supSl=sup?(sup._slabAt||{}):null;
@@ -537,7 +543,7 @@ function cascadeAtPoint(stack,pourIdx,thickIn,dl,shores){
     const hMinFt=(needShores&&sup&&sloped)
       ?shoreHeightUnder(lv,sup,sl.soffitIn!=null?sl.soffitIn:sl.thick,sl.offLow!=null?sl.offLow:sl.off,supSl.off||0):null;
     steps.push({levelIdx:j,level:lv,capacity:cap,remaining,resultant,
-                shoreHeightFt:hFt,supportLevel:sup,supportIdx:sj,
+                shoreHeightFt:hFt,supportLevel:sup,supportIdx:sj,shaft,
                 onGrade:!!(supSl&&supSl.grade),          // MDL-18: this shore's base sits on slab on grade
                 ...(sloped&&hMinFt!=null&&hFt!=null&&Math.abs(hFt-hMinFt)>=1/24?{shoreHeightMinFt:hMinFt,sloped:true}:{}),
                 spansOpen:sup?sj-j-1:0,
@@ -792,13 +798,14 @@ function beamProfileAt(stack,pourIdx,regSteps,shores){
     const slabRem=remAt[j]!=null?remAt[j]:0;
     let sj=-1;
     for(let m=j+1;m<stack.length;m++){const t=stack[m]._slabAt;if(!t||!t.open){sj=m;break}}
+    let shaft=0;if(sj>=0&&sj-j-1>SHAFT_OPEN_FLOORS){shaft=sj-j-1;sj=-1}   // MDL-10
     const sup=sj>=0?stack[sj]:null;
     const supSl=sup?(sup._slabAt||{}):null;
     const hFt=sup?shoreHeightUnder(lv,sup,sl.soffitIn!=null?sl.soffitIn:sl.thick,sl.off,(supSl.offLow!=null?supSl.offLow:supSl.off)||0):null;
     const sloped=!!(sl.sloped||(supSl&&supSl.sloped));      // MDL-17
     const hMinFt=(sup&&sloped)?shoreHeightUnder(lv,sup,sl.soffitIn!=null?sl.soffitIn:sl.thick,sl.offLow!=null?sl.offLow:sl.off,supSl.off||0):null;
     rows.push({levelIdx:j,level:lv,capacity:cap,slabRemaining:slabRem,sparePsf:Math.max(0,cap-slabRem),
-               shoreHeightFt:hFt,supportLevel:sup,supportIdx:sj,spansOpen:sup?sj-j-1:0,
+               shoreHeightFt:hFt,supportLevel:sup,supportIdx:sj,spansOpen:sup?sj-j-1:0,shaft,
                onGrade:!!(supSl&&supSl.grade),           // MDL-18
                ...(sloped&&hMinFt!=null&&hFt!=null&&Math.abs(hFt-hMinFt)>=1/24?{shoreHeightMinFt:hMinFt,sloped:true}:{}),
                options:hFt!=null?shoreOptionsFor(hFt,0,shores):[]});
