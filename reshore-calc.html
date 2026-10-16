@@ -2929,7 +2929,8 @@ async function opTextItems(page,vp){
     }
     out.push({...r});
   }
-  return{items:out.map(r=>({s:r.s.trim(),x:r.x,y:r.y,w:Math.hypot(r.x1-r.x,r.y1-r.y),h:r.h})).filter(r=>r.s),shows};
+  return{items:out.map(r=>{const w=Math.hypot(r.x1-r.x,r.y1-r.y),dx=w?(r.x1-r.x)/w:1,dy=w?(r.y1-r.y)/w:0;
+    return{s:r.s.trim(),x:r.x,y:r.y,w,h:r.h,dx,dy,th:r.h}}).filter(r=>r.s),shows};
 }
 
 async function pageTextItems(num){
@@ -2942,7 +2943,14 @@ async function pageTextItems(num){
     if(!s)continue;
     const t=it.transform;
     const p=matApply(vp.transform,t[4],t[5]);
-    out.push({s,x:p[0],y:p[1],w:(it.width||0)*PDF_RENDER_SCALE,h:Math.abs(t[3]||t[0])*PDF_RENDER_SCALE,v:Math.abs(t[1])>Math.abs(t[0])});
+    // BEM-10: the direction the text runs, on the canvas, and its real height
+    // — a sideways tag has t[0]=t[3]=0, which read as 0 px tall and placed
+    // its middle half a tag-length off to the side (Bothell 18X57, Oct 16 2026)
+    const q=matApply(vp.transform,t[4]+t[0],t[5]+t[1]),u=matApply(vp.transform,t[4]+t[2],t[5]+t[3]);
+    const dl=Math.hypot(q[0]-p[0],q[1]-p[1])||1,hh=Math.hypot(u[0]-p[0],u[1]-p[1]);
+    const dx=(q[0]-p[0])/dl,dy=(q[1]-p[1])/dl;
+    // (h stays as every other reader has always had it; th is the real height)
+    out.push({s,x:p[0],y:p[1],w:(it.width||0)*PDF_RENDER_SCALE,h:Math.abs(t[3]||t[0])*PDF_RENDER_SCALE,v:Math.abs(t[1])>Math.abs(t[0]),dx,dy,th:hh});
   }
   // getTextContent silently drops text on some exports; fall back to the
   // operator list when it clearly missed most of the page
@@ -17610,15 +17618,27 @@ const LOADMAP_TITLE_RES=[
 ];
 // Titles come through as separate runs ("LOAD MAP" / "LEVEL 03") on one
 // baseline, so rebuild text lines first.
-function textLines(items){
+// BEM-10: `sideways` keeps sideways text as lines of its own, with the way
+// it runs and its real height — for reading beam tags. Every other reader
+// gets the lines exactly as before.
+function textLines(items,sideways){
   const rows=[];
   const sorted=items.filter(i=>String(i.s||'').trim()&&(i.h||0)>=0).slice().sort((a,b)=>a.y-b.y||a.x-b.x);
   for(const it of sorted){
-    let r=rows.find(r=>Math.abs(r.y-it.y)<Math.max(5,(it.h||12)*0.35)&&it.x>r.x1-4&&it.x<r.x1+Math.max(60,(it.h||12)*3));
+    if(sideways&&it.v){rows.push({y:it.y,x0:it.x,x1:it.x+(it.w||0),h:it.th||it.h||12,parts:[it],v:true,dx:it.dx,dy:it.dy});continue}
+    let r=rows.find(r=>!r.v&&Math.abs(r.y-it.y)<Math.max(5,(it.h||12)*0.35)&&it.x>r.x1-4&&it.x<r.x1+Math.max(60,(it.h||12)*3));
     if(!r){r={y:it.y,x0:it.x,x1:it.x+(it.w||0),h:it.h||12,parts:[]};rows.push(r)}
     r.parts.push(it);r.x1=Math.max(r.x1,it.x+(it.w||0));r.h=Math.max(r.h,it.h||0);
   }
-  return rows.map(r=>({text:r.parts.map(p=>String(p.s).trim()).join(' '),x:r.x0,y:r.y,w:r.x1-r.x0,h:r.h}));
+  return rows.map(r=>r.v?{text:String(r.parts[0].s).trim(),x:r.x0,y:r.y,w:r.parts[0].w||0,h:r.h,v:true,dx:r.dx,dy:r.dy}
+                       :{text:r.parts.map(p=>String(p.s).trim()).join(' '),x:r.x0,y:r.y,w:r.x1-r.x0,h:r.h});
+}
+// BEM-10: the middle of a text line on the canvas, whichever way it runs.
+// Level text is unchanged (x + w/2, y - h/2); sideways text runs along its
+// own direction and stands up off its baseline to the left of it.
+function textCenter(ln){
+  const dx=ln.v&&ln.dx!=null?ln.dx:1,dy=ln.v&&ln.dy!=null?ln.dy:0,h=ln.h||10,w=ln.w||0;
+  return [ln.x+dx*w/2+dy*h/2,ln.y+dy*w/2-dx*h/2];
 }
 function loadMapTitles(items){
   const out=[];
@@ -19628,7 +19648,7 @@ function greyLevel(col){
   return (r+g+b)/3;
 }
 // "45X17 BM", "31 3/4 x24 COL" — size labels with what they are
-const SIZE_RE=/(\d+(?:\s+\d+\/\d+)?)\s*["”']?\s*[xX×]\s*(\d+(?:\.\d+)?)\s*["”']?\s*([xX×]\s*\d+(?:\.\d+)?\s*["”']?\s*)?([A-Z]{2,8})?/i;
+const SIZE_RE=/(\d+(?:\s+\d+\/\d+)?)\s*["”']?\s*[xX×]\s*(\d+(?:\.\d+)?(?:\s+\d+\/\d+)?)\s*["”']?\s*([xX×]\s*\d+(?:\.\d+)?\s*["”']?\s*)?([A-Z]{2,8})?/i;
 function parseSizeLabel(text){
   const m=String(text||'').match(SIZE_RE);
   if(!m)return null;
@@ -19639,36 +19659,45 @@ function parseSizeLabel(text){
   const third=!!m[3];                       // a third dimension: not a beam
   const kind=(m[4]||'').toUpperCase();
   const isOther=third||/^(COL|COLUMN|FOOTING|FTG|PAD|PIER)$/.test(kind);
-  return{wIn:frac(m[1]),dIn:parseFloat(m[2]),
+  // BEM-10: "24X22 1/2 BM" is 22½ deep, not 22
+  return{wIn:frac(m[1]),dIn:frac(m[2]),
          isBeam:!isOther&&(!kind||/^(BM|BEAM)$/.test(kind)),
          isOther,
          text:m[0].trim()};
 }
 // A label belongs to this shape only if it sits along the long axis.
-function labelFitsShape(lab,bb){
+// BEM-10: measured from the label's real middle (sideways tags included).
+// Within the old 70 px (or 1.6 beam widths) it is NEAR; out to 8 times the
+// label's own text height it is FAR — a far label is used only where this
+// shape is the one nearest to it (Bothell, Oct 16 2026: four tags sat
+// 71–119 px off their beams at 16 px text and were never read).
+function labelFitsShape(lab,bb,far){
   const w=bb.maxx-bb.minx,hh=bb.maxy-bb.miny;
   const horiz=w>=hh;
   const along=horiz?[bb.minx,bb.maxx]:[bb.miny,bb.maxy];
   const across=horiz?[bb.miny,bb.maxy]:[bb.minx,bb.maxx];
-  const lx=lab.x+(lab.w||0)/2, ly=lab.y-(lab.h||10)/2;
+  const [lx,ly]=textCenter(lab);
   const a=horiz?lx:ly, c=horiz?ly:lx;
   const len=along[1]-along[0], thick=across[1]-across[0];
   const pad=len*0.2+40;
   if(a<along[0]-pad||a>along[1]+pad)return null;              // past either end
   const off=c<across[0]?across[0]-c:c>across[1]?c-across[1]:0;
   const maxOff=Math.max(70,thick*1.6);
-  if(off>maxOff)return null;                                   // off to one side
+  const reach=far?Math.max(maxOff,LABEL_REACH_H*(lab.h||16)):maxOff;
+  if(off>reach)return null;                                    // off to one side
   return off+Math.abs(a-(along[0]+along[1])/2)*0.15;
 }
+const LABEL_REACH_H=8;           // BEM-10: a far label, in its own text heights
 async function detectGreyShapes(num){
   const objs=await fillRegionObjects(num);
   const items=await pageTextCached(num);
   const labels=[];
-  for(const ln of textLines(items)){
+  for(const ln of textLines(items,true)){
     const p=parseSizeLabel(ln.text);
-    if(p)labels.push({...p,x:ln.x,y:ln.y,w:ln.w,h:ln.h});
+    if(p)labels.push({...p,x:ln.x,y:ln.y,w:ln.w,h:ln.h,v:ln.v,dx:ln.dx,dy:ln.dy});
   }
   const out=[];
+  const shapes=[];
   for(const o of objs){
     const g=greyLevel(o.col);
     if(g==null||g<GREY_LO||g>GREY_HI)continue;
@@ -19677,10 +19706,27 @@ async function detectGreyShapes(num){
       const bb=shape.bbox;
       const w=bb.maxx-bb.minx,hh=bb.maxy-bb.miny;
       if(w<4||hh<4)continue;
+      shapes.push({shape,g,bb});
+    }
+  }
+  // BEM-10: which shape each label is nearest to, for the far reach
+  const nearestOf=new Map();
+  for(const l of labels){let best=null;for(const S of shapes){const sc=labelFitsShape(l,S.bb,true);if(sc!=null&&(!best||sc<best.sc))best={S,sc}}if(best)nearestOf.set(l,best.S)}
+  for(const S of shapes){
+    const {shape,g,bb}=S;
+    {
+      const w=bb.maxx-bb.minx,hh=bb.maxy-bb.miny;
       const aspect=Math.max(w,hh)/Math.max(1,Math.min(w,hh));
-      // best label along the long axis; two close contenders = ambiguous
-      const scored=labels.map(l=>({l,s:labelFitsShape(l,bb)})).filter(o2=>o2.s!=null)
+      // best label along the long axis; two close contenders = ambiguous.
+      // Near labels as always; failing any, a far label this shape is the
+      // nearest shape to (BEM-10)
+      let scored=labels.map(l=>({l,s:labelFitsShape(l,bb)})).filter(o2=>o2.s!=null)
                          .sort((a,b2)=>a.s-b2.s);
+      let farHit=false;
+      if(!scored.length){
+        scored=labels.filter(l=>nearestOf.get(l)===S).map(l=>({l,s:labelFitsShape(l,bb,true)})).filter(o2=>o2.s!=null).sort((a,b2)=>a.s-b2.s);
+        farHit=scored.length>0;
+      }
       const best=scored[0]||null;
       const ambiguous=scored.length>1&&scored[1].s<scored[0].s*1.35;
       const isBeam=best&&!ambiguous&&best.l.isBeam ? true
@@ -19691,13 +19737,39 @@ async function detectGreyShapes(num){
         kind:isBeam?'beam':'slab',
         widthIn:use?use.wIn:null, depthIn:use?use.dIn:null,
         label:use?use.text:(best?best.l.text:null),
-        why: use?'from label' : ambiguous?'two labels compete — size left blank'
+        why: use?(farHit?`from the label "${use.text}" set back from it — check it`:'from label') : ambiguous?'two labels compete — size left blank'
              : best?`nearest label is "${best.l.text}" — not a beam size` : 'no size label along it',
-        sized:!!use, pick:false });
+        sized:!!use, check:!!(use&&farHit), pick:false });
     }
   }
+  beamContinuations(out);
   out.sort((a,b2)=>b2.areaPx2-a.areaPx2);
   return{page:num,items:out,labels:labels.length};
+}
+// BEM-10: A BEAM PIECE WITH NO LABEL OF ITS OWN THAT CONTINUES A SIZED ONE
+// takes its size: same direction, on the same line, the same drawn width
+// (within a quarter), and a gap between their ends no longer than three
+// widths — a beam broken by a column it frames into. Flagged to check.
+// Several sized neighbours that disagree leave it blank.
+function beamContinuations(items){
+  const geo=it=>{const b=it.bbox,w=b.maxx-b.minx,h=b.maxy-b.miny,hz=w>=h;
+    return{hz,a0:hz?b.minx:b.miny,a1:hz?b.maxx:b.maxy,c:hz?(b.miny+b.maxy)/2:(b.minx+b.maxx)/2,t:hz?h:w}};
+  const sized=items.filter(i=>i.kind==='beam'&&i.sized&&!i.cont);
+  for(const it of items){
+    if(it.kind!=='beam'||it.sized)continue;
+    const A=geo(it);
+    const hits=sized.filter(s=>{const B=geo(s);
+      if(B.hz!==A.hz)return false;
+      if(Math.abs(B.c-A.c)>Math.max(A.t,B.t)*0.5)return false;
+      if(Math.max(A.t,B.t)>Math.min(A.t,B.t)*1.25)return false;
+      const gap=Math.max(B.a0-A.a1,A.a0-B.a1);
+      return gap>=-1&&gap<=3*Math.max(A.t,B.t)});
+    if(!hits.length)continue;
+    const k=hits[0];
+    if(hits.some(h=>h.widthIn!==k.widthIn||h.depthIn!==k.depthIn))continue;
+    it.widthIn=k.widthIn;it.depthIn=k.depthIn;it.label=k.label;it.sized=true;it.check=true;it.cont=true;
+    it.why=`from the beam it continues ("${k.label}") — check it`;
+  }
 }
 // OPENINGS. They are not a fill — on the 1175 set an opening is a black
 // outline with a red X through it and an OPNG tag inside. The red is
@@ -20364,7 +20436,7 @@ function scanQueueHtml(){
   // while adjusting, the card is about the shape just accepted, not the next one
   const shown=adjusting&&beamScan.adjustingItem?beamScan.adjustingItem:it;
   const lv=state.levels[shown.levelIdx!=null?shown.levelIdx:beamScan.levelIdx]||{};
-  const bad=shown.kind!=='opening'&&!shown.sized;
+  const bad=shown.kind!=='opening'&&(!shown.sized||!!shown.check);
   let name;
   if(shown.kind==='opening')name=`Opening${shown.label&&!/^OPNG$/i.test(shown.label)?' &middot; '+esc(shown.label):''}`;
   else{const gw=beamGeomWidthIn(shown);
@@ -20393,7 +20465,7 @@ function scanQueueHtml(){
     ${progress}
     <div class="sq-card${bad?' v-warn':''}${adjusting?' adj':''}">
       <div class="sq-name">${adjusting?pillHtml('ok','added')+' ':''}${name} <span class="lm-dim">${sf(shown)}</span></div>
-      <div class="mp-why">${adjusting?'Drag its corners on the plan, or edit it below; then <b>Done \u2014 next candidate</b>.':esc((it&&it.why)||'')+(bad?' — the size can be typed in after it is added.':'')}</div>
+      <div class="mp-why">${adjusting?'Drag its corners on the plan, or edit it below; then <b>Done \u2014 next candidate</b>.':esc((it&&it.why)||'')+(bad&&!shown.sized?' — the size can be typed in after it is added.':'')}</div>
     </div>
     ${acts}
     ${adjusting?`<div class="sq-adjust"><div class="sq-props"></div></div>`:''}
@@ -20436,7 +20508,7 @@ function renderBeamPanel(){
   const sf=it=>{const f=beamFtPerPx(it);return f?fmtArea(it.areaPx2*f*f):`${Math.round(it.areaPx2/1000)}k px&sup2;`};
   const rows=beamScan.items.map((it,i)=>{
     if(it.done==='added'||it.done==='drawn')return '';   // written already, or drawn before the scan
-    const bad=it.failed||(it.kind!=='opening'&&!it.sized);
+    const bad=it.failed||(it.kind!=='opening'&&(!it.sized||!!it.check));
     let name,stat;
     if(it.kind==='opening'){
       name=`Opening${it.label&&!/^OPNG$/i.test(it.label)?' &middot; '+esc(it.label):''}`;
@@ -21896,11 +21968,14 @@ function adTextH(page){
 }
 // nearest BM size label to any segment of a centerline, within 10 ft
 function adBeamLabelFor(lv,P){
-  const page=state.pdf.current,lines=adLines(page);if(!lines.length)return null;
+  const page=state.pdf.current,it=adText(page);if(!it)return null;
+  // BEM-10: sideways tags as their own lines
+  if(!it._adSide)Object.defineProperty(it,'_adSide',{value:textLines(it,true),enumerable:false});
+  const lines=it._adSide;if(!lines.length)return null;
   const lim=10/adFtPerPx(lv);let best=null;
   for(const ln of lines){
     const p=parseSizeLabel(ln.text);if(!p||!p.isBeam||!(p.wIn>0)||!(p.dIn>0))continue;
-    const c=[ln.x+(ln.w||0)/2,ln.y-(ln.h||10)/2];
+    const c=textCenter(ln);
     let d=Infinity;for(let i=0;i<P.length-1;i++)d=Math.min(d,adSegDist(c,P[i],P[i+1]));
     if(d<lim&&(!best||d<best.d))best={d,w:p.wIn,dp:p.dIn,t:p.text,ln};
   }
