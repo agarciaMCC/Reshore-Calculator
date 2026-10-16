@@ -19980,6 +19980,129 @@ function isOutlined(cov){
   const mean=cov.reduce((a,b)=>a+b,0)/cov.length;
   return Math.min(...cov)>=0.5&&mean>=0.8;
 }
+// ── A SLAB ZONE FROM ITS NOTE (ARE-31, Bothell Oct 16 2026) ──
+// The scan found thickened slabs only as solid gray fills. Bothell draws its
+// 7", 8 1/2", 22" and 22 1/2" PT zones as outlines, dashed boxes and a pink
+// hatch, each named by a boxed callout ('8 1/2" PT SLAB' over T/SLAB, B/SLAB,
+// CLR HT) — sometimes inside the zone, sometimes on a leader to a dot in it.
+// So the note is the lead: for each thickness note other than the floor's
+// typical, the zone is traced from the leader's far end, or else from just
+// outside the callout box, the smallest region that holds the callout. A
+// region is kept only if it is under a quarter of the floor and holds no
+// other callout (a typical "9" PT SLAB" inside means the trace leaked into
+// the typical bay); otherwise the note is listed to draw by hand. Every one
+// is a candidate to review, never written by itself, and says it came from
+// a note.
+function slabNoteInches(text,loose){
+  const s=String(text||'').replace(/[″”]/g,'"').trim();
+  const m=new RegExp('^(\\d+(?:\\s*-?\\s*\\d+\\/\\d+)?|\\d+\\.\\d+)\\s*"\\s*(?:THICKENED\\s+|THK\\.?\\s+|DROP\\s+|DEPRESSED\\s+)?(?:PT\\s+|P\\.T\\.\\s+|CIP\\s+)?(?:SLAB|PANEL)'+(loose?'\\b':'\\s*$'),'i').exec(s);
+  if(!m)return null;
+  const f=/^(\d+)\s*-?\s*(\d+)\/(\d+)$/.exec(m[1].trim());
+  const v=f?+f[1]+(+f[3]?+f[2]/+f[3]:0):+m[1];
+  return v>0&&v<=60?v:null;
+}
+async function detectSlabNotes(num,lv){
+  const out=[];
+  if(!lv||levelOnGrade(lv))return out;          // soil carries it, whatever its thickness
+  const typ=+lv.slabThickness||0;
+  await pageTextCached(num);
+  const lines=adLines(num);if(!lines.length)return out;
+  const box=ln=>({minx:ln.x,maxx:ln.x+(ln.w||0),miny:ln.y-(ln.h||10),maxy:ln.y});
+  const notes=lines.map(ln=>({ln,t:slabNoteInches(ln.text)})).filter(n=>n.t!=null);
+  const edge=edgeOf(lv,num);
+  const band=edge&&edge.polygon&&edge.polygon.length>2?edgeBandPx(lv,num,edge):0;
+  // a note off the plan (a section, an elevation, the legend) names no zone
+  const onPlan=p=>!band||insideEdgeBand(p,edge,band);
+  const odd=notes.filter(n=>!(typ>0&&Math.abs(n.t-typ)<0.06));
+  if(!odd.length)return out;
+  const segs=await pageColourSegs(num);
+  const edgeA=edge&&edge.polygon&&edge.polygon.length>2?Math.abs(edge.polygon.reduce((a,p,i)=>{const q=edge.polygon[(i+1)%edge.polygon.length];return a+p.x*q.y-q.x*p.y},0)/2):Infinity;
+  const ptIn=(p,b)=>p.x>=b.minx&&p.x<=b.maxx&&p.y>=b.miny&&p.y<=b.maxy;
+  const T=(levelAlignmentFor(lv,num)||{}).transform,fpp=T?Math.hypot(T[0],T[2]):0;
+  const minPx2=fpp>0?30/(fpp*fpp):0;            // under 30 SF is a column or a callout, not a zone
+  const endOf=(q,e)=>Math.hypot(q.x0-e.x,q.y0-e.y)<1.5?{x:q.x1,y:q.y1}:(Math.hypot(q.x1-e.x,q.y1-e.y)<1.5?{x:q.x0,y:q.y0}:null);
+  for(const n of odd){
+    const h=n.ln.h||10,b0=box(n.ln);
+    // the callout: the note and the T/SLAB, B/SLAB, CLR HT lines under it
+    const cb={...b0};let tosFt=null;
+    for(const ln of lines){
+      const lb=box(ln);
+      if(lb.miny<cb.maxy-h*0.2||lb.miny>cb.maxy+h*1.6)continue;
+      if(lb.maxx<cb.minx-h*2||lb.minx>cb.maxx+h*2)continue;
+      const tx=String(ln.text).replace(/[″”]/g,'"').replace(/[′’]/g,"'").trim();
+      if(!/^(T|B)\s*\/\s*SLAB|^CLR\s*HT|^(T|B)\s*:/i.test(tx))continue;
+      cb.minx=Math.min(cb.minx,lb.minx);cb.maxx=Math.max(cb.maxx,lb.maxx);cb.maxy=Math.max(cb.maxy,lb.maxy);
+      const mt=/T\s*\/\s*SLAB\s*[:=]?\s*(\d+\s*'\s*-?\s*[\d\s\/]*"?)/i.exec(tx);
+      if(mt&&tosFt==null){const v=parseFeet(mt[1]);if(v!=null&&isFinite(v))tosFt=v}
+    }
+    const pad=h*0.8,cx=(cb.minx+cb.maxx)/2,cy=(cb.miny+cb.maxy)/2;
+    const near={minx:cb.minx-pad,maxx:cb.maxx+pad,miny:cb.miny-pad,maxy:cb.maxy+pad};
+    // a leader: a line leaving the callout, followed to its far end
+    let lead=null;
+    for(const g of segs){
+      if(g.len<h*2)continue;
+      const a={x:g.x0,y:g.y0},c={x:g.x1,y:g.y1};
+      const aIn=ptIn(a,near),cIn=ptIn(c,near);
+      if(aIn===cIn)continue;
+      let end=aIn?c:a;
+      for(let hop=0;hop<3;hop++){      // a shoulder, then the run to the dot
+        const nx=segs.find(q=>q!==g&&q.len>=h*0.5&&endOf(q,end)&&!ptIn(endOf(q,end),near));
+        if(!nx)break;
+        end=endOf(nx,end);
+      }
+      if(Math.hypot(end.x-cx,end.y-cy)<Math.max(cb.maxx-cb.minx,cb.maxy-cb.miny)*0.75)continue;
+      if(!lead||g.len>lead.len)lead={end,len:g.len};
+    }
+    // a note off the plan (a section, an elevation, the legend) names no
+    // zone — unless its leader reaches onto the plan
+    if(!onPlan({x:cx,y:cy})&&!(lead&&onPlan(lead.end)))continue;
+    const seeds=lead?[lead.end]
+      :[{x:cx,y:cb.miny-pad*1.6},{x:cx,y:cb.maxy+pad*1.6},{x:cb.minx-pad*1.6,y:cy},{x:cb.maxx+pad*1.6,y:cy}];
+    let best=null,why='';
+    // heavy outlines first (a zone's edge), then medium, then every dark
+    // line — the last is cut up by grid and dimension lines, so it comes last
+    const MODES=[{heavyOnly:true},{mid:true,heavyOnly:true},{}];
+    for(const sd of seeds){
+      for(const md of MODES){
+        const m=await traceRegionAt(num,sd.x,sd.y,{noFillObjects:true,...md});
+        if(!m||!m.polygon||m.polygon.length<3)continue;
+        const P=m.polygon;
+        if(!lead&&!pointInPoly({x:cx,y:cy},P))continue;                         // must hold its own callout
+        if(m.areaPx2<(cb.maxx-cb.minx)*(cb.maxy-cb.miny)*(lead?0.5:2)){why='only the callout box traced';continue}
+        if(m.areaPx2<minPx2){why='only a small pocket traced';continue}
+        if(m.areaPx2>edgeA*0.25){why='the trace ran into the rest of the floor';continue}
+        // another callout inside: leaked into a neighboring bay
+        const other=notes.find(o=>o!==n&&pointInPoly({x:o.ln.x+(o.ln.w||0)/2,y:o.ln.y-(o.ln.h||10)/2},P));
+        if(other){why=`the trace took in the "${String(other.ln.text).trim()}" note too`;continue}
+        m.how=md.heavyOnly?(md.mid?'mid':'heavy'):'all';
+        if(!best||m.areaPx2<best.areaPx2)best=m;
+        break;
+      }
+    }
+    const label=String(n.ln.text).replace(/[″”]/g,'"').trim();
+    if(best){
+      const P=best.polygon;
+      const bb={minx:Math.min(...P.map(p=>p.x)),maxx:Math.max(...P.map(p=>p.x)),miny:Math.min(...P.map(p=>p.y)),maxy:Math.max(...P.map(p=>p.y))};
+      // two notes onto one region (Bothell: 22" and 22 1/2" into the same
+      // stepped bay) are one candidate — the thicker, which loads more
+      const twin=out.find(o=>o.polygon&&Math.abs(o.areaPx2-best.areaPx2)<best.areaPx2*0.05&&pointInPoly(polyCentroid(P),o.polygon));
+      if(twin){
+        const lo=Math.min(twin.tIn,n.t),hi=Math.max(twin.tIn,n.t);
+        if(n.t>twin.tIn){twin.tIn=n.t;twin.tosFt=tosFt;twin.label=label}
+        twin.why=`the sheet's notes ${inchStr(lo)} and ${inchStr(hi)} both point here — the thicker is offered; check which is right`;
+        continue;
+      }
+      out.push({kind:'slab',polygon:P,bbox:bb,areaPx2:best.areaPx2,aspect:1,gray:null,sized:true,check:true,fromNote:true,
+        tIn:n.t,tosFt,label,why:`traced from the sheet's note "${label}"${lead?' along its leader':''} — check its outline`,pick:false});
+    }else{
+      const at=lead?lead.end:{x:cx,y:cy};
+      out.push({kind:'slab',failed:true,fromNote:true,tIn:n.t,tosFt,label,x:at.x,y:at.y,
+        why:`the sheet notes "${label}" here, but its outline could not be traced${why?' ('+why+')':''} — draw it by hand`,
+        polygon:null,bbox:{minx:at.x-20,miny:at.y-20,maxx:at.x+20,maxy:at.y+20},areaPx2:0,pick:false});
+    }
+  }
+  return out;
+}
 async function detectOpenings(num){
   const segs=await pageColourSegs(num);
   const items=await pageTextCached(num);
@@ -20174,6 +20297,11 @@ async function runAutoDetect(opt){
         const r=await detectGreyShapes(t.page);
         if(scanToken!==token||!beamScan)return;           // closed while reading
         for(const i of r.items)found.push({...i,page:t.page,levelIdx:t.levelIdx});
+        // ARE-31: slab zones drawn as outlines, found from their notes
+        const sn=await detectSlabNotes(t.page,lv);
+        if(scanToken!==token||!beamScan)return;
+        for(const i of sn)found.push({...i,page:t.page,levelIdx:t.levelIdx});
+        beamScan.notes.slabNotes=(beamScan.notes.slabNotes||[]).concat(sn.filter(i=>i.failed).map(i=>`${i.label} (${lv.name})`));
       }
       if(opt.openings){
         const r=await detectOpenings(t.page);
@@ -20202,6 +20330,7 @@ async function runAutoDetect(opt){
     if(nt.outside)notes.push(`${nt.outside} shape${nt.outside>1?'s':''} outside the floor edge ignored`);
     if(nt.drawn)notes.push(`${nt.drawn} already drawn on the floor, not offered again`);
     if(nt.crossings)notes.push(`${nt.crossings} crossing${nt.crossings>1?'s':''} of dimension or grid lines with no outline round them not offered as openings`);
+    if(nt.slabNotes&&nt.slabNotes.length)notes.push(`${nt.slabNotes.length} slab note${nt.slabNotes.length>1?'s':''} whose zone could not be traced — draw ${nt.slabNotes.length>1?'them':'it'} by hand: ${nt.slabNotes.join(', ')}`);
     if(nt.skipped)notes.push(`${nt.skipped} sheet${nt.skipped>1?'s':''} without a confirmed edge not read`);
     // UI-26: what the read left out is plumbing — a dim line on the card, not
     // a pop-up ("155 already drawn … 187 crossings …", Kalae, Oct 15 2026)
@@ -20401,7 +20530,15 @@ function scanCommit(list,label){
       if(it.depthIn!=null)z.depthIn=it.depthIn; else blank++;
       beams++;
     }else if(it.kind==='opening'){opens++}
-    else{slabs++}
+    else{
+      slabs++;
+      // ARE-31: a zone found from its note takes the note's thickness and top
+      if(it.fromNote){
+        if(it.tIn!=null)z.thicknessIn=it.tIn;
+        if(it.tosFt!=null&&hasElev(lv))z.offsetIn=Math.round((it.tosFt-lv.elevation)*12*8)/8;
+        z.label=it.label||'';
+      }
+    }
     arr.push(z);
     it.done='added';it.pick=false;it.zoneId=z.id;
     added.push({lv,z});
@@ -22084,7 +22221,7 @@ function adSheetReads(lv,ring){
     const s=String(ln.text).replace(/[″”]/g,'"').replace(/[′’]/g,"'");let m;
     if(m=/T\s*\/\s*(?:O\s*)?SLAB\s*(?:EL\.?|ELEV\.?)?\s*[:=]?\s*(?:EL\.?\s*)?(\d+\s*'\s*-?\s*[\d\s\/]*"?)/i.exec(s)){const v=parseFeet(m[1]);if(v!=null&&isFinite(v)){tv.add(Math.round(v*96)/96);r.src.push(s.trim())}}
     else if(m=/B\s*\/\s*(?:O\s*)?SLAB\s*(?:EL\.?|ELEV\.?)?\s*[:=]?\s*(?:EL\.?\s*)?(\d+\s*'\s*-?\s*[\d\s\/]*"?)/i.exec(s)){const v=parseFeet(m[1]);if(v!=null&&isFinite(v)){bv.add(Math.round(v*96)/96);r.src.push(s.trim())}}
-    else if(m=/^(\d+(?:\.\d+)?)\s*"\s*(?:THICKENED\s+|THK\.?\s+|DROP\s+|DEPRESSED\s+)?(?:PT\s+|P\.T\.\s+|CIP\s+)?(SLAB|PANEL)\b/i.exec(s)){th.add(+m[1]);r.src.push(s.trim())}
+    else if((m=slabNoteInches(s,true))!=null){th.add(m);r.src.push(s.trim())}
   }
   if(tv.size===1)r.tosFt=[...tv][0];if(th.size===1)r.tIn=[...th][0];
   if(bv.size===1)r.bosFt=[...bv][0];
