@@ -1,4 +1,4 @@
-// @rules ARE-10, ARE-03, UI-11  (see DECISIONS.md)
+// @rules ARE-10, ARE-03, UI-11, UI-12  (see DECISIONS.md)
 // ONE LOADING AREA, TWO ZONE SHEETS + THAT GROUND IS ON GRADE (Sep 17 2026)
 // Adolfo: "if a loading area is split by a floor edge and appears in multiple
 // zones as a result, draw the loading area in both zones. right now it only
@@ -167,6 +167,12 @@ const F = await page.evaluate(async () => {
   const hadBtn = !!btn && /slab on grade/i.test(btn.textContent);
   if (btn) btn.click();
   await new Promise(r => setTimeout(r, 50));
+  // UI-12 (Oct 16): the OK also draws the on-grade area (tests/gradepast.mjs);
+  // take it away to see the acceptance stand on its own
+  const drawn = zonesOf(lv, 'slab').filter(z => z.fromStack);
+  const drew = drawn.length > 0 && row().overOnGrade;
+  lv.slabZones = lv.slabZones.filter(z => !z.fromStack);
+  renderSheetStack();
   const r2 = row();
   const accepted = r2.overAccepted && !r2.issues.length && r2.notes.some(t => /confirmed OK/.test(t));
   const shown = host.querySelectorAll('.ss-row.bad').length === 0 && !!host.querySelector('button[data-ssundo]');
@@ -189,10 +195,11 @@ const F = await page.evaluate(async () => {
   const r5 = row();
   const undone = !r5.overAccepted && r5.issues.some(t => /south of anything 2 describes/.test(t)) && !lv.stackOk;
   grade.forEach((z, i) => { z.kind = keep[i]; });
-  return { warned, hadBtn, accepted, shown, saved, back, again, undone, over: r1.over };
+  return { warned, hadBtn, drew, accepted, shown, saved, back, again, undone, over: r1.over };
 });
 ok(F.warned, 'with the on-grade areas turned into plain slab the warning is back: ' + JSON.stringify(F.over));
 ok(F.hadBtn, 'and the row offers "OK — that’s slab on grade"');
+ok(F.drew, 'pressing it draws the on-grade area past the floor below');
 ok(F.accepted && F.shown, 'pressing it accepts the overshoot: no warning, a muted note, a recheck link');
 ok(F.saved && F.saved['11'] && F.saved['11'].south === F.over.south, 'the acceptance is saved with the job: ' + JSON.stringify(F.saved));
 ok(F.back, 'when the overshoot grows by 10 ft the warning returns');
