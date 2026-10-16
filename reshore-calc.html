@@ -21077,7 +21077,9 @@ function sequenceCurrent(){return !!seqPlan&&resultsCurrent()&&sequenceInputKey=
 function describeInputChange(before,after){
   if(!before)return 'Job inputs changed';
   try{
-    const a=JSON.parse(before),b=JSON.parse(after),out=[];
+    // calculationKey writes [project, levels, shores]; read either shape
+    const shape=x=>Array.isArray(x)?{project:x[0],levels:x[1],shores:x[2]}:x;
+    const a=shape(JSON.parse(before)),b=shape(JSON.parse(after)),out=[];
     if(JSON.stringify(a.levels)!==JSON.stringify(b.levels))out.push('levels, areas or matches');
     if(JSON.stringify(a.shores)!==JSON.stringify(b.shores))out.push('shore catalog');
     if(JSON.stringify(a.project)!==JSON.stringify(b.project))out.push('loads, choices or project settings');
