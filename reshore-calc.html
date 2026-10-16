@@ -11647,9 +11647,34 @@ function refreshPicks(S){
     s.pendingChoices=s.regions.reduce((m,r)=>m+r.steps.filter(x=>stNeeds(x)&&!x.chosen&&x.options.length).length,0)
       +(s.beams||[]).reduce((m,b)=>m+b.rows.filter(x=>x.beamKey&&x.beamNet>0&&!x.beamChosen&&x.options.length).length,0);
     if(s._cellIdx)s._cellIdx=null;
+    // what is worked out from the picks and kept on the placement
+    L._installPlan=null;L._laterMaps=null;L._patScale=null;L._beamNames=null;
   }
   _regionNameCache=null;
   if(typeof seqPlan!=='undefined'){seqPlan=null;sequenceInputKey=null}
+}
+// RES-18: A PICK IS READ IN, NOT SOLVED AGAIN. A shore pick (or a beam row's
+// width or shores per cluster) changes which shore a row shows and the beam
+// spacing worked out from it — never a load, an area or the rows themselves.
+// So the standing solve takes the picks in place: slab rows read their pick,
+// and the placements whose picks changed have their beam items regathered
+// (groupBeamItems reads the picks, as the full solve does). Kalae, Oct 16
+// 2026: every pick cost a full solve of all 41 placements. `keys` are the
+// pick keys that changed; without them every placement is regathered.
+function repickSchedule(keys){
+  if(!resultsCurrent()){runSchedule();return}
+  const pours=keys?new Set(keys.map(k=>String(k).split('|')[0])):null;
+  refreshPicks(schedSolve);
+  for(const L of schedSolve.levels){
+    const s=L.solve;
+    if(!s||!s.rawBeams||(pours&&!pours.has(L.pour.name)))continue;
+    // every beam's rows from its picks, as the solve writes them (a lone
+    // beam is shown with these rows; a group is chained again from them)
+    for(const it of s.rawBeams){const c=beamChain(it,L.pour.name);it.rows=c.rows;it.beamUnresolved=c.unresolved;it.beamLevels=c.levels;it.absorbedAt=c.absorbedAt}
+    regroupBeamsOf(L);
+  }
+  notePickLoss(schedSolve);
+  renderSchedule();
 }
 // Which picks the last solve used; a pick in use then and no longer
 // matching a row now is a pick the user has lost sight of.
@@ -12051,7 +12076,7 @@ function applyBulkShore(shoreId,rows,what){
   history.record('Apply shore '+what);
   const ch=shoreChoices();
   for(const r of fit)ch[r.key]=r.options.find(o=>String(o.shoreId)===String(shoreId)).shoreId;
-  persist();runSchedule();renderCanvas();
+  persist();repickSchedule(fit.map(r=>r.key));renderCanvas();
   // UI-18: say it in the same terms as the "still to choose" count — rows
   // that already had a shore are not rows waiting for one
   const missed=rows.filter(r=>!fit.includes(r)),open=missed.filter(r=>!r.chosen).length,kept=missed.length-open;
@@ -13072,7 +13097,7 @@ function renderSchedule(){
       const v=parseFloat(inp.value);
       history.record('Set effective width');
       if(inp.value.trim()===''||isNaN(v)||v<=0)delete shoreChoices()[k];else shoreChoices()[k]=v;
-      persist();runSchedule();
+      persist();repickSchedule([k]);
     });
     inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();inp.blur()}});
   });
@@ -13080,7 +13105,7 @@ function renderSchedule(){
     selEl.addEventListener('change',()=>{
       history.record('Shores per cluster');
       shoreChoices()[selEl.dataset.key+'N']=selEl.value;
-      persist();runSchedule();
+      persist();repickSchedule([selEl.dataset.key]);
     });
   });
   host.querySelectorAll('select.sched-shore').forEach(selEl=>{
@@ -13089,7 +13114,7 @@ function renderSchedule(){
       history.record('Choose shore');
       if(selEl.value)shoreChoices()[k]=selEl.value;
       else delete shoreChoices()[k];
-      persist();runSchedule();renderCanvas();
+      persist();repickSchedule([k]);renderCanvas();
     });
   });
   // A pick made on the plan has to bring its block into view, or the click
