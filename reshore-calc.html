@@ -7163,11 +7163,36 @@ async function autoTraceBackground(){
   traceBgBusy=true;renderAreasPrimary();
   try{
     const T=await tracedLoadMaps();
-    const byLevel={};
-    for(const pl of T.plans){if(pl.levelIdx<0)continue;byLevel[pl.levelIdx]=(byLevel[pl.levelIdx]||0)+pl.fills.length}
-    traceReady={key:traceCacheKey(),byLevel,plans:T.plans.length};
+    const byLevel={},caps={};
+    for(const pl of T.plans){if(pl.levelIdx<0)continue;byLevel[pl.levelIdx]=(byLevel[pl.levelIdx]||0)+pl.fills.length;
+      (caps[pl.levelIdx]||(caps[pl.levelIdx]=[])).push(...pl.fills.filter(f=>!f.untagged).map(f=>f.capacity))}
+    traceReady={key:traceCacheKey(),byLevel,caps,plans:T.plans.length};
   }catch(e){console.error(e)}
-  finally{traceBgBusy=false;renderAreasPrimary()}
+  finally{traceBgBusy=false;renderAreasPrimary();if(typeof renderStepFoot==='function')renderStepFoot();if(typeof renderGroupChrome==='function'&&typeof curStep!=='undefined'&&groupOf(curStep).id==='areas')renderGroupChrome()}
+}
+// ── THE LOAD MAP IS PART OF THE AREAS REVIEW (ARE-30, Bothell Oct 16 2026) ──
+// A run that trusted every suggestion never opened a floor's Loading tab, so
+// its load-map areas were never offered, Areas read Done and Results ran on
+// the typical alone. Floor 3's 125 PSF mechanical area under a 138 PSF
+// typical was missed — and an area below the typical always counts (MDL-20).
+// The background read now runs on arriving at Areas, whichever tab, and the
+// step names the floors whose load map was read but not reviewed: an area
+// BELOW the typical holds the step until that floor's map is reviewed (Accept
+// or Skip each one); areas at or above it are named and optional. Floors
+// whose capacity is never used (top floor, on grade; MDL-14) are left out.
+function loadMapUnreviewed(){
+  if(!traceReady||traceReady.key!==traceCacheKey()||!traceReady.caps)return [];
+  const out=[];const top=topLevelId();
+  for(const k of Object.keys(traceReady.caps)){
+    const li=+k,lv=state.levels[li];if(!lv)continue;
+    if(lv.id===top||levelOnGrade(lv)||lv.loadMapReviewed)continue;
+    if(zonesOf(lv,'loading').some(z=>z.fromLoadMap))continue;
+    const typ=levelDefaultCapacity(lv),caps=traceReady.caps[k].filter(c=>c!=null&&!isNaN(c));
+    if(!caps.length)continue;
+    const low=typ>0?caps.filter(c=>c<typ-0.05):[];
+    out.push({li,lv,n:caps.length,low,typ});
+  }
+  return out;
 }
 function loadingPrimaryHtml(){
   const li=state.activeLevelIdx;const st=floorTraceState(li);
@@ -7182,7 +7207,8 @@ function loadingPrimaryHtml(){
   }
   if(st.have)return `<span class="lm-dim">${st.have} loading area${st.have===1?'':'s'} on ${name} came from its load map — <button type="button" class="btn btn-xs" id="btnTraceFloor">Trace it again</button></span>`;
   if(st.reading)return `<div class="lp-card">${pillHtml('read',`reading the load maps…`)}<span class="lm-dim">${name}'s loading areas are offered here when the read is done</span></div>`;
-  if(st.ready)return `<div class="lp-card">${pillHtml('need',`${st.ready} loading area${st.ready===1?'':'s'} read`)}<span class="lp-txt">from ${name}'s load map — review them on the map, then you are brought back here</span><button type="button" class="btn btn-sm btn-primary" id="btnTraceFloor">Review</button></div>`;
+  const lowHere=(loadMapUnreviewed().find(x=>x.li===li)||{low:[]}).low;
+  if(st.ready)return `<div class="lp-card">${pillHtml('need',`${st.ready} loading area${st.ready===1?'':'s'} read`)}<span class="lp-txt">from ${name}'s load map${lowHere.length?` — <b>${lowHere.length} below the typical capacity</b> (${lowHere.map(c=>Math.round(c)).join(', ')} PSF), which always count${lowHere.length===1?'s':''}`:''} — review them on the map, then you are brought back here</span><button type="button" class="btn btn-sm btn-primary" id="btnTraceFloor">Review</button></div>`;
   if(traceReady&&traceReady.key===traceCacheKey())return `<div class="lp-card">${pillHtml('read','no load map names '+name)}<span class="lp-txt">draw its areas by hand, or</span><button type="button" class="btn btn-sm" id="btnTraceFloor">Trace from a load map…</button></div>`;
   return `<div class="lp-card"><span class="lp-txt">Read ${name}'s loading areas off its load map, confirm them there, and come back.</span><button type="button" class="btn btn-sm btn-primary" id="btnTraceFloor">Trace from ${name}'s load map</button></div>`;
 }
@@ -7196,6 +7222,7 @@ function renderAreasPrimary(){
     if(typeof curStep!=='undefined'&&groupOf(curStep).id==='areas')autoTraceBackground();
     return;
   }
+  if(typeof curStep!=='undefined'&&groupOf(curStep).id==='areas')autoTraceBackground();
   const rows=typeof planSheetRows==='function'?planSheetRows():[];
   const conf=rows.filter(r=>r.confirmed).length;
   const done=typeof autoScanDone==='function'?autoScanDone():[];
@@ -14658,8 +14685,14 @@ function stepStatus(id){
       // accept" foot (Kalae, Oct 15 2026)
       const rv=scanLeft();
       if(rv.n)return{done:false,text:`Reviewing: ${rv.n} shape${rv.n>1?'s':''} on ${rv.floors} floor${rv.floors>1?'s':''} still to accept or skip — or Stop here`};
+      const lm=loadMapUnreviewed(),lmLow=lm.filter(x=>x.low.length);
+      if(lmLow.length){
+        const x=lmLow[0];
+        return{done:false,text:`${levelTagName(x.lv.name)}'s load map has ${x.low.length} loading area${x.low.length>1?'s':''} below its typical capacity (${Math.round(Math.min(...x.low))} < ${Math.round(x.typ)} PSF)${lmLow.length>1?` — and ${lmLow.length-1} more floor${lmLow.length>2?'s':''}`:''}: review ${x.low.length>1?'them':'it'} on the Loading tab`};
+      }
       const bits=[];
       if(n)bits.push(`${n} area${n>1?'s':''} tagged`);
+      if(lm.length){const k=lm.reduce((t,x)=>t+x.n,0);bits.push(`${k} load-map area${k>1?'s':''} on ${lm.map(x=>levelTagName(x.lv.name)).join(', ')} not reviewed (at or above the typical: optional)`)}
       if(typ)bits.push(`${typ} floor${typ>1?'s':''} on the typical`);
       const stopped=state.ui.scanStopped;
       if(stopped&&stopped.n)bits.push(`${stopped.n} shape${stopped.n>1?'s':''} on ${stopped.floors} floor${stopped.floors>1?'s':''} not reviewed`);
@@ -21096,6 +21129,7 @@ async function acceptAutoTrace(){
     }
     materializeLevelZones(lv);
     pending+=pendingZoneCount(lv);
+    lv.loadMapReviewed=true;           // ARE-30: its load map has been looked at
   }
   // the load-map sheet is not a floor plan; stop the sheet bar asking
   for(const pg of (R.pages||[R.page]))if(levelForPage(pg)<0&&!pageIsSkipped(pg))skippedPages().push(pg);
