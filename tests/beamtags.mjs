@@ -59,9 +59,10 @@ ok(!D.c.sized, 'a piece off the line is not a continuation');
 ok(!D.d.sized, 'a piece more than three widths away is not a continuation');
 
 console.log('A/B. Bothell: every drawn beam reads the drawn size');
-const job = fs.readFileSync(path.resolve(here, '..', 'Project Testing', 'Bothell', 'Bothell_Test_2026.10.16.reshore.json'), 'utf8');
+const jobPath = path.resolve(here, '..', 'Project Testing', 'Bothell', 'Bothell_Test_2026.10.16.reshore.json');
 const pdfPath = path.resolve(here, '..', 'Project Testing', 'Bothell', 'Reshore Calculator Test.pdf');
-if (fs.existsSync(pdfPath)) {
+if (fs.existsSync(jobPath) && fs.existsSync(pdfPath)) {
+  const job = fs.readFileSync(jobPath, 'utf8');
   await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
   await page.evaluate(async ([j, p]) => {
     applyOpenedJob(JSON.parse(j), 'Bothell_Test_2026.10.16.reshore.json');
