@@ -66,6 +66,12 @@ await page.waitForTimeout(2500);
 
 for (const s of STEPS) {
   if (!want(s)) continue;
+  // the opening "5 levels read…" pop-up (6.5 s) fades right as Sheets is
+  // shot, so whether it showed there was a race (CI, Oct 16 2026: up on the
+  // run, gone on the Linux baseline). Drawings and Levels keep it, as their
+  // baselines do; from Sheets on, pop-ups left from earlier steps are
+  // cleared. A step's own pop-ups still show.
+  if (STEPS.indexOf(s) >= STEPS.indexOf('sheets')) await page.evaluate(() => { const h = document.getElementById('toastHost'); if (h) h.innerHTML = ''; });
   await page.evaluate(id => setStep(id), s);
   if (s === 'results')
     await page.waitForFunction(() => schedSolve && schedSolve.levels.length, null, { timeout: 120000 }).catch(() => {});

@@ -1752,8 +1752,10 @@ const pdfCtx=pdfCvs.getContext('2d');
 async function loadFile(file){
   const isImg=/\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name);
   // JOB-02: the job remembers which drawing set it was built on, so opening
-  // it again can name the file to load
-  if(file&&file.name)state.project.drawingSet=file.name;
+  // it again can name the file to load — but only once the set fits the job
+  // (adoptOpenedSet). A set that cannot be the job's never replaces the name
+  // (Kalae, Oct 16 2026: the wrong 12-page set was named as the one to open).
+  state.pdf.fileName=file&&file.name||'';
   if(isImg){
     const url=URL.createObjectURL(file);
     const img=new Image();
@@ -1763,6 +1765,7 @@ async function loadFile(file){
       invalidateCalculatedResults('The drawing was replaced; verify the matches and areas');
       state.pdf.pages=1;state.pdf.current=1;
       state.pdf.pageImages={1:img};
+      adoptOpenedSet();
       state.drawing.imgW=img.width;state.drawing.imgH=img.height;
       document.getElementById('upload-prompt').style.display='none';
       document.getElementById('pageNav').style.display='flex';
@@ -1793,7 +1796,7 @@ async function loadFile(file){
       // (Kalae, Oct 15 2026: a 12-page set opened on a 42-sheet job read
       // "42 sheets matched" with no word)
       const mis=drawingSetMismatch(true);
-      state.project.drawingSetPages=doc.numPages;
+      adoptOpenedSet();
       // UI-20: the first sheet's floor is the working floor on arrival
       if(state.levels.length){const h=levelForPage(1);if(h>=0)state.activeLevelIdx=h}
       document.getElementById('upload-prompt').style.display='none';
@@ -12734,15 +12737,32 @@ function renderSchedule(){
   // where the stack already ends on grade, "add the floors below" is not the
   // answer: the load is unresolved because no floor down to grade has slab
   // there (an overhang or a shaft). Say where, and how much.
+  // MDL-04/MDL-10: a region stopped by a shaft is said as a shaft, on any
+  // stack (Kalae, Oct 16 2026: MECH ROOF over the elevator shaft read "add the
+  // floors below" on a stack that ends on grade).
   const bottomOnGrade=state.levels.length&&levelOnGrade(state.levels[state.levels.length-1]);
   const allOpen=r=>r.steps.length&&r.steps.every(st=>st.open);
+  const lastStep=r=>r.steps[r.steps.length-1];
   if(s.spatial&&s.anyUnresolved){
-    const usf=s.regions.filter(r=>r.unresolved).reduce((t,r)=>t+r.areaSF,0);
-    const noSlab=s.regions.filter(r=>r.unresolved&&allOpen(r));
+    const unres=s.regions.filter(r=>r.unresolved);
+    const shaftR=unres.filter(r=>r.steps.length&&lastStep(r).shaft>0);
+    const noSlab=unres.filter(r=>!shaftR.includes(r)&&allOpen(r));
+    const rest=unres.filter(r=>!shaftR.includes(r)&&!noSlab.includes(r));
+    const sumSF=a=>a.reduce((t,r)=>t+r.areaSF,0);
+    if(shaftR.length){
+      const st=lastStep(shaftR[0]);
+      warnBits.push(`<span class="lm-warn">${fmtArea(sumSF(shaftR))} of this placement is over a shaft: the opening under ${esc(st.level.name)} continues ${st.shaft} floors down, so nothing below can take its load — the shores under ${esc(st.level.name)} need a support of their own, or check the openings on the floors below.</span>`);
+    }
     if(bottomOnGrade&&noSlab.length){
-      const sf=noSlab.reduce((t,r)=>t+r.areaSF,0),why=noSlab.some(r=>r.steps.some(st=>st.noSlab))?'past the floor edges below':'over openings';
-      warnBits.push(`<span class="lm-warn">${fmtArea(sf)} of this placement is ${why} on every floor down to grade, so nothing below can take its load — check the floor edges and openings on ${esc(noSlab[0].steps.map(st=>st.level.name).join(', '))}${usf-sf>1?`; ${fmtArea(usf-sf)} more is still carrying load at the bottom of the stack`:''}.</span>`);
-    }else warnBits.push(`<span class="lm-warn">Load still remains at the bottom of the defined stack — add the floors below${s.hasGrade||bottomOnGrade?'':', or mark the lowest floor as slab on grade (▨ on its level row) if it is'}.</span>`);
+      const why=noSlab.some(r=>r.steps.some(st=>st.noSlab))?'past the floor edges below':'over openings';
+      warnBits.push(`<span class="lm-warn">${fmtArea(sumSF(noSlab))} of this placement is ${why} on every floor down to grade, so nothing below can take its load — check the floor edges and openings on ${esc(noSlab[0].steps.map(st=>st.level.name).join(', '))}.</span>`);
+    }
+    if(bottomOnGrade&&rest.length){
+      const at=rest[0].steps.length?lastStep(rest[0]).level.name:'';
+      warnBits.push(`<span class="lm-warn">${fmtArea(sumSF(rest))} of this placement still carries load${at?` under ${esc(at)}`:''} with no floor below to stand on — check the floor edges and openings below${at?` ${esc(at)}`:''}.</span>`);
+    }
+    if(!bottomOnGrade&&(noSlab.length||rest.length))
+      warnBits.push(`<span class="lm-warn">Load still remains at the bottom of the defined stack — add the floors below${s.hasGrade?'':', or mark the lowest floor as slab on grade (▨ on its level row) if it is'}.</span>`);
   }
   // RES-07: open all the way down to grade is not a missing input, but it is
   // a field condition — no reshores there, the pour's falsework stands on grade
@@ -13360,7 +13380,7 @@ function loadPathSvg(r,L){
       // nothing below: draw the shore hanging with a warning
       const endY=barY+D.barH+D.gapShore;
       parts.push(diagShore(barY,endY,st.shoreHeightFt||0,true));
-      parts.push(diagText(barY+D.barH+30,[{t:`${st.remaining.toFixed(1)} − ${st.capacity} = ${st.resultant.toFixed(1)} PSF`},{t:'no floor below to stand on — add the floors below or mark grade',cls:'dg-pend-txt'}]));
+      parts.push(diagText(barY+D.barH+30,[{t:`${st.remaining.toFixed(1)} − ${st.capacity} = ${st.resultant.toFixed(1)} PSF`},{t:st.shaft?`the opening under it continues ${st.shaft} floors down — a shaft, nothing to stand on`:(state.levels.length&&levelOnGrade(state.levels[state.levels.length-1])?'no floor with slab below to stand on — check the floor edges and openings below':'no floor below to stand on — add the floors below or mark grade'),cls:'dg-pend-txt'}]));
       y=endY;pendingShore=null;
       break;
     }
@@ -14323,6 +14343,14 @@ function drawingSetMismatch(all){
   const saved=state.project.drawingSetPages;
   if(all&&saved&&saved!==state.pdf.pages)return `This set has ${state.pdf.pages} pages; the job was saved with a ${saved}-page set${set}. Check that the sheets are the same before going on.`;
   return '';
+}
+// JOB-02: the open set becomes the job's remembered set (name and page count)
+// only while it fits the job; once the sheets are placed again so it does,
+// it is adopted then.
+function adoptOpenedSet(){
+  if(!state.pdf.pages||!state.pdf.fileName||drawingSetMismatch())return;
+  state.project.drawingSet=state.pdf.fileName;
+  if(state.pdf.doc)state.project.drawingSetPages=state.pdf.pages;
 }
 function stepBlockers(id){
   const b=[];
@@ -15517,7 +15545,7 @@ function renderMatchPanel(){
 }
 
 // Called whenever project state changes so the rail stays honest.
-function refreshFlow(){renderStepper();renderStepPanel()}
+function refreshFlow(){adoptOpenedSet();renderStepper();renderStepPanel()}
 
 // Move the existing controls into their step panels. Ids survive, so the
 // engines and their listeners are untouched.
@@ -21624,6 +21652,8 @@ function applyOpenedJob(d,what){
   // UI-20: the floor of the sheet on screen is the working floor, so the
   // sheet-and-floor bar has nothing to ask on arrival
   if(state.pdf.pages){const h=levelForPage(state.pdf.current);if(h>=0)state.activeLevelIdx=h}
+  // JOB-02: a set already open is not taken on as this job's set
+  state.pdf.fileName='';
   renderSidebar();updatePageInfo();renderCanvas();persist();
   if(typeof refreshFlow==='function')refreshFlow();
   const set=state.project.drawingSet;

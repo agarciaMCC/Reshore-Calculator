@@ -266,7 +266,7 @@ const counts = p => p.evaluate(() => {
   ok(H.pages === 12, 'the 12-page set loaded: ' + H.pages);
   ok(!H.st.done && /go up to page 42/.test(H.st.text), 'Drawings is not done and says why: ' + H.st.text);
   ok(/not the set the job was built on/.test(H.mis), 'the mismatch names the problem: ' + H.mis.slice(0, 100));
-  ok(H.saved === 12, 'the page count is saved with the job for next time: ' + H.saved);
+  ok(H.saved !== 12, 'a set that cannot be the job’s does not become its saved page count (JOB-02, Oct 16): ' + H.saved);
   await page.close();
 }
 
