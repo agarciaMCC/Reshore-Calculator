@@ -882,6 +882,14 @@ function mpUnion(...xs){
   const v=xs.filter(x=>x&&x.length);
   if(v.length<2)return v[0]||null;
   try{const r=PC().union(...v);if(r&&r.length)return r}catch(e){}
+  // SPEED (Oct 16 2026): a join of many shapes that trips on a hairline is
+  // tried again rounded to a thousandth of a foot (as pcTry does for two),
+  // then in halves, before falling back to one at a time
+  if(v.length>2){
+    try{const r=PC().union(...v.map(mpRound));if(r&&r.length)return r}catch(e){}
+    const h=v.length>>1,a=mpUnion(...v.slice(0,h)),b=mpUnion(...v.slice(h));
+    return mpUnion(a,b);
+  }
   let acc=v[0],lost=0;
   for(let i=1;i<v.length;i++){
     const r=pcTry('union',acc,v[i]);
@@ -917,13 +925,32 @@ function mpBBox(mp){
   }
   return bb;
 }
+// SPEED (Kalae, Oct 16 2026): mpHas is asked millions of times on a podium
+// floor and rebuilt each ring's points on every ask. Each ring's points and
+// box are now built once and kept with the ring; a point outside the box is
+// outside the ring. Same answer.
+const _ringCache=new WeakMap();
+function ringOf(r){
+  let v=_ringCache.get(r);
+  if(!v){
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    const pts=r.map(p=>{if(p[0]<minX)minX=p[0];if(p[0]>maxX)maxX=p[0];if(p[1]<minY)minY=p[1];if(p[1]>maxY)maxY=p[1];return{x:p[0],y:p[1]}});
+    v={pts,minX,minY,maxX,maxY};_ringCache.set(r,v);
+  }
+  return v;
+}
+function inRing(r,x,y){
+  const o=ringOf(r);
+  if(x<o.minX||x>o.maxX||y<o.minY||y>o.maxY)return false;
+  return pointInPoly({x,y},o.pts);
+}
 function mpHas(mp,x,y){
   if(!mp)return false;
   for(const poly of mp){
-    if(!pointInPoly({x,y},poly[0].map(p=>({x:p[0],y:p[1]}))))continue;
+    if(!inRing(poly[0],x,y))continue;
     let hole=false;
     for(let i=1;i<poly.length;i++)
-      if(pointInPoly({x,y},poly[i].map(p=>({x:p[0],y:p[1]})))){hole=true;break}
+      if(inRing(poly[i],x,y)){hole=true;break}
     if(!hole)return true;
   }
   return false;
@@ -1285,9 +1312,15 @@ function addAssumptionArea(store,floor,type,piece){
   const key=floor+'|'+type;
   const a=store.get(key)||{floor,type,cells:[],areaSF:0,mp:null};
   a.areaSF+=piece.area;
-  a.mp=mpUnion(a.mp,piece.mp);
+  pendMp(a,piece.mp);
   store.set(key,a);
 }
+// SPEED (Kalae, Oct 16 2026): joining each sample piece into its region one
+// at a time redid every earlier join, so a podium floor with many pieces
+// took seconds. Pieces wait in a list and are joined once, all together,
+// before anything reads the shape (flushMp). Same shapes, one pass.
+function pendMp(o,mp){if(mp&&mp.length)(o._mpPend||(o._mpPend=[])).push(mp)}
+function flushMp(o){if(o&&o._mpPend){o.mp=mpUnion(o.mp,...o._mpPend);delete o._mpPend}}
 function solvePourLevel(stack,pourIdx,opts){
   const shores=state.shores;
   const pour=stack[pourIdx];
@@ -1541,7 +1574,7 @@ function solvePourLevel(stack,pourIdx,opts){
     }
     reg.samples++;
     reg.areaSF+=pcArea;
-    reg.mp=mpUnion(reg.mp,piece.mp);
+    pendMp(reg,piece.mp);
     if(edgeHits)reg.edgeSF+=pcArea;
     // which marks did the carrying floors have here (equal capacities can
     // come from different marks — list them all)
@@ -1589,7 +1622,7 @@ function solvePourLevel(stack,pourIdx,opts){
         }
       }
       item.samples++;item.areaSF+=pcArea;
-      item.mp=mpUnion(item.mp,piece.mp);
+      pendMp(item,piece.mp);
       item.bb.minX=Math.min(item.bb.minX,piece.bb.minX);item.bb.maxX=Math.max(item.bb.maxX,piece.bb.maxX);
       item.bb.minY=Math.min(item.bb.minY,piece.bb.minY);item.bb.maxY=Math.max(item.bb.maxY,piece.bb.maxY);
     }
@@ -1599,6 +1632,9 @@ function solvePourLevel(stack,pourIdx,opts){
   // not exactly coincide — an edge traced separately per level, off by a
   // fraction of a foot. Those are drafting noise, not conditions, and they
   // are absorbed on geometry before anything else looks at the regions.
+  for(const r of regions.values())flushMp(r);
+  for(const it of beamItems.values())flushMp(it);
+  for(const a of assumptionSamples.values())flushMp(a);
   absorbHairlines(regions,step);
   // Cells are no longer what a region IS — they are derived from its shape
   // for the install plan, the sequence maths and click-to-region. The sliver
