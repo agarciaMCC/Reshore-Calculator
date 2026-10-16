@@ -5933,7 +5933,7 @@ function sheetStackRows(){
       // where it is not drawn, an OK on the row accepts it, remembered on
       // the job until the overshoot grows or a new side appears.
       if(over.length){
-        r.over=by;
+        r.over=by;r.belowBox=u;
         r.overOnGrade=overshootOnGrade(r,u);
         const acc=stackAccepted(r.lv,r.page);
         r.overAccepted=!!acc&&Object.keys(by).every(k=>acc[k]!=null&&by[k]-acc[k]<=2);
@@ -6009,6 +6009,52 @@ function unacceptStackOvershoot(lv,page){
   if(!Object.keys(lv.stackOk).length)delete lv.stackOk;
   return true;
 }
+// ── "THAT'S SLAB ON GRADE" DRAWS IT (UI-12, Bothell Oct 16 2026) ──
+// The OK used to silence the row and nothing else: the solver never heard of
+// the soil, so on Bothell ~12,000 SF of floor 1 past the floor below was a
+// suspended slab over nothing — a false "no floor below" on every placement
+// and shores asked for under floor 1. Saying it is on grade now draws it:
+// this sheet's floor edge outside the ground the floor below describes (the
+// same box the row measured the overshoot against), less any on-grade area
+// already drawn there. Slivers under 100 SF or 3 ft wide are drafting, not
+// soil. The area is marked to check (`stackReview`) until its OK on the
+// Slab tab's checks, since the cut is a straight line the drawings never drew.
+function gradeAreasPastBelow(r){
+  const lv=r&&r.lv,u=r&&r.belowBox,PC=adPC();
+  if(!lv||!u||!PC||r.page==null)return [];
+  const a=levelAlignmentFor(lv,r.page),T=a&&a.transform;
+  const e=edgeOf(lv,r.page);
+  if(!T||!e||!e.polygon||e.polygon.length<3)return [];
+  // only the sides that overshoot are cut: on the others the floor below's
+  // box runs on, so a drafting foot along them is not soil
+  const o=r.over||{},BIG=1e5;
+  const x0=o.west!=null?u.minX:u.minX-BIG,x1=o.east!=null?u.maxX:u.maxX+BIG;
+  const y0=o.north!=null?u.minY:u.minY-BIG,y1=o.south!=null?u.maxY:u.maxY+BIG;
+  const box=[[x0,y0],[x1,y0],[x1,y1],[x0,y1]].map(([x,y])=>{const q=buildingToPixel(x,y,T);return q&&[q.px,q.py]});
+  if(box.some(q=>!q))return [];
+  const cut=[[adClose(box)]].concat(zonesOf(lv,'slab').filter(z=>isGradeZone(z)&&zonePage(lv,z)===r.page&&z.polygon&&z.polygon.length>=3).map(z=>[adClose(adP(z.polygon))]));
+  const left=adSafe(()=>PC.difference([[adClose(adP(e.polygon))]],...cut),[]);
+  const out=[];
+  for(const pl of left){
+    const ring=adOpen(pl[0]);if(ring.length<3)continue;
+    const bp=transformPolyToBuilding(adQ(ring),T);
+    const sf=Math.abs(polyAreaFt(bp));
+    let per=0;for(let i=0;i<bp.length;i++){const p=bp[i],q=bp[(i+1)%bp.length];per+=Math.hypot(q.x-p.x,q.y-p.y)}
+    if(sf<100||2*sf/per<3)continue;
+    out.push({polygon:adQ(ring),sf});
+  }
+  return out;
+}
+function drawGradePastBelow(r){
+  const pieces=gradeAreasPastBelow(r);
+  if(!pieces.length)return 0;
+  history.record('Draw slab on grade past the floor below');
+  const arr=zonesOf(r.lv,'slab');
+  for(const p of pieces)arr.push({id:sid(),polygon:p.polygon,kind:'grade',thicknessIn:r.lv.slabThickness,offsetIn:0,
+    label:'Slab on grade',page:r.page,fromStack:true,stackReview:true});
+  state.results=null;
+  return pieces.reduce((t,p)=>t+p.sf,0);
+}
 function renderSheetStack(){
   const host=document.getElementById('sheetStack');
   if(!host)return;
@@ -6031,9 +6077,9 @@ function renderSheetStack(){
          <span class="ss-st">${r.matched?'matched':'<b>unmatched</b>'} \u00b7 ${r.nEdges?`${r.nEdges} floor edge${r.nEdges>1?'s':''}`:(r.bb?'slab areas only':'nothing drawn')}</span>
          <span class="ss-ft">${r.bb?`x ${ft(r.bb.minX)}\u2013${ft(r.bb.maxX)} \u00b7 y ${ft(r.bb.minY)}\u2013${ft(r.bb.maxY)} ft \u00b7 ${Math.round(r.sf).toLocaleString()} SF`:'\u2014'}</span>
          ${r.issues.length?`<span class="ss-why">${r.issues.map(esc).join(' \u00b7 ')}${r.over&&!r.overOnGrade&&!r.overAccepted
-              ?` <button type="button" class="btn btn-sm ss-ok" data-ssok="${i}" title="The slab there is on grade \u2014 it bears on soil and needs nothing under it. Accepts this overshoot; the warning returns if it grows or a new side appears.">OK \u2014 that's slab on grade</button>`:''}</span>`:''}
-         ${r.notes.length?`<span class="ss-note">${r.notes.map(esc).join(' \u00b7 ')}${r.over&&r.overAccepted
-              ?` <button type="button" class="ss-undo" data-ssundo="${i}" title="Take the confirmation back and warn about this overshoot again">recheck</button>`:''}</span>`:''}
+              ?` <button type="button" class="btn btn-sm ss-ok" data-ssok="${i}" title="The slab there is on grade \u2014 it bears on soil and needs nothing under it. Draws it as an on-grade area inside the floor edge (check its outline on Areas › Slab) and accepts this overshoot; the warning returns if it grows or a new side appears.">OK \u2014 that's slab on grade</button>`:''}</span>`:''}
+         ${r.notes.length?`<span class="ss-note">${r.notes.map(esc).join(' \u00b7 ')}${r.over&&r.overAccepted&&!r.overOnGrade
+              ?` <button type="button" class="btn btn-sm ss-draw" data-ssdraw="${i}" title="Draw the on-grade area so the solver sees the soil there too">Draw it as slab on grade</button> <button type="button" class="ss-undo" data-ssundo="${i}" title="Take the confirmation back and warn about this overshoot again">recheck</button>`:''}</span>`:''}
        </div>`).join('')}
     </div>`;
   const g=host.querySelector('#ssGhost');
@@ -6041,10 +6087,22 @@ function renderSheetStack(){
   host.querySelectorAll('button[data-ssok]').forEach(b=>b.addEventListener('click',ev=>{
     ev.stopPropagation();
     const r=rows[+b.dataset.ssok];if(!r||!r.over)return;
-    if(acceptStackOvershoot(r.lv,r.page,r.over)){
-      toast(`${r.level}${r.zone?' '+r.zone:''}: the ground past ${esc(levelBelowOf(r.lv)?levelBelowOf(r.lv).name:'the floor below')} is taken as slab on grade. Draw it as an on-grade area on the Slab tab if you want the solver to see it too.`,5200);
-      persist();renderSheetStack();
+    const bn=levelBelowOf(r.lv)?levelBelowOf(r.lv).name:'the floor below';
+    const sf=drawGradePastBelow(r);
+    if(acceptStackOvershoot(r.lv,r.page,r.over)||sf){
+      toast(sf
+        ?`${r.level}${r.zone?' '+r.zone:''}: ${Math.round(sf).toLocaleString()} SF past ${esc(bn)} drawn as slab on grade, inside the floor edge. Check its outline on Areas › Slab.`
+        :`${r.level}${r.zone?' '+r.zone:''}: the ground past ${esc(bn)} is taken as slab on grade, but it could not be drawn (no floor edge on this sheet). Draw it as an on-grade area on the Slab tab so the solver sees it too.`,6000);
+      persist();renderSheetStack();renderSidebar();renderCanvas();
     }
+  }));
+  host.querySelectorAll('button[data-ssdraw]').forEach(b=>b.addEventListener('click',ev=>{
+    ev.stopPropagation();
+    const r=rows[+b.dataset.ssdraw];if(!r||!r.over)return;
+    const sf=drawGradePastBelow(r);
+    toast(sf?`${Math.round(sf).toLocaleString()} SF drawn as slab on grade on ${r.level}. Check its outline on Areas › Slab.`
+            :'Nothing to draw: this sheet has no floor edge past the floor below. Draw the on-grade area on the Slab tab.',5000);
+    if(sf){persist();renderSheetStack();renderSidebar();renderCanvas()}
   }));
   host.querySelectorAll('button[data-ssundo]').forEach(b=>b.addEventListener('click',ev=>{
     ev.stopPropagation();
@@ -22858,7 +22916,7 @@ function adChecks(lv){
   if(!lv)return [];
   const layer=state.layer,arr=zonesOf(lv,layer).filter(z=>zoneOnSheet(lv,z)&&z.polygon&&z.polygon.length>=3);
   const ok=new Set(lv.adOkOverlap||[]);
-  const sig=layer+lv.elevation+levelDefaultCapacity(lv)+JSON.stringify(arr.map(z=>[z.id,z.kind,z.polygon,z.mark,z.llMark,z.sdlMark,z.offsetIn,z.thicknessIn,z.widthIn,z.depthIn,z.adSizeSrc,z.adVerifyTop,z.adVerified,z.adSheet]))+[...ok].join()+(layer==='loading'?JSON.stringify((zonesOf(lv,'slab').find(isEdgeZone)||{}).polygon||0):'');
+  const sig=layer+lv.elevation+levelDefaultCapacity(lv)+JSON.stringify(arr.map(z=>[z.id,z.kind,z.polygon,z.mark,z.llMark,z.sdlMark,z.offsetIn,z.thicknessIn,z.widthIn,z.depthIn,z.adSizeSrc,z.adVerifyTop,z.adVerified,z.adSheet,z.stackReview]))+[...ok].join()+(layer==='loading'?JSON.stringify((zonesOf(lv,'slab').find(isEdgeZone)||{}).polygon||0):'');
   if(sig===_adChk.sig)return _adChk.out;
   const PC=adPC(),out=[],f2=adFtPerPx(lv)**2;
   const pairs=(list,label)=>{for(let i=0;i<list.length;i++)for(let j=i+1;j<list.length;j++){
@@ -22890,6 +22948,11 @@ function adChecks(lv){
       if(s.tosFt!=null&&hasElev(lv)&&Math.abs((s.tosFt-lv.elevation)*12-slabOffsetOf(z))>0.06)d.push(`T/SLAB ${ftInStr(s.tosFt)}`);
       if(d.length)out.push({type:'sheet',rings:[adP(z.polygon)],ids:[z.id],text:`${nm(z)} — the sheet says ${d.join(', ')} here`});
     });
+    // UI-12: an on-grade area drawn by Match floors' "that's slab on grade" is
+    // cut on a straight line the drawings never drew — look at it once
+    arr.filter(z=>isGradeZone(z)&&z.stackReview).forEach(z=>{
+      out.push({type:'sheet',rings:[adP(z.polygon)],ids:[z.id],sf:Math.abs(adArea(adP(z.polygon)))*f2,stack:true,text:`${nm(z)} — drawn from Match floors past the floor below: check where soil ends and suspended slab begins`});
+    });
   }
   out.sort((a,b)=>(b.sf||0)-(a.sf||0));
   _adChk.sig=sig;_adChk.out=out;return out;
@@ -22899,7 +22962,7 @@ function adChecksHtml(lv){
   const cs=adChecks(lv),L=state.layer==='loading';
   if(!cs.length)return `<div class="ad-ready ok">✓ Ready for Results — ${L?(levelDefaultCapacity(lv)>0?'no overlapping marks; the typical covers the rest':'the whole floor is covered, with no overlapping marks'):'no overlapping slab areas and nothing left to verify'}</div>`;
   return `<div class="ad-ready no"><b>${cs.length} to look at</b> before Results${L&&cs.some(c=>c.type==='gap')?' — gaps are tinted red, overlaps amber':''}</div>`+
-    cs.map((c,i)=>`<div class="ad-chk${AD.chk===i?' on':''}" data-adchk="${i}"><span class="ad-ic" style="background:${AD_CHK_C[c.type]}"></span><span class="ad-t">${esc(c.text)}</span>${c.sf?`<span class="ad-sf">${Math.round(c.sf).toLocaleString()} SF</span>`:''}${c.type==='overlap'?`<button class="btn btn-sm" data-adokov="${c.key}" title="Keep both: it's meant to be like this">OK</button>`:''}${c.type==='verify'?c.verify.map(p=>`<button class="btn btn-sm" data-adverify="${c.ids[0]}|${p.off}" title="Use this top for the whole beam">${esc(adElevStr(lv,p.off))}</button>`).join(''):''}</div>`).join('');
+    cs.map((c,i)=>`<div class="ad-chk${AD.chk===i?' on':''}" data-adchk="${i}"><span class="ad-ic" style="background:${AD_CHK_C[c.type]}"></span><span class="ad-t">${esc(c.text)}</span>${c.sf?`<span class="ad-sf">${Math.round(c.sf).toLocaleString()} SF</span>`:''}${c.type==='overlap'?`<button class="btn btn-sm" data-adokov="${c.key}" title="Keep both: it's meant to be like this">OK</button>`:''}${c.stack?`<button class="btn btn-sm" data-adokstack="${c.ids[0]}" title="The outline is right: soil inside, suspended slab outside">OK</button>`:''}${c.type==='verify'?c.verify.map(p=>`<button class="btn btn-sm" data-adverify="${c.ids[0]}|${p.off}" title="Use this top for the whole beam">${esc(adElevStr(lv,p.off))}</button>`).join(''):''}</div>`).join('');
 }
 function adBindChecks(el,lv){
   el.querySelectorAll('[data-adchk]').forEach(r=>r.addEventListener('click',e=>{
@@ -22911,6 +22974,10 @@ function adBindChecks(el,lv){
     renderSidebar();renderCanvas();
   }));
   el.querySelectorAll('[data-adokov]').forEach(b=>b.addEventListener('click',()=>{history.record('Keep overlap');lv.adOkOverlap=[...(lv.adOkOverlap||[]),b.dataset.adokov];persist();renderSidebar();renderCanvas()}));
+  el.querySelectorAll('[data-adokstack]').forEach(b=>b.addEventListener('click',()=>{
+    const z=zonesOf(lv,'slab').find(q=>q.id===b.dataset.adokstack);if(!z)return;
+    history.record('Keep slab on grade');delete z.stackReview;persist();renderSidebar();renderCanvas();
+  }));
   el.querySelectorAll('[data-adverify]').forEach(b=>b.addEventListener('click',()=>{
     const [id,off]=b.dataset.adverify.split('|');const z=zonesOf(lv,'slab').find(q=>q.id===id);if(!z)return;
     history.record('Verify beam top');z.offsetIn=+off;z.adVerified=true;delete z.adVerifyTop;state.results=null;
