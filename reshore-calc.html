@@ -5933,7 +5933,7 @@ function sheetStackRows(){
       // where it is not drawn, an OK on the row accepts it, remembered on
       // the job until the overshoot grows or a new side appears.
       if(over.length){
-        r.over=by;
+        r.over=by;r.belowBox=u;
         r.overOnGrade=overshootOnGrade(r,u);
         const acc=stackAccepted(r.lv,r.page);
         r.overAccepted=!!acc&&Object.keys(by).every(k=>acc[k]!=null&&by[k]-acc[k]<=2);
@@ -6009,6 +6009,52 @@ function unacceptStackOvershoot(lv,page){
   if(!Object.keys(lv.stackOk).length)delete lv.stackOk;
   return true;
 }
+// ── "THAT'S SLAB ON GRADE" DRAWS IT (UI-12, Bothell Oct 16 2026) ──
+// The OK used to silence the row and nothing else: the solver never heard of
+// the soil, so on Bothell ~12,000 SF of floor 1 past the floor below was a
+// suspended slab over nothing — a false "no floor below" on every placement
+// and shores asked for under floor 1. Saying it is on grade now draws it:
+// this sheet's floor edge outside the ground the floor below describes (the
+// same box the row measured the overshoot against), less any on-grade area
+// already drawn there. Slivers under 100 SF or 3 ft wide are drafting, not
+// soil. The area is marked to check (`stackReview`) until its OK on the
+// Slab tab's checks, since the cut is a straight line the drawings never drew.
+function gradeAreasPastBelow(r){
+  const lv=r&&r.lv,u=r&&r.belowBox,PC=adPC();
+  if(!lv||!u||!PC||r.page==null)return [];
+  const a=levelAlignmentFor(lv,r.page),T=a&&a.transform;
+  const e=edgeOf(lv,r.page);
+  if(!T||!e||!e.polygon||e.polygon.length<3)return [];
+  // only the sides that overshoot are cut: on the others the floor below's
+  // box runs on, so a drafting foot along them is not soil
+  const o=r.over||{},BIG=1e5;
+  const x0=o.west!=null?u.minX:u.minX-BIG,x1=o.east!=null?u.maxX:u.maxX+BIG;
+  const y0=o.north!=null?u.minY:u.minY-BIG,y1=o.south!=null?u.maxY:u.maxY+BIG;
+  const box=[[x0,y0],[x1,y0],[x1,y1],[x0,y1]].map(([x,y])=>{const q=buildingToPixel(x,y,T);return q&&[q.px,q.py]});
+  if(box.some(q=>!q))return [];
+  const cut=[[adClose(box)]].concat(zonesOf(lv,'slab').filter(z=>isGradeZone(z)&&zonePage(lv,z)===r.page&&z.polygon&&z.polygon.length>=3).map(z=>[adClose(adP(z.polygon))]));
+  const left=adSafe(()=>PC.difference([[adClose(adP(e.polygon))]],...cut),[]);
+  const out=[];
+  for(const pl of left){
+    const ring=adOpen(pl[0]);if(ring.length<3)continue;
+    const bp=transformPolyToBuilding(adQ(ring),T);
+    const sf=Math.abs(polyAreaFt(bp));
+    let per=0;for(let i=0;i<bp.length;i++){const p=bp[i],q=bp[(i+1)%bp.length];per+=Math.hypot(q.x-p.x,q.y-p.y)}
+    if(sf<100||2*sf/per<3)continue;
+    out.push({polygon:adQ(ring),sf});
+  }
+  return out;
+}
+function drawGradePastBelow(r){
+  const pieces=gradeAreasPastBelow(r);
+  if(!pieces.length)return 0;
+  history.record('Draw slab on grade past the floor below');
+  const arr=zonesOf(r.lv,'slab');
+  for(const p of pieces)arr.push({id:sid(),polygon:p.polygon,kind:'grade',thicknessIn:r.lv.slabThickness,offsetIn:0,
+    label:'Slab on grade',page:r.page,fromStack:true,stackReview:true});
+  state.results=null;
+  return pieces.reduce((t,p)=>t+p.sf,0);
+}
 function renderSheetStack(){
   const host=document.getElementById('sheetStack');
   if(!host)return;
@@ -6031,9 +6077,9 @@ function renderSheetStack(){
          <span class="ss-st">${r.matched?'matched':'<b>unmatched</b>'} \u00b7 ${r.nEdges?`${r.nEdges} floor edge${r.nEdges>1?'s':''}`:(r.bb?'slab areas only':'nothing drawn')}</span>
          <span class="ss-ft">${r.bb?`x ${ft(r.bb.minX)}\u2013${ft(r.bb.maxX)} \u00b7 y ${ft(r.bb.minY)}\u2013${ft(r.bb.maxY)} ft \u00b7 ${Math.round(r.sf).toLocaleString()} SF`:'\u2014'}</span>
          ${r.issues.length?`<span class="ss-why">${r.issues.map(esc).join(' \u00b7 ')}${r.over&&!r.overOnGrade&&!r.overAccepted
-              ?` <button type="button" class="btn btn-sm ss-ok" data-ssok="${i}" title="The slab there is on grade \u2014 it bears on soil and needs nothing under it. Accepts this overshoot; the warning returns if it grows or a new side appears.">OK \u2014 that's slab on grade</button>`:''}</span>`:''}
-         ${r.notes.length?`<span class="ss-note">${r.notes.map(esc).join(' \u00b7 ')}${r.over&&r.overAccepted
-              ?` <button type="button" class="ss-undo" data-ssundo="${i}" title="Take the confirmation back and warn about this overshoot again">recheck</button>`:''}</span>`:''}
+              ?` <button type="button" class="btn btn-sm ss-ok" data-ssok="${i}" title="The slab there is on grade \u2014 it bears on soil and needs nothing under it. Draws it as an on-grade area inside the floor edge (check its outline on Areas › Slab) and accepts this overshoot; the warning returns if it grows or a new side appears.">OK \u2014 that's slab on grade</button>`:''}</span>`:''}
+         ${r.notes.length?`<span class="ss-note">${r.notes.map(esc).join(' \u00b7 ')}${r.over&&r.overAccepted&&!r.overOnGrade
+              ?` <button type="button" class="btn btn-sm ss-draw" data-ssdraw="${i}" title="Draw the on-grade area so the solver sees the soil there too">Draw it as slab on grade</button> <button type="button" class="ss-undo" data-ssundo="${i}" title="Take the confirmation back and warn about this overshoot again">recheck</button>`:''}</span>`:''}
        </div>`).join('')}
     </div>`;
   const g=host.querySelector('#ssGhost');
@@ -6041,10 +6087,22 @@ function renderSheetStack(){
   host.querySelectorAll('button[data-ssok]').forEach(b=>b.addEventListener('click',ev=>{
     ev.stopPropagation();
     const r=rows[+b.dataset.ssok];if(!r||!r.over)return;
-    if(acceptStackOvershoot(r.lv,r.page,r.over)){
-      toast(`${r.level}${r.zone?' '+r.zone:''}: the ground past ${esc(levelBelowOf(r.lv)?levelBelowOf(r.lv).name:'the floor below')} is taken as slab on grade. Draw it as an on-grade area on the Slab tab if you want the solver to see it too.`,5200);
-      persist();renderSheetStack();
+    const bn=levelBelowOf(r.lv)?levelBelowOf(r.lv).name:'the floor below';
+    const sf=drawGradePastBelow(r);
+    if(acceptStackOvershoot(r.lv,r.page,r.over)||sf){
+      toast(sf
+        ?`${r.level}${r.zone?' '+r.zone:''}: ${Math.round(sf).toLocaleString()} SF past ${esc(bn)} drawn as slab on grade, inside the floor edge. Check its outline on Areas › Slab.`
+        :`${r.level}${r.zone?' '+r.zone:''}: the ground past ${esc(bn)} is taken as slab on grade, but it could not be drawn (no floor edge on this sheet). Draw it as an on-grade area on the Slab tab so the solver sees it too.`,6000);
+      persist();renderSheetStack();renderSidebar();renderCanvas();
     }
+  }));
+  host.querySelectorAll('button[data-ssdraw]').forEach(b=>b.addEventListener('click',ev=>{
+    ev.stopPropagation();
+    const r=rows[+b.dataset.ssdraw];if(!r||!r.over)return;
+    const sf=drawGradePastBelow(r);
+    toast(sf?`${Math.round(sf).toLocaleString()} SF drawn as slab on grade on ${r.level}. Check its outline on Areas › Slab.`
+            :'Nothing to draw: this sheet has no floor edge past the floor below. Draw the on-grade area on the Slab tab.',5000);
+    if(sf){persist();renderSheetStack();renderSidebar();renderCanvas()}
   }));
   host.querySelectorAll('button[data-ssundo]').forEach(b=>b.addEventListener('click',ev=>{
     ev.stopPropagation();
@@ -7105,11 +7163,36 @@ async function autoTraceBackground(){
   traceBgBusy=true;renderAreasPrimary();
   try{
     const T=await tracedLoadMaps();
-    const byLevel={};
-    for(const pl of T.plans){if(pl.levelIdx<0)continue;byLevel[pl.levelIdx]=(byLevel[pl.levelIdx]||0)+pl.fills.length}
-    traceReady={key:traceCacheKey(),byLevel,plans:T.plans.length};
+    const byLevel={},caps={};
+    for(const pl of T.plans){if(pl.levelIdx<0)continue;byLevel[pl.levelIdx]=(byLevel[pl.levelIdx]||0)+pl.fills.length;
+      (caps[pl.levelIdx]||(caps[pl.levelIdx]=[])).push(...pl.fills.filter(f=>!f.untagged).map(f=>f.capacity))}
+    traceReady={key:traceCacheKey(),byLevel,caps,plans:T.plans.length};
   }catch(e){console.error(e)}
-  finally{traceBgBusy=false;renderAreasPrimary()}
+  finally{traceBgBusy=false;renderAreasPrimary();if(typeof renderStepFoot==='function')renderStepFoot();if(typeof renderGroupChrome==='function'&&typeof curStep!=='undefined'&&groupOf(curStep).id==='areas')renderGroupChrome()}
+}
+// ── THE LOAD MAP IS PART OF THE AREAS REVIEW (ARE-30, Bothell Oct 16 2026) ──
+// A run that trusted every suggestion never opened a floor's Loading tab, so
+// its load-map areas were never offered, Areas read Done and Results ran on
+// the typical alone. Floor 3's 125 PSF mechanical area under a 138 PSF
+// typical was missed — and an area below the typical always counts (MDL-20).
+// The background read now runs on arriving at Areas, whichever tab, and the
+// step names the floors whose load map was read but not reviewed: an area
+// BELOW the typical holds the step until that floor's map is reviewed (Accept
+// or Skip each one); areas at or above it are named and optional. Floors
+// whose capacity is never used (top floor, on grade; MDL-14) are left out.
+function loadMapUnreviewed(){
+  if(!traceReady||traceReady.key!==traceCacheKey()||!traceReady.caps)return [];
+  const out=[];const top=topLevelId();
+  for(const k of Object.keys(traceReady.caps)){
+    const li=+k,lv=state.levels[li];if(!lv)continue;
+    if(lv.id===top||levelOnGrade(lv)||lv.loadMapReviewed)continue;
+    if(zonesOf(lv,'loading').some(z=>z.fromLoadMap))continue;
+    const typ=levelDefaultCapacity(lv),caps=traceReady.caps[k].filter(c=>c!=null&&!isNaN(c));
+    if(!caps.length)continue;
+    const low=typ>0?caps.filter(c=>c<typ-0.05):[];
+    out.push({li,lv,n:caps.length,low,typ});
+  }
+  return out;
 }
 function loadingPrimaryHtml(){
   const li=state.activeLevelIdx;const st=floorTraceState(li);
@@ -7124,7 +7207,8 @@ function loadingPrimaryHtml(){
   }
   if(st.have)return `<span class="lm-dim">${st.have} loading area${st.have===1?'':'s'} on ${name} came from its load map — <button type="button" class="btn btn-xs" id="btnTraceFloor">Trace it again</button></span>`;
   if(st.reading)return `<div class="lp-card">${pillHtml('read',`reading the load maps…`)}<span class="lm-dim">${name}'s loading areas are offered here when the read is done</span></div>`;
-  if(st.ready)return `<div class="lp-card">${pillHtml('need',`${st.ready} loading area${st.ready===1?'':'s'} read`)}<span class="lp-txt">from ${name}'s load map — review them on the map, then you are brought back here</span><button type="button" class="btn btn-sm btn-primary" id="btnTraceFloor">Review</button></div>`;
+  const lowHere=(loadMapUnreviewed().find(x=>x.li===li)||{low:[]}).low;
+  if(st.ready)return `<div class="lp-card">${pillHtml('need',`${st.ready} loading area${st.ready===1?'':'s'} read`)}<span class="lp-txt">from ${name}'s load map${lowHere.length?` — <b>${lowHere.length} below the typical capacity</b> (${lowHere.map(c=>Math.round(c)).join(', ')} PSF), which always count${lowHere.length===1?'s':''}`:''} — review them on the map, then you are brought back here</span><button type="button" class="btn btn-sm btn-primary" id="btnTraceFloor">Review</button></div>`;
   if(traceReady&&traceReady.key===traceCacheKey())return `<div class="lp-card">${pillHtml('read','no load map names '+name)}<span class="lp-txt">draw its areas by hand, or</span><button type="button" class="btn btn-sm" id="btnTraceFloor">Trace from a load map…</button></div>`;
   return `<div class="lp-card"><span class="lp-txt">Read ${name}'s loading areas off its load map, confirm them there, and come back.</span><button type="button" class="btn btn-sm btn-primary" id="btnTraceFloor">Trace from ${name}'s load map</button></div>`;
 }
@@ -7138,6 +7222,7 @@ function renderAreasPrimary(){
     if(typeof curStep!=='undefined'&&groupOf(curStep).id==='areas')autoTraceBackground();
     return;
   }
+  if(typeof curStep!=='undefined'&&groupOf(curStep).id==='areas')autoTraceBackground();
   const rows=typeof planSheetRows==='function'?planSheetRows():[];
   const conf=rows.filter(r=>r.confirmed).length;
   const done=typeof autoScanDone==='function'?autoScanDone():[];
@@ -14600,8 +14685,14 @@ function stepStatus(id){
       // accept" foot (Kalae, Oct 15 2026)
       const rv=scanLeft();
       if(rv.n)return{done:false,text:`Reviewing: ${rv.n} shape${rv.n>1?'s':''} on ${rv.floors} floor${rv.floors>1?'s':''} still to accept or skip — or Stop here`};
+      const lm=loadMapUnreviewed(),lmLow=lm.filter(x=>x.low.length);
+      if(lmLow.length){
+        const x=lmLow[0];
+        return{done:false,text:`${levelTagName(x.lv.name)}'s load map has ${x.low.length} loading area${x.low.length>1?'s':''} below its typical capacity (${Math.round(Math.min(...x.low))} < ${Math.round(x.typ)} PSF)${lmLow.length>1?` — and ${lmLow.length-1} more floor${lmLow.length>2?'s':''}`:''}: review ${x.low.length>1?'them':'it'} on the Loading tab`};
+      }
       const bits=[];
       if(n)bits.push(`${n} area${n>1?'s':''} tagged`);
+      if(lm.length){const k=lm.reduce((t,x)=>t+x.n,0);bits.push(`${k} load-map area${k>1?'s':''} on ${lm.map(x=>levelTagName(x.lv.name)).join(', ')} not reviewed (at or above the typical: optional)`)}
       if(typ)bits.push(`${typ} floor${typ>1?'s':''} on the typical`);
       const stopped=state.ui.scanStopped;
       if(stopped&&stopped.n)bits.push(`${stopped.n} shape${stopped.n>1?'s':''} on ${stopped.floors} floor${stopped.floors>1?'s':''} not reviewed`);
@@ -16977,6 +17068,80 @@ async function heavyRaster(num,useAllDark){
 }
 // morphClose / morphOpen live with the floor-edge detector, further down.
 
+// ── DASHED LINES, JOINED (ARE-32, Bothell Oct 17 2026) ──
+// A step in a slab is drawn dashed: short thin dark pieces in a row. The
+// 'all' raster sees them but also every leader, dimension line and note box,
+// which chop a zone into slivers; the heavy and mid rasters see none of them,
+// so a trace runs across the step. This raster is the mid one plus each row
+// of three or more dashes drawn as one solid line, start to end. A row
+// on a line whose pieces span over a third of the page is a gridline, not a
+// step, and is left out whole.
+function dashedRows(flat,pageW,grid){
+  const rows=new Map();
+  for(let i=0;i<flat.length;i+=4){
+    const x0=flat[i],y0=flat[i+1],x1=flat[i+2],y1=flat[i+3];
+    const L=Math.hypot(x1-x0,y1-y0);
+    if(L<2||L>40)continue;                            // a dash, not a line
+    let th=Math.atan2(y1-y0,x1-x0);if(th<0)th+=Math.PI;if(th>=Math.PI-1e-9)th-=Math.PI;
+    const ux=Math.cos(th),uy=Math.sin(th);
+    const rho=-uy*x0+ux*y0,t0=ux*x0+uy*y0,t1=ux*x1+uy*y1;
+    const key=Math.round(th*180/Math.PI)%180+'|'+Math.round(rho/1.5);
+    let g=rows.get(key);if(!g){g={ux,uy,rho,d:[]};rows.set(key,g)}
+    g.d.push([Math.min(t0,t1),Math.max(t0,t1)]);
+  }
+  const out=[];
+  for(const g of rows.values()){
+    if(g.d.length<3)continue;
+    g.d.sort((a,b)=>a[0]-b[0]);
+    // a gridline is dash-dot across the whole plan: every piece on its line,
+    // gaps and all, spans more than a third of the page — none of it is a step
+    if(g.d[g.d.length-1][1]-g.d[0][0]>pageW/3)continue;
+    // and a dashed row on one of the job's gridlines is that gridline
+    if(grid&&grid.some(q=>{let th=q.th%Math.PI;if(th<0)th+=Math.PI;
+      const dth=Math.abs(th-Math.atan2(g.uy,g.ux));if(Math.min(dth,Math.PI-dth)>0.02)return false;
+      return Math.abs(-Math.sin(th)*q.x+Math.cos(th)*q.y-g.rho)<4}))continue;
+    let run=[g.d[0]];
+    const flush=()=>{
+      if(run.length>=3){
+        const a=run[0][0],b=Math.max(...run.map(r=>r[1]));
+        if(b-a<=pageW/3)out.push(g.ux*a-g.uy*g.rho,g.uy*a+g.ux*g.rho,g.ux*b-g.uy*g.rho,g.uy*b+g.ux*g.rho);
+      }
+    };
+    for(let i=1;i<g.d.length;i++){
+      const prev=run[run.length-1],cur=g.d[i];
+      const dash=prev[1]-prev[0];
+      if(cur[0]-prev[1]<=Math.max(6,Math.min(30,dash*2.5)))run.push(cur);
+      else{flush();run=[cur]}
+    }
+    flush();
+  }
+  return out;
+}
+async function dashRaster(num,grid){
+  const key=num+'d'+(grid?grid.length:'');
+  if(rasterCache[key])return rasterCache[key];
+  const st=await pageStrokes(num);
+  if(!st)return null;
+  const S=0.5,W=Math.ceil(st.W*S),H=Math.ceil(st.H*S);
+  const c=document.createElement('canvas');c.width=W;c.height=H;
+  const g=c.getContext('2d');
+  g.fillStyle='#fff';g.fillRect(0,0,W,H);
+  g.strokeStyle='#000';g.lineCap='round';
+  const draw=(arr,lwPx)=>{g.lineWidth=lwPx;g.beginPath();
+    for(let i=0;i<arr.length;i+=4){g.moveTo(arr[i]*S,arr[i+1]*S);g.lineTo(arr[i+2]*S,arr[i+3]*S)}
+    g.stroke()};
+  draw(st.heavy,3);
+  draw(st.mid||new Float32Array(0),3);
+  draw(dashedRows(st.thin,st.W,grid),3);
+  const px=g.getImageData(0,0,W,H).data;
+  let ink=new Uint8Array(W*H);
+  for(let i=0;i<W*H;i++)ink[i]=px[i*4]<128?1:0;
+  ink=morphClose(ink,W,H,4);
+  const rec={S,W,H,ink};
+  rasterCache[key]=rec;
+  return rec;
+}
+
 // Flood fill on the raster from an image-px point. Returns null on a leak
 // (the fill reached the page edge or swallowed most of the page).
 function floodMask(r,px,py){
@@ -17512,9 +17677,9 @@ async function traceRegionAt(num,px,py,opts){
   // a painted region object under the point wins outright
   const fr=await fillRegionAt(num,px,py);
   if(fr&&!(opts&&opts.noFillObjects))return{polygon:fr.polygon,areaPx2:fr.areaPx2,bbox:fr.bbox,mode:'fill'};
-  let r=await heavyRaster(num,opts&&opts.mid?'mid':false);
+  let r=opts&&opts.dashed?await dashRaster(num,opts.grid):await heavyRaster(num,opts&&opts.mid?'mid':false);
   let m=r?floodMask(r,px,py):null;
-  let mode=opts&&opts.mid?'mid':'heavy';
+  let mode=opts&&opts.dashed?'dashed':opts&&opts.mid?'mid':'heavy';
   if(!m&&!(opts&&opts.heavyOnly)){r=await heavyRaster(num,true);m=r?floodMask(r,px,py):null;mode='all'}
   if(!m)return null;
   let poly=maskOutline(m);
@@ -19834,6 +19999,45 @@ async function pageColourSegs(num){
   xMarkCache[num]=segs;
   return segs;
 }
+// LEADER DOTS (ARE-32): the small filled circle a note's leader ends on.
+// A dimension line can touch a note's box too; the line that ends on a dot
+// is the leader. Centers in image px.
+const dotCache={};
+async function pageDots(num){
+  if(dotCache[num])return dotCache[num];
+  const doc=state.pdf.doc;
+  if(!doc||typeof pdfjsLib==='undefined')return [];
+  const pg=await doc.getPage(num);
+  const vp=pg.getViewport({scale:PDF_RENDER_SCALE});
+  const ops=await pg.getOperatorList(),O=pdfjsLib.OPS;
+  let ctm=vp.transform.slice();const stack=[];
+  const out=[];
+  const FILL=new Set([O.fill,O.eoFill,O.fillStroke,O.eoFillStroke,O.closeFillStroke,O.closeEOFillStroke]);
+  for(let k=0;k<ops.fnArray.length;k++){
+    const op=ops.fnArray[k],a=ops.argsArray[k];
+    if(op===O.save){stack.push(ctm.slice());continue}
+    if(op===O.restore){const s=stack.pop();if(s)ctm=s;continue}
+    if(op===O.transform){ctm=matMul(ctm,a);continue}
+    if(op===O.paintFormXObjectBegin){stack.push(ctm.slice());if(a&&a[0])ctm=matMul(ctm,a[0]);continue}
+    if(op===O.paintFormXObjectEnd){const s=stack.pop();if(s)ctm=s;continue}
+    if(op!==O.constructPath||!FILL.has(ops.fnArray[k+1]))continue;
+    const o=a[0],c=a[1];let j=0,curves=0,x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+    const grow=(x,y)=>{const q=matApply(ctm,x,y);if(q[0]<x0)x0=q[0];if(q[0]>x1)x1=q[0];if(q[1]<y0)y0=q[1];if(q[1]>y1)y1=q[1]};
+    for(let i=0;i<o.length;i++){
+      switch(o[i]|0){
+        case O.moveTo:case O.lineTo:grow(c[j],c[j+1]);j+=2;break;
+        case O.curveTo:grow(c[j],c[j+1]);grow(c[j+2],c[j+3]);grow(c[j+4],c[j+5]);j+=6;curves++;break;
+        case O.curveTo2:case O.curveTo3:grow(c[j],c[j+1]);grow(c[j+2],c[j+3]);j+=4;curves++;break;
+        case O.rectangle:j+=4;break;
+        default:break;
+      }
+    }
+    const w=x1-x0,h=y1-y0;
+    if(curves>=2&&w>=2&&w<=16&&h>=2&&h<=16&&Math.abs(w-h)<=Math.max(w,h)*0.35)out.push({x:(x0+x1)/2,y:(y0+y1)/2});
+  }
+  dotCache[num]=out;
+  return out;
+}
 const isRedSeg=s=>{const p=s.col.split(',').map(Number);
   return p.length>=3&&p[0]>150&&p[1]<110&&p[2]<110};
 const isBlackSeg=s=>{const p=s.col.split(',').map(Number);
@@ -19888,6 +20092,195 @@ function isOutlined(cov){
   if(!cov.length)return false;
   const mean=cov.reduce((a,b)=>a+b,0)/cov.length;
   return Math.min(...cov)>=0.5&&mean>=0.8;
+}
+// ── A SLAB ZONE FROM ITS NOTE (ARE-31, Bothell Oct 16 2026) ──
+// The scan found thickened slabs only as solid gray fills. Bothell draws its
+// 7", 8 1/2", 22" and 22 1/2" PT zones as outlines, dashed boxes and a pink
+// hatch, each named by a boxed callout ('8 1/2" PT SLAB' over T/SLAB, B/SLAB,
+// CLR HT) — sometimes inside the zone, sometimes on a leader to a dot in it.
+// So the note is the lead: for each thickness note other than the floor's
+// typical, the zone is traced from the leader's far end, or else from just
+// outside the callout box, the smallest region that holds the callout. A
+// region is kept only if it is under a quarter of the floor and holds no
+// other callout (a typical "9" PT SLAB" inside means the trace leaked into
+// the typical bay); otherwise the note is listed to draw by hand. Every one
+// is a candidate to review, never written by itself, and says it came from
+// a note.
+function slabNoteInches(text,loose){
+  const s=String(text||'').replace(/[″”]/g,'"').trim();
+  const m=new RegExp('^(\\d+(?:\\s*-?\\s*\\d+\\/\\d+)?|\\d+\\.\\d+)\\s*"\\s*(?:THICKENED\\s+|THK\\.?\\s+|DROP\\s+|DEPRESSED\\s+)?(?:PT\\s+|P\\.T\\.\\s+|CIP\\s+)?(?:SLAB|PANEL)'+(loose?'\\b':'\\s*$'),'i').exec(s);
+  if(!m)return null;
+  const f=/^(\d+)\s*-?\s*(\d+)\/(\d+)$/.exec(m[1].trim());
+  const v=f?+f[1]+(+f[3]?+f[2]/+f[3]:0):+m[1];
+  return v>0&&v<=60?v:null;
+}
+async function detectSlabNotes(num,lv){
+  const out=[];
+  if(!lv||levelOnGrade(lv))return out;          // soil carries it, whatever its thickness
+  const typ=+lv.slabThickness||0;
+  await pageTextCached(num);
+  const lines=adLines(num);if(!lines.length)return out;
+  const box=ln=>({minx:ln.x,maxx:ln.x+(ln.w||0),miny:ln.y-(ln.h||10),maxy:ln.y});
+  const notes=lines.map(ln=>({ln,t:slabNoteInches(ln.text)})).filter(n=>n.t!=null);
+  // ARE-32: the short form, a box of two lines "T: 119'-11 1/2"" over
+  // "B: 118'-1 1/2"" with no title — a step's top and bottom. Its thickness
+  // is the difference, its top the T. The same two lines label a BEAM's top
+  // and bottom on other sets (Horizon House, Kinect: dozens), so the short
+  // form counts as a slab step only within a dozen text heights of a
+  // "T/SLAB: Varies" note — the note a stepped area carries.
+  const variesLines=lines.filter(ln=>/^T\s*\/\s*SLAB\s*:?\s*VARIES/i.test(String(ln.text).trim()));
+  const nearVaries=a=>variesLines.some(v=>Math.hypot(v.x-a.x,v.y-a.y)<=(a.h||10)*12);
+  const elevAt=(tx,tag)=>{const m=new RegExp('^'+tag+'\\s*:\\s*(\\d+\\s*\'\\s*-?\\s*\\d+(?:\\s+\\d+\\/\\d+)?\\s*"?)','i').exec(String(tx||'').replace(/[″”]/g,'"').replace(/[′’]/g,"'").trim());if(!m)return null;const v=parseFeet(m[1]);return v!=null&&isFinite(v)?v:null};
+  for(const a of lines){
+    const T=elevAt(a.text,'T');if(T==null||!nearVaries(a))continue;
+    const ba=box(a),h=a.h||10;
+    const b=lines.find(ln=>{const lb=box(ln);return ln!==a&&lb.miny>=ba.maxy-h*0.4&&lb.miny<=ba.maxy+h*0.9&&Math.abs(lb.minx-ba.minx)<h*1.5&&elevAt(ln.text,'B')!=null});
+    if(!b)continue;
+    const B=elevAt(b.text,'B'),t=Math.round((T-B)*12*8)/8;
+    if(t>0&&t<=60)notes.push({ln:a,ln2:b,t,tos:T,short:true});
+  }
+  // "T/SLAB: Varies": a stepped area's own note — never a zone of one
+  // thickness, but a trace that takes it in has crossed a step
+  const varies=variesLines.map(ln=>({ln,varies:true}));
+  const edge=edgeOf(lv,num);
+  const band=edge&&edge.polygon&&edge.polygon.length>2?edgeBandPx(lv,num,edge):0;
+  // a note off the plan (a section, an elevation, the legend) names no zone
+  const onPlan=p=>!band||insideEdgeBand(p,edge,band);
+  const odd=notes.filter(n=>!(typ>0&&Math.abs(n.t-typ)<0.06)||(n.short&&hasElev(lv)&&Math.abs(n.tos-lv.elevation)>0.03));
+  if(!odd.length)return out;
+  const segs=await pageColourSegs(num);
+  const dots=await pageDots(num);
+  // each dot's leader, followed from the dot back toward its note: up to
+  // three pieces (a run, a shoulder), stopping at the last one that continues
+  const dotLeads=[];
+  for(const d of dots){
+    const g=segs.find(q=>Math.min(Math.hypot(q.x0-d.x,q.y0-d.y),Math.hypot(q.x1-d.x,q.y1-d.y))<=8&&q.len>=6);
+    if(!g)continue;
+    let far=Math.hypot(g.x0-d.x,g.y0-d.y)<=8?{x:g.x1,y:g.y1}:{x:g.x0,y:g.y0},len=g.len,prev=g;
+    for(let hop=0;hop<2;hop++){
+      const nx=segs.find(q=>q!==prev&&q.len>=4&&(Math.hypot(q.x0-far.x,q.y0-far.y)<1.5||Math.hypot(q.x1-far.x,q.y1-far.y)<1.5));
+      if(!nx)break;
+      const f2=Math.hypot(nx.x0-far.x,nx.y0-far.y)<1.5?{x:nx.x1,y:nx.y1}:{x:nx.x0,y:nx.y0};
+      if(Math.hypot(f2.x-d.x,f2.y-d.y)<Math.hypot(far.x-d.x,far.y-d.y))break;   // turning back: not a leader's run
+      far=f2;len+=nx.len;prev=nx;
+    }
+    dotLeads.push({dot:d,far,len});
+  }
+  const edgeA=edge&&edge.polygon&&edge.polygon.length>2?Math.abs(edge.polygon.reduce((a,p,i)=>{const q=edge.polygon[(i+1)%edge.polygon.length];return a+p.x*q.y-q.x*p.y},0)/2):Infinity;
+  const ptIn=(p,b)=>p.x>=b.minx&&p.x<=b.maxx&&p.y>=b.miny&&p.y<=b.maxy;
+  const T=(levelAlignmentFor(lv,num)||{}).transform,fpp=T?Math.hypot(T[0],T[2]):0;
+  const minPx2=fpp>0?30/(fpp*fpp):0;            // under 30 SF is a column or a callout, not a zone (6 SF at a dot)
+  // the job's gridlines on this sheet, as a point and an angle each
+  const gridPx=[];
+  if(T){const G=state.project&&state.project.grid||{};
+    for(const g of G.x||[]){const a=buildingToPixel(g.pos,0,T),b=buildingToPixel(g.pos,100,T);if(a&&b)gridPx.push({x:a.px,y:a.py,th:Math.atan2(b.py-a.py,b.px-a.px)})}
+    for(const g of G.y||[]){const a=buildingToPixel(0,g.pos,T),b=buildingToPixel(100,g.pos,T);if(a&&b)gridPx.push({x:a.px,y:a.py,th:Math.atan2(b.py-a.py,b.px-a.px)})}}
+  const endOf=(q,e)=>Math.hypot(q.x0-e.x,q.y0-e.y)<1.5?{x:q.x1,y:q.y1}:(Math.hypot(q.x1-e.x,q.y1-e.y)<1.5?{x:q.x0,y:q.y0}:null);
+  // every note's callout box, and where it POINTS: its leader's far end, or
+  // the box itself. A note boxed inside one zone with a leader to the next
+  // speaks for the next (Bothell: "T: 119'-11 1/2"" sits in the 8 1/2" zone
+  // and points at the 22" strip below it).
+  const callout=n=>{
+    const h=n.ln.h||10,b0=box(n.ln);
+    const cb={...b0};let tosFt=n.short?n.tos:null;
+    if(n.ln2){const b2=box(n.ln2);cb.minx=Math.min(cb.minx,b2.minx);cb.maxx=Math.max(cb.maxx,b2.maxx);cb.maxy=Math.max(cb.maxy,b2.maxy)}
+    for(const ln of lines){
+      const lb=box(ln);
+      if(lb.miny<cb.maxy-h*0.2||lb.miny>cb.maxy+h*1.6)continue;
+      if(lb.maxx<cb.minx-h*2||lb.minx>cb.maxx+h*2)continue;
+      const tx=String(ln.text).replace(/[″”]/g,'"').replace(/[′’]/g,"'").trim();
+      if(!/^(T|B)\s*\/\s*SLAB|^CLR\s*HT|^(T|B)\s*:/i.test(tx))continue;
+      cb.minx=Math.min(cb.minx,lb.minx);cb.maxx=Math.max(cb.maxx,lb.maxx);cb.maxy=Math.max(cb.maxy,lb.maxy);
+      const mt=/T\s*\/\s*SLAB\s*[:=]?\s*(\d+\s*'\s*-?\s*[\d\s\/]*"?)/i.exec(tx);
+      if(mt&&tosFt==null){const v=parseFeet(mt[1]);if(v!=null&&isFinite(v))tosFt=v}
+    }
+    const pad=h*0.8,cx=(cb.minx+cb.maxx)/2,cy=(cb.miny+cb.maxy)/2;
+    const near={minx:cb.minx-pad,maxx:cb.maxx+pad,miny:cb.miny-pad,maxy:cb.maxy+pad};
+    const clear={minx:near.minx-h,maxx:near.maxx+h,miny:near.miny-h,maxy:near.maxy+h};
+    // a leader: best, a dot whose line runs back to this box; else a long
+    // line leaving the box and ending clear of it
+    let lead=null;
+    const reach={minx:near.minx-h*2.5,maxx:near.maxx+h*2.5,miny:near.miny-h*2.5,maxy:near.maxy+h*2.5};
+    for(const L of dotLeads){
+      if(!ptIn(L.far,reach)||ptIn(L.dot,near))continue;
+      const d=Math.hypot(Math.max(cb.minx-L.far.x,0,L.far.x-cb.maxx),Math.max(cb.miny-L.far.y,0,L.far.y-cb.maxy));
+      if(!lead||d<lead.d)lead={end:L.dot,dot:true,d,len:L.len};
+    }
+    if(!lead)for(const g of segs){
+      if(g.len<h*1.5)continue;
+      const a={x:g.x0,y:g.y0},c={x:g.x1,y:g.y1};
+      const aIn=ptIn(a,near),cIn=ptIn(c,near);
+      if(aIn===cIn)continue;
+      let end=aIn?c:a;
+      for(let hop=0;hop<3;hop++){      // a shoulder, then the run on
+        const nx=segs.find(q=>q!==g&&q.len>=h*0.5&&endOf(q,end)&&!ptIn(endOf(q,end),near));
+        if(!nx)break;
+        end=endOf(nx,end);
+      }
+      if(ptIn(end,clear))continue;
+      if(!lead||g.len>lead.len)lead={end,len:g.len,dot:false};
+    }
+    return {h,cb,cx,cy,pad,tosFt,lead,at:lead?lead.end:{x:cx,y:cy}};
+  };
+  const all=notes.concat(varies);
+  for(const n of all)n.co=callout(n);
+  for(const n of odd){
+    const {cb,cx,cy,pad,tosFt,lead}=n.co;
+    // a note off the plan (a section, an elevation, the legend) names no
+    // zone — unless its leader reaches onto the plan
+    if(!onPlan({x:cx,y:cy})&&!(lead&&onPlan(lead.end)))continue;
+    const seeds=lead?[lead.end]
+      :[{x:cx,y:cb.miny-pad*1.6},{x:cx,y:cb.maxy+pad*1.6},{x:cb.minx-pad*1.6,y:cy},{x:cb.maxx+pad*1.6,y:cy}];
+    let best=null,why='';
+    // heavy outlines first (a zone's edge), then medium, then medium with
+    // dashed rows joined (a step), then every dark line — the last is cut up
+    // by grid and dimension lines, so it comes last
+    const MODES=[{heavyOnly:true},{mid:true,heavyOnly:true},{dashed:true,heavyOnly:true,grid:gridPx},{}];
+    for(const sd of seeds){
+      for(const md of MODES){
+        const m=await traceRegionAt(num,sd.x,sd.y,{noFillObjects:true,...md});
+        if(!m||!m.polygon||m.polygon.length<3)continue;
+        const P=m.polygon;
+        if(!lead&&!pointInPoly({x:cx,y:cy},P))continue;                         // must hold its own callout
+        // a dot's leader may name a small zone (Bothell's 7" pockets are
+        // 4 ft boxes); otherwise a region the size of the note box is the box
+        const own=pointInPoly({x:cx,y:cy},P);
+        if(!(lead&&lead.dot&&!own)&&m.areaPx2<(cb.maxx-cb.minx)*(cb.maxy-cb.miny)*(lead?0.5:2)){why='only the callout box traced';continue}
+        if(m.areaPx2<(lead&&lead.dot?minPx2/5:minPx2)){why='only a small pocket traced';continue}
+        if(m.areaPx2>edgeA*0.25){why='the trace ran into the rest of the floor';continue}
+        // another note pointing inside: leaked into a neighboring zone or across a step
+        const same=o=>o.t!=null&&Math.abs(o.t-n.t)<0.06&&(o.co.tosFt==null||tosFt==null||Math.abs(o.co.tosFt-tosFt)<0.03);
+        const other=all.find(o=>o!==n&&pointInPoly(o.co.at,P)&&!same(o));
+        if(other){why=`the trace took in the "${String(other.ln.text).trim()}" note too`;continue}
+        m.how=md.dashed?'dashed':md.heavyOnly?(md.mid?'mid':'heavy'):'all';
+        if(!best||m.areaPx2<best.areaPx2)best=m;
+        break;
+      }
+    }
+    const label=String(n.ln.text).replace(/[″”]/g,'"').trim();
+    if(best){
+      const P=best.polygon;
+      const bb={minx:Math.min(...P.map(p=>p.x)),maxx:Math.max(...P.map(p=>p.x)),miny:Math.min(...P.map(p=>p.y)),maxy:Math.max(...P.map(p=>p.y))};
+      // two notes onto one region are one candidate — the thicker, which
+      // loads more; the same thickness twice is simply the same zone
+      const twin=out.find(o=>o.polygon&&Math.abs(o.areaPx2-best.areaPx2)<best.areaPx2*0.05&&pointInPoly(polyCentroid(P),o.polygon));
+      if(twin){
+        const lo=Math.min(twin.tIn,n.t),hi=Math.max(twin.tIn,n.t);
+        if(n.t>twin.tIn){twin.tIn=n.t;twin.tosFt=tosFt;twin.label=label}
+        if(hi-lo>0.06)twin.why=`the sheet's notes ${inchStr(lo)} and ${inchStr(hi)} both point here — the thicker is offered; check which is right`;
+        else if(twin.tosFt==null&&tosFt!=null)twin.tosFt=tosFt;
+        continue;
+      }
+      out.push({kind:'slab',polygon:P,bbox:bb,areaPx2:best.areaPx2,aspect:1,gray:null,sized:true,check:true,fromNote:true,
+        tIn:n.t,tosFt,label,how:best.how,why:`traced from the sheet's note "${label}"${lead?' along its leader':''} — check its outline`,pick:false});
+    }else{
+      const at=n.co.at;
+      out.push({kind:'slab',failed:true,fromNote:true,tIn:n.t,tosFt,label,x:at.x,y:at.y,
+        why:`the sheet notes "${label}" here, but its outline could not be traced${why?' ('+why+')':''} — draw it by hand`,
+        polygon:null,bbox:{minx:at.x-20,miny:at.y-20,maxx:at.x+20,maxy:at.y+20},areaPx2:0,pick:false});
+    }
+  }
+  return out;
 }
 async function detectOpenings(num){
   const segs=await pageColourSegs(num);
@@ -20083,6 +20476,11 @@ async function runAutoDetect(opt){
         const r=await detectGreyShapes(t.page);
         if(scanToken!==token||!beamScan)return;           // closed while reading
         for(const i of r.items)found.push({...i,page:t.page,levelIdx:t.levelIdx});
+        // ARE-31: slab zones drawn as outlines, found from their notes
+        const sn=await detectSlabNotes(t.page,lv);
+        if(scanToken!==token||!beamScan)return;
+        for(const i of sn)found.push({...i,page:t.page,levelIdx:t.levelIdx});
+        beamScan.notes.slabNotes=(beamScan.notes.slabNotes||[]).concat(sn.filter(i=>i.failed).map(i=>`${i.label} (${lv.name})`));
       }
       if(opt.openings){
         const r=await detectOpenings(t.page);
@@ -20111,6 +20509,7 @@ async function runAutoDetect(opt){
     if(nt.outside)notes.push(`${nt.outside} shape${nt.outside>1?'s':''} outside the floor edge ignored`);
     if(nt.drawn)notes.push(`${nt.drawn} already drawn on the floor, not offered again`);
     if(nt.crossings)notes.push(`${nt.crossings} crossing${nt.crossings>1?'s':''} of dimension or grid lines with no outline round them not offered as openings`);
+    if(nt.slabNotes&&nt.slabNotes.length)notes.push(`${nt.slabNotes.length} slab note${nt.slabNotes.length>1?'s':''} whose zone could not be traced — draw ${nt.slabNotes.length>1?'them':'it'} by hand: ${nt.slabNotes.join(', ')}`);
     if(nt.skipped)notes.push(`${nt.skipped} sheet${nt.skipped>1?'s':''} without a confirmed edge not read`);
     // UI-26: what the read left out is plumbing — a dim line on the card, not
     // a pop-up ("155 already drawn … 187 crossings …", Kalae, Oct 15 2026)
@@ -20310,7 +20709,15 @@ function scanCommit(list,label){
       if(it.depthIn!=null)z.depthIn=it.depthIn; else blank++;
       beams++;
     }else if(it.kind==='opening'){opens++}
-    else{slabs++}
+    else{
+      slabs++;
+      // ARE-31: a zone found from its note takes the note's thickness and top
+      if(it.fromNote){
+        if(it.tIn!=null)z.thicknessIn=it.tIn;
+        if(it.tosFt!=null&&hasElev(lv))z.offsetIn=Math.round((it.tosFt-lv.elevation)*12*8)/8;
+        z.label=it.label||'';
+      }
+    }
     arr.push(z);
     it.done='added';it.pick=false;it.zoneId=z.id;
     added.push({lv,z});
@@ -21038,6 +21445,7 @@ async function acceptAutoTrace(){
     }
     materializeLevelZones(lv);
     pending+=pendingZoneCount(lv);
+    lv.loadMapReviewed=true;           // ARE-30: its load map has been looked at
   }
   // the load-map sheet is not a floor plan; stop the sheet bar asking
   for(const pg of (R.pages||[R.page]))if(levelForPage(pg)<0&&!pageIsSkipped(pg))skippedPages().push(pg);
@@ -21992,7 +22400,7 @@ function adSheetReads(lv,ring){
     const s=String(ln.text).replace(/[″”]/g,'"').replace(/[′’]/g,"'");let m;
     if(m=/T\s*\/\s*(?:O\s*)?SLAB\s*(?:EL\.?|ELEV\.?)?\s*[:=]?\s*(?:EL\.?\s*)?(\d+\s*'\s*-?\s*[\d\s\/]*"?)/i.exec(s)){const v=parseFeet(m[1]);if(v!=null&&isFinite(v)){tv.add(Math.round(v*96)/96);r.src.push(s.trim())}}
     else if(m=/B\s*\/\s*(?:O\s*)?SLAB\s*(?:EL\.?|ELEV\.?)?\s*[:=]?\s*(?:EL\.?\s*)?(\d+\s*'\s*-?\s*[\d\s\/]*"?)/i.exec(s)){const v=parseFeet(m[1]);if(v!=null&&isFinite(v)){bv.add(Math.round(v*96)/96);r.src.push(s.trim())}}
-    else if(m=/^(\d+(?:\.\d+)?)\s*"\s*(?:THICKENED\s+|THK\.?\s+|DROP\s+|DEPRESSED\s+)?(?:PT\s+|P\.T\.\s+|CIP\s+)?(SLAB|PANEL)\b/i.exec(s)){th.add(+m[1]);r.src.push(s.trim())}
+    else if((m=slabNoteInches(s,true))!=null){th.add(m);r.src.push(s.trim())}
   }
   if(tv.size===1)r.tosFt=[...tv][0];if(th.size===1)r.tIn=[...th][0];
   if(bv.size===1)r.bosFt=[...bv][0];
@@ -22858,7 +23266,7 @@ function adChecks(lv){
   if(!lv)return [];
   const layer=state.layer,arr=zonesOf(lv,layer).filter(z=>zoneOnSheet(lv,z)&&z.polygon&&z.polygon.length>=3);
   const ok=new Set(lv.adOkOverlap||[]);
-  const sig=layer+lv.elevation+levelDefaultCapacity(lv)+JSON.stringify(arr.map(z=>[z.id,z.kind,z.polygon,z.mark,z.llMark,z.sdlMark,z.offsetIn,z.thicknessIn,z.widthIn,z.depthIn,z.adSizeSrc,z.adVerifyTop,z.adVerified,z.adSheet]))+[...ok].join()+(layer==='loading'?JSON.stringify((zonesOf(lv,'slab').find(isEdgeZone)||{}).polygon||0):'');
+  const sig=layer+lv.elevation+levelDefaultCapacity(lv)+JSON.stringify(arr.map(z=>[z.id,z.kind,z.polygon,z.mark,z.llMark,z.sdlMark,z.offsetIn,z.thicknessIn,z.widthIn,z.depthIn,z.adSizeSrc,z.adVerifyTop,z.adVerified,z.adSheet,z.stackReview]))+[...ok].join()+(layer==='loading'?JSON.stringify((zonesOf(lv,'slab').find(isEdgeZone)||{}).polygon||0):'');
   if(sig===_adChk.sig)return _adChk.out;
   const PC=adPC(),out=[],f2=adFtPerPx(lv)**2;
   const pairs=(list,label)=>{for(let i=0;i<list.length;i++)for(let j=i+1;j<list.length;j++){
@@ -22890,6 +23298,11 @@ function adChecks(lv){
       if(s.tosFt!=null&&hasElev(lv)&&Math.abs((s.tosFt-lv.elevation)*12-slabOffsetOf(z))>0.06)d.push(`T/SLAB ${ftInStr(s.tosFt)}`);
       if(d.length)out.push({type:'sheet',rings:[adP(z.polygon)],ids:[z.id],text:`${nm(z)} — the sheet says ${d.join(', ')} here`});
     });
+    // UI-12: an on-grade area drawn by Match floors' "that's slab on grade" is
+    // cut on a straight line the drawings never drew — look at it once
+    arr.filter(z=>isGradeZone(z)&&z.stackReview).forEach(z=>{
+      out.push({type:'sheet',rings:[adP(z.polygon)],ids:[z.id],sf:Math.abs(adArea(adP(z.polygon)))*f2,stack:true,text:`${nm(z)} — drawn from Match floors past the floor below: check where soil ends and suspended slab begins`});
+    });
   }
   out.sort((a,b)=>(b.sf||0)-(a.sf||0));
   _adChk.sig=sig;_adChk.out=out;return out;
@@ -22899,7 +23312,7 @@ function adChecksHtml(lv){
   const cs=adChecks(lv),L=state.layer==='loading';
   if(!cs.length)return `<div class="ad-ready ok">✓ Ready for Results — ${L?(levelDefaultCapacity(lv)>0?'no overlapping marks; the typical covers the rest':'the whole floor is covered, with no overlapping marks'):'no overlapping slab areas and nothing left to verify'}</div>`;
   return `<div class="ad-ready no"><b>${cs.length} to look at</b> before Results${L&&cs.some(c=>c.type==='gap')?' — gaps are tinted red, overlaps amber':''}</div>`+
-    cs.map((c,i)=>`<div class="ad-chk${AD.chk===i?' on':''}" data-adchk="${i}"><span class="ad-ic" style="background:${AD_CHK_C[c.type]}"></span><span class="ad-t">${esc(c.text)}</span>${c.sf?`<span class="ad-sf">${Math.round(c.sf).toLocaleString()} SF</span>`:''}${c.type==='overlap'?`<button class="btn btn-sm" data-adokov="${c.key}" title="Keep both: it's meant to be like this">OK</button>`:''}${c.type==='verify'?c.verify.map(p=>`<button class="btn btn-sm" data-adverify="${c.ids[0]}|${p.off}" title="Use this top for the whole beam">${esc(adElevStr(lv,p.off))}</button>`).join(''):''}</div>`).join('');
+    cs.map((c,i)=>`<div class="ad-chk${AD.chk===i?' on':''}" data-adchk="${i}"><span class="ad-ic" style="background:${AD_CHK_C[c.type]}"></span><span class="ad-t">${esc(c.text)}</span>${c.sf?`<span class="ad-sf">${Math.round(c.sf).toLocaleString()} SF</span>`:''}${c.type==='overlap'?`<button class="btn btn-sm" data-adokov="${c.key}" title="Keep both: it's meant to be like this">OK</button>`:''}${c.stack?`<button class="btn btn-sm" data-adokstack="${c.ids[0]}" title="The outline is right: soil inside, suspended slab outside">OK</button>`:''}${c.type==='verify'?c.verify.map(p=>`<button class="btn btn-sm" data-adverify="${c.ids[0]}|${p.off}" title="Use this top for the whole beam">${esc(adElevStr(lv,p.off))}</button>`).join(''):''}</div>`).join('');
 }
 function adBindChecks(el,lv){
   el.querySelectorAll('[data-adchk]').forEach(r=>r.addEventListener('click',e=>{
@@ -22911,6 +23324,10 @@ function adBindChecks(el,lv){
     renderSidebar();renderCanvas();
   }));
   el.querySelectorAll('[data-adokov]').forEach(b=>b.addEventListener('click',()=>{history.record('Keep overlap');lv.adOkOverlap=[...(lv.adOkOverlap||[]),b.dataset.adokov];persist();renderSidebar();renderCanvas()}));
+  el.querySelectorAll('[data-adokstack]').forEach(b=>b.addEventListener('click',()=>{
+    const z=zonesOf(lv,'slab').find(q=>q.id===b.dataset.adokstack);if(!z)return;
+    history.record('Keep slab on grade');delete z.stackReview;persist();renderSidebar();renderCanvas();
+  }));
   el.querySelectorAll('[data-adverify]').forEach(b=>b.addEventListener('click',()=>{
     const [id,off]=b.dataset.adverify.split('|');const z=zonesOf(lv,'slab').find(q=>q.id===id);if(!z)return;
     history.record('Verify beam top');z.offsetIn=+off;z.adVerified=true;delete z.adVerifyTop;state.results=null;
