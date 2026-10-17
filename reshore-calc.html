@@ -19948,7 +19948,9 @@ function beamContinuations(items){
 // text: it is always present, and its endpoints ARE the opening's corners,
 // so nothing depends on flooding a pocket whose outline may not be closed.
 // (pdf.js reports stroke color 0-255, so red is '255,0,0', not '1,0,0'.)
-const OPENING_TAG_RE=/^(OPNG|OPENING|OPEN|OPNG\.)$/i;
+// a bare OPNG / OPENING / OPEN, or a named one ending so: "SHAFT OPNG",
+// "STAIR OPENING" (ARE-33, Bothell's elevator shaft at 6/B)
+const OPENING_TAG_RE=/^(OPNG|OPENING|OPEN|OPNG\.)$|^[A-Z][A-Z .\/-]*\s(OPNG|OPENING)\.?$/i;
 const OPENING_MIN_PX2=1200;
 const X_MIN_LEN=45;              // shorter than this is a hatch tick
 const X_MID=0.22;                // each leg must be crossed near its middle
@@ -20321,9 +20323,15 @@ async function detectOpenings(num){
     // the printed outline is the exact shape when it can be flooded; the X
     // hull is the fallback and is right to the corner either way
     let poly=hull,how='from the X corners',area=Math.abs(polyAreaFt?0:0)||0;
-    const m=await traceRegionAt(num,mk.cross.x,mk.cross.y,{heavyOnly:true,noFillObjects:true});
     const hullArea=Math.abs(hull.reduce((s,p,i2)=>{const q=hull[(i2+1)%hull.length];return s+(p.x*q.y-q.x*p.y)},0)/2);
-    if(m&&m.areaPx2>hullArea*0.55&&m.areaPx2<hullArea*1.8){poly=m.polygon;how='traced round the X';}
+    // heavy outline first; then medium lines too (ARE-33: a notched shaft
+    // outline drawn medium leaked on heavy alone)
+    let m=null;
+    for(const md of [{heavyOnly:true},{mid:true,heavyOnly:true}]){
+      const t=await traceRegionAt(num,mk.cross.x,mk.cross.y,{noFillObjects:true,...md});
+      if(t&&t.areaPx2>hullArea*0.55&&t.areaPx2<hullArea*1.8){m=t;break}
+    }
+    if(m){poly=m.polygon;how='traced round the X';}
     const px2=m&&poly===m.polygon?m.areaPx2:hullArea;
     const pbb={minx:Math.min(...poly.map(p=>p.x)),maxx:Math.max(...poly.map(p=>p.x)),
                miny:Math.min(...poly.map(p=>p.y)),maxy:Math.max(...poly.map(p=>p.y))};
@@ -20331,7 +20339,9 @@ async function detectOpenings(num){
     const tag=tags.find(t=>pointInPoly({x:t.x+(t.w||0)/2,y:t.y-(t.h||10)*0.35},poly));
     // the X must sit in a drawn outline; crossing dimension and grid lines
     // enclose nothing. A tagged X is kept either way, and says so.
-    const cov=outlineCoverage(hull,segs),outlined=isOutlined(cov);
+    // the outline is checked on the traced shape where there is one: a
+    // notched opening's X runs corner to corner, and its hull is slanted
+    const cov=outlineCoverage(poly===hull?hull:poly,segs),outlined=isOutlined(cov)||(poly!==hull&&isOutlined(outlineCoverage(hull,segs)));
     if(!outlined&&!tag){nUnoutlined++;continue}
     if(px2<OPENING_MIN_PX2)continue;
     taken.push(poly);

@@ -1,4 +1,4 @@
-// @rules RVT-15, ARE-32  (see DECISIONS.md)
+// @rules RVT-15, ARE-32, ARE-33  (see DECISIONS.md)
 // THE MODEL AS ANSWER KEY (Oct 16 2026)
 // Bothell's drawing set (Reshore Calculator Test.pdf) was printed from its
 // Revit model, so the model says what every floor should read back: floor
@@ -12,6 +12,10 @@
 //     was drawn by hand (edges, openings, beams) — so a low score is the job
 //  C. the scan today on floors 2 and 3 (drawing set in the repo): its
 //     slab-zone candidates, all accepted, scored — a floor, not a ceiling
+//  E. the scan's openings and beams on every floor, the job's own removed,
+//     all accepted: every opening the model has (the elevator shaft at 6/B,
+//     tagged "SHAFT OPNG" and notched, was missed — ARE-33), nothing extra,
+//     beams found and sized right by length
 //  D. the Oct 16 jobs, where present: scores printed
 import { createRequire } from 'node:module';
 const { chromium } = await (async () => {
@@ -96,6 +100,24 @@ for (const t of ['8" PT SLAB', '22" PT SLAB', '22 1/2" PT SLAB']) ok(C.list.some
 ok(!C.list.some(z => z.jobT != null && Math.abs(z.jobT - z.tIn) > 1 && z.sf > 100), 'no zone over 100 SF is offered at the wrong thickness (the stepped bay was 22 1/2" over a 7 1/2" slab)');
 ok(C.l2.rightSF >= 10 && C.l2.extra.length === 0, 'floor 2: a 7" pocket right, nothing outside the model: ' + C.l2.rightSF);
 ok(C.extra.length === 0, 'no candidate lands where the model has no slab zone');
+
+console.log('E. the scan’s openings and beams, every floor, all accepted');
+const E = await page.evaluate(async raw => {
+  for (const lv of state.levels) lv.slabZones = (lv.slabZones || []).filter(z => isEdgeZone(z) || isGradeZone(z) || slabKind(z) === 'slab');
+  for (const [li, lv] of state.levels.entries()) for (const sh of levelSheets(lv)) {
+    const pg = sh.page; await goToPage(pg);
+    const found = [];
+    for (const i of (await detectGreyShapes(pg)).items) found.push({ ...i, page: pg, levelIdx: li });
+    for (const i of (await detectOpenings(pg)).items) found.push({ ...i, page: pg, levelIdx: li });
+    const take = clipItemsToEdge(found, lv, pg).kept.filter(i => !i.failed && i.polygon && i.polygon.length > 2 && (i.kind === 'beam' || i.kind === 'opening'));
+    beamScan = { page: pg, levelIdx: li, items: take, sel: -1, what: 'both', view: 'queue' };
+    scanCommit(take, 'model score'); beamScan = null;
+  }
+  return modelScore(modelAnswerKey(raw)).levels.filter(s => !s.missing).map(s => ({ name: s.name, o: s.openings, b: { found: s.beams.foundLen, sized: s.beams.sizedLen, miss: s.beams.list.filter(b => !b.found).map(b => b.type + ' ' + b.len + ' ft') } }));
+}, raw);
+for (const s of E) console.log(`   ${s.name}: openings ${s.o.found} of ${s.o.key}, ${s.o.extra} extra · beams ${s.b.found}% found, ${s.b.sized}% sized right${s.b.miss.length ? ' · missed ' + s.b.miss.join(', ') : ''}`);
+ok(E.every(s => s.o.found === s.o.key && !s.o.extra), 'every opening the model has, nothing extra (22 of 22; 19 before ARE-33)');
+ok(E.every(s => s.b.found == null || s.b.found >= 96) && E.every(s => s.b.sized == null || s.b.sized >= 96), 'beams found and sized right, by length, on every floor');
 
 const BOT = process.env.BOTHELL_DIR || path.join(root, 'Project Testing', 'Bothell');
 const jobsD = ['Bothell_Test_2026.10.16.reshore.json', 'Bothell_TrustAll_2026.10.16.reshore.json'].map(f => path.join(BOT, f)).filter(f => fs.existsSync(f));
