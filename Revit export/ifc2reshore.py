@@ -232,7 +232,20 @@ def is_floor_slab(rec):
     t = rec['type'] or ''
     if not t.startswith('Floor:') and not t.startswith('Floors') and 'Thickened' not in t: return False
     if EXCLUDE_FLOOR.search(t) or BEAM_NAME.search(t) or FOUNDATION.search(t): return False
+    if is_metal_deck(rec): return False
     return True
+
+# RVT-19: concrete on metal deck (Horizon's 3 1/2" SLAB at 9/C on B1-B3) is
+# carried by steel: no pour on the cast-in-place decks, no support for them.
+# Named DECK / METAL / COMPOSITE, or a plain SLAB under 4" with no MS, PT,
+# SOG, TOPPING or THICKENED in its name.
+METAL_DECK = re.compile(r'DECK|METAL|COMPOSITE', re.I)
+NOT_DECK = re.compile(r'\bMS\b|\bPT\b|\bSOG\b|SLAB ON GRADE|TOPPING|THICKENED', re.I)
+def is_metal_deck(rec):
+    t = type_tail(rec['type'])
+    if METAL_DECK.search(t): return True
+    thk = thickness_from_name(rec['type'])
+    return thk is not None and thk < 4 and bool(re.search(r'\bSLAB\b', t, re.I)) and not NOT_DECK.search(t)
 
 def is_mat(rec):
     """RVT-16. A foundation slab (mat, pit slab) bears on the ground."""
@@ -403,11 +416,12 @@ def build(ex, args):
     order = [s['name'] for s in storeys]
 
     # ── classify per storey ─────────────────────────────────────────────────
-    per = collections.OrderedDict((n, {'slabs': [], 'mats': [], 'beams': [], 'cols': [], 'walls': []}) for n in order)
+    per = collections.OrderedDict((n, {'slabs': [], 'mats': [], 'decks': [], 'beams': [], 'cols': [], 'walls': []}) for n in order)
     for r in ex['slabs']:
         if r['storey'] not in per or not r['fp']: continue
         if is_floor_slab(r): per[r['storey']]['slabs'].append(r)
         elif is_mat(r): per[r['storey']]['mats'].append(r)
+        elif is_metal_deck(r): per[r['storey']]['decks'].append(r)
         elif is_floor_beam(r): per[r['storey']]['beams'].append(dict(r, src='floor'))
     for r in ex['beams']:
         if r['storey'] in per and r['fp'] and is_structural_beam(r): per[r['storey']]['beams'].append(dict(r, src='beam'))
@@ -548,12 +562,6 @@ def build(ex, args):
         m_rec = main[0]
         typ_thk = thickness_from_name(m_rec['type']) or geo_thickness(m_rec)
         base_top = m_rec['zmax']                       # ft, shared-coords z of the typical slab top
-        # Revit level elevation vs slab top: report the difference, use slab top as T.O.S.
-        # (geometry z is shared coordinates; the storey elevation is project; align them through the typical slab)
-        lvl_elev = round(round((base_top + z_off) * 96) / 96, 4)      # snap to 1/8" (the IFC carries 100'-0" as 99.99993)
-        step_note = ''
-        if abs(lvl_elev - elev[n]) >= 1 / 24:
-            step_note = f"  (slab top {fmt_ftin(lvl_elev - elev[n])} vs Revit level {fmt_ftin(elev[n])})"
         # RVT-16: a floor bears on the ground if it is SOG, or if most of it
         # sits on a mat (a topping on the mat: the mat's top between the
         # floor's underside, less a foot, and its top). The level is on grade
@@ -570,6 +578,24 @@ def build(ex, args):
         bear_u = unary_union([g for r, g in geoms if id(r) in bears] + ([mat_u.difference(hung)] if mats else []))
         foot_u = unary_union([g for r, g in geoms] + [g for r, g in mats])
         on_grade = bear_u.area >= 0.9 * foot_u.area
+        # RVT-18: on grade over mats, the level's T.O.S. is the top that covers
+        # the most of its plan — bare mat or a floor on it — and the rest
+        # carry their own offset (Horizon B7: mostly mat at 197'-4", 10"
+        # toppings at 198'-2", and shores land on both).
+        if on_grade and mats:
+            tops = collections.Counter()
+            for r, g in geoms:
+                if id(r) in bears: tops[round(r['zmax'] * 48)] += g.area
+            bare = unary_union([g for r, g in geoms])
+            for r, g in mats:
+                tops[round(r['zmax'] * 48)] += g.difference(bare).area
+            base_top = tops.most_common(1)[0][0] / 48
+        # Revit level elevation vs slab top: report the difference, use slab top as T.O.S.
+        # (geometry z is shared coordinates; the storey elevation is project; align them through the typical slab)
+        lvl_elev = round(round((base_top + z_off) * 96) / 96, 4)      # snap to 1/8" (the IFC carries 100'-0" as 99.99993)
+        step_note = ''
+        if abs(lvl_elev - elev[n]) >= 1 / 24:
+            step_note = f"  (slab top {fmt_ftin(lvl_elev - elev[n])} vs Revit level {fmt_ftin(elev[n])})"
         # Revit floors joined with framing come through with a slot cut where every
         # beam runs, so the slab extent is floors ∪ beams (beams at slab level only)
         beam_geoms = [shapely_from_fp(b['fp']) for b in P['beams'] if abs(b['zmax'] - base_top) < 1.5]
@@ -632,11 +658,12 @@ def build(ex, args):
                        'offsetIn': 0, 'label': '', 'page': page_no, 'source': 'revit'})
         # slab areas: every floor element that differs from the typical (thickness or top), and SOG areas on a suspended level
         n_area = 0; n_sloped = 0
+        mat_tos = on_grade and bool(mats)                        # RVT-18: T.O.S. is the mat; floors on it carry their offset
         for r, g in geoms:
-            if r is m_rec: continue
+            if r is m_rec and not mat_tos: continue
             thk = thickness_from_name(r['type']) or geo_thickness(r)
             is_sog = id(r) in bears                              # SOG, or a topping on a mat (RVT-16)
-            if on_grade and is_sog: continue                     # the whole level is on grade already
+            if on_grade and is_sog and not mat_tos: continue     # the whole level is on grade already
             if g.area < args.min_area: continue
             # RVT-13: a ramp is one element with a falling top. Split it at
             # its slope breaks and give each run and landing its own high and
@@ -647,14 +674,18 @@ def build(ex, args):
                 off = round((zhi - base_top) * 12 * 4) / 4
                 off_lo = round((zlo - base_top) * 12 * 4) / 4
                 flat = abs(off - off_lo) < 0.25
-                if is_sog: flat = True
+                if is_sog and not mat_tos: flat = True
+                if mat_tos and is_sog and flat and abs(off) < 0.25: continue
                 if not is_sog and flat and abs(thk - typ_thk) < 0.125 and abs(off) < 0.25: continue
                 for ring, holes in poly_b(pg_):
                     n_area += 1
                     z = {'id': sid(f'slab|{n}|{n_area}'), 'polygon': poly_pts(ring, xf), 'polygonFt': ft_pts(ring), 'kind': 'grade' if is_sog else 'slab',
-                         'thicknessIn': thk, 'offsetIn': off if not is_sog else 0, 'label': type_tail(r['type']), 'page': page_no, 'source': 'revit'}
+                         'thicknessIn': thk, 'offsetIn': off if (mat_tos or not is_sog) else 0, 'label': type_tail(r['type']), 'page': page_no, 'source': 'revit'}
                     # an on-grade piece bears on the ground whatever it does,
                     # so its fall is not a shore-height question
+                    if not flat and is_sog:
+                        # on a mat, a falling top is landed on at its low end
+                        z['offsetLowIn'] = off_lo
                     if not flat and not is_sog:
                         # the low end travels with it; the calculator shores to
                         # the tallest and checks the low end against the
@@ -720,6 +751,7 @@ def build(ex, args):
         report.append(f"{short:>6}  T.O.S. {fmt_ftin(lvl_elev):>10}  typ {typ_thk:g}\"  edge {Polygon(edge_ring).area:,.0f} SF  "
                        f"openings {n_open}  slab areas {n_area + n_slab}  beams {n_beam}{'  ON GRADE' if on_grade else ''}"
                        + (f"  [{n_fill} wall/column pockets filled]" if n_fill else '')
+                       + (f"  [metal deck left out: {len(P['decks'])}]" if P['decks'] else '')
                        + (f"  [{'; '.join(f'{k}: {v}' for k, v in beam_notes.items())}]" if beam_notes else '')
                        + (f"  [sloped pieces: {n_sloped}]" if n_sloped else '') + step_note)
 

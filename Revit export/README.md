@@ -49,7 +49,7 @@ Python 3.10+ with `ifcopenshell`, `shapely`, `numpy`, `matplotlib`:
 ## Modeling conventions it relies on (Kalae, Sep 18, 2026)
 
 - **Floors:** the type name carries thickness and kind (`7 1/2" PT SLAB`, `9" MS SLAB`, `5" SOG`). The name wins over the geometry.
-- **Never slab:** floors named `FILL`, `PAD`, `CURB`, `PEDESTAL`, `PLINTH` or `TOS SLOPE`. Piles and pile caps are ignored. Foundation slabs (mats) are not slab, but a level standing on them is on grade over the whole footprint (RVT-16).
+- **Never slab:** floors named `FILL`, `PAD`, `CURB`, `PEDESTAL`, `PLINTH` or `TOS SLOPE`. Piles and pile caps are ignored. Foundation slabs (mats) are not slab, but a level standing on them is on grade over the whole footprint (RVT-16). Its T.O.S. is the top over most of it, bare mat or topping, and the rest are on-grade areas with their own offset (RVT-18). Concrete on metal deck (`DECK`, `METAL`, `COMPOSITE`, or a plain `SLAB` under 4") is carried by steel and left out (RVT-19).
 - **Beams:** anything with `BM` or `BEAM` in the type name, as Structural Framing or as a Floor (`Floor:90x12 3/4 BM`).
   - `WxD` is width × full depth from the beam's own top, in inches, exported as-is.
   - A beam topped below the slab gets a negative T.O.S. offset, and the calculator counts everything below the slab soffit as stem (BEM-09).
