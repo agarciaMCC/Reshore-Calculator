@@ -234,6 +234,10 @@ def is_floor_slab(rec):
     if EXCLUDE_FLOOR.search(t) or BEAM_NAME.search(t) or FOUNDATION.search(t): return False
     return True
 
+def is_mat(rec):
+    """RVT-16. A foundation slab (mat, pit slab) bears on the ground."""
+    return (rec['type'] or '').startswith('Foundation Slab')
+
 def is_floor_beam(rec):
     t = rec['type'] or ''
     return t.startswith('Floor:') and bool(BEAM_NAME.search(t))
@@ -399,10 +403,11 @@ def build(ex, args):
     order = [s['name'] for s in storeys]
 
     # ── classify per storey ─────────────────────────────────────────────────
-    per = collections.OrderedDict((n, {'slabs': [], 'beams': [], 'cols': [], 'walls': []}) for n in order)
+    per = collections.OrderedDict((n, {'slabs': [], 'mats': [], 'beams': [], 'cols': [], 'walls': []}) for n in order)
     for r in ex['slabs']:
         if r['storey'] not in per or not r['fp']: continue
         if is_floor_slab(r): per[r['storey']]['slabs'].append(r)
+        elif is_mat(r): per[r['storey']]['mats'].append(r)
         elif is_floor_beam(r): per[r['storey']]['beams'].append(dict(r, src='floor'))
     for r in ex['beams']:
         if r['storey'] in per and r['fp'] and is_structural_beam(r): per[r['storey']]['beams'].append(dict(r, src='beam'))
@@ -549,13 +554,28 @@ def build(ex, args):
         step_note = ''
         if abs(lvl_elev - elev[n]) >= 1 / 24:
             step_note = f"  (slab top {fmt_ftin(lvl_elev - elev[n])} vs Revit level {fmt_ftin(elev[n])})"
-        sog_area = sum(g.area for r, g in geoms if SOG.search(r['type'] or ''))
-        tot_area = sum(g.area for r, g in geoms)
-        on_grade = sog_area >= 0.9 * tot_area
+        # RVT-16: a floor bears on the ground if it is SOG, or if most of it
+        # sits on a mat (a topping on the mat: the mat's top between the
+        # floor's underside, less a foot, and its top). The level is on grade
+        # when what bears — those floors, and mat no suspended floor covers —
+        # is 90% of the footprint of floors and mats together.
+        mats = [(r, shapely_from_fp(r['fp'])) for r in P['mats']]
+        mats = [(r, g) for r, g in mats if not g.is_empty]
+        def on_mat(r, g):
+            under = [mg for mr, mg in mats if r['zmin'] - 1.0 <= mr['zmax'] <= r['zmax'] + 0.25]
+            return bool(under) and g.intersection(unary_union(under)).area >= 0.5 * g.area
+        bears = {id(r) for r, g in geoms if SOG.search(r['type'] or '') or on_mat(r, g)}
+        hung = unary_union([g for r, g in geoms if id(r) not in bears])
+        mat_u = unary_union([g for r, g in mats])
+        bear_u = unary_union([g for r, g in geoms if id(r) in bears] + ([mat_u.difference(hung)] if mats else []))
+        foot_u = unary_union([g for r, g in geoms] + [g for r, g in mats])
+        on_grade = bear_u.area >= 0.9 * foot_u.area
         # Revit floors joined with framing come through with a slot cut where every
         # beam runs, so the slab extent is floors ∪ beams (beams at slab level only)
         beam_geoms = [shapely_from_fp(b['fp']) for b in P['beams'] if abs(b['zmax'] - base_top) < 1.5]
-        struct = unary_union([g for r, g in geoms] + [bg for bg in beam_geoms if not bg.is_empty])
+        # an on-grade level is on grade over its mats too, not just the topping (RVT-16)
+        struct = unary_union([g for r, g in geoms] + [bg for bg in beam_geoms if not bg.is_empty]
+                             + ([g for r, g in mats] if on_grade else []))
         try: struct = struct.buffer(0.05).buffer(-0.05)      # close hairline gaps between joined elements
         except Exception: pass
         # fill the pockets cut for walls and columns (see 'what holds the slab up')
@@ -615,7 +635,7 @@ def build(ex, args):
         for r, g in geoms:
             if r is m_rec: continue
             thk = thickness_from_name(r['type']) or geo_thickness(r)
-            is_sog = bool(SOG.search(r['type'] or ''))
+            is_sog = id(r) in bears                              # SOG, or a topping on a mat (RVT-16)
             if on_grade and is_sog: continue                     # the whole level is on grade already
             if g.area < args.min_area: continue
             # RVT-13: a ramp is one element with a falling top. Split it at
@@ -663,12 +683,16 @@ def build(ex, args):
                 xs_, ys_ = mrr.exterior.coords.xy
                 sides = sorted({round(math.hypot(xs_[i+1]-xs_[i], ys_[i+1]-ys_[i]), 3) for i in range(4)})
                 w_in = round(sides[0] * 12 * 4) / 4; beam_notes['width from geometry'] += 1
-            # T.O.S. offset: beam top vs the slab element under its centroid (else the typical)
-            c = g.centroid; local_top = base_top
-            for sg, sr in slab_lookup:
-                if sg.contains(c): local_top = sr['zmax']; break
+            # RVT-17. T.O.S. offset: beam top vs the slab it sits in. Floors are
+            # slotted where beams run, so the centroid is mostly in no slab:
+            # look at every slab touching the beam (and the one under its
+            # centroid) and take the top nearest the beam's own, the higher on
+            # a tie. Only a beam clearly above every one of them is upturned.
+            c = g.centroid; gb = g.buffer(0.25)
+            tops = [sr['zmax'] for sg, sr in slab_lookup if sg.contains(c) or sg.intersects(gb)]
+            local_top = min(tops, key=lambda z: (abs(b['zmax'] - z), -z)) if tops else base_top
             off_in = round((b['zmax'] - local_top) * 12 * 4) / 4
-            if b['zmax'] > base_top + 0.5 and off_in > 6:
+            if (b['zmax'] - max(tops or [base_top])) * 12 > 6:
                 beam_notes['upturned / above slab (skipped)'] += 1; continue
             n_beam += 1
             for ring, holes in poly_b(g):
