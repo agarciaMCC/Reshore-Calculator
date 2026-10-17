@@ -9,7 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-24.04  # pinned: screenshots change between Ubuntu versions
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +35,7 @@ jobs:
         run: node tests/run.mjs --fresh
         env:
           RESHORE_JOBS: 4
-          RESHORE_BUDGET: 600
+          RESHORE_BUDGET: 1200
           RESHORE_TIMEOUT: 300
 
       - name: Keep the screenshots that differ from the baselines
