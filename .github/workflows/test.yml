@@ -9,7 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-24.04  # pinned: screenshots change between Ubuntu versions
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v4
@@ -20,6 +20,14 @@ jobs:
 
       - run: npm ci
 
+      # the converter tests (revit-mats-beams) run ifc2reshore.build() on a
+      # made-up model, which needs shapely; the IFC stack itself is not needed
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install shapely
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
@@ -27,7 +35,7 @@ jobs:
         run: node tests/run.mjs --fresh
         env:
           RESHORE_JOBS: 4
-          RESHORE_BUDGET: 600
+          RESHORE_BUDGET: 1200
           RESHORE_TIMEOUT: 300
 
       - name: Keep the screenshots that differ from the baselines
