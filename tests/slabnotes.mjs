@@ -1,4 +1,4 @@
-// @rules ARE-31, ARE-19, ARE-11  (see DECISIONS.md)
+// @rules ARE-31, ARE-32, ARE-19, ARE-11  (see DECISIONS.md)
 // A SLAB ZONE FROM ITS NOTE (Bothell, Oct 16 2026)
 // Sheet 5 shows 7", 8 1/2", 22" and 22 1/2" PT slab zones, but the scan
 // offered none: it found thickened slabs only as solid gray fills, and these
@@ -12,10 +12,13 @@
 //  B. Horizon House B1 (typical 12"): the two 10" SLAB zones are traced
 //     along their leaders, inside the floor edge, with their thickness
 //  C. accepting one writes the note's thickness
-//  D. Bothell sheet 5 (where the set is present): the 8 1/2" hatch zone is
-//     traced, 22" and 22 1/2" into one bay give one candidate (the thicker),
-//     the 7" and 8" dashed boxes are listed to draw by hand; sheet 6's 17"
-//     note in an elevation is not offered
+//  D. Bothell sheet 5 (the set is in the repo): the 8 1/2" hatch zone is
+//     traced; ARE-32 (Oct 17, scored against the Revit model): the 22" and
+//     22 1/2" strips of the stepped bay are traced each at its own thickness
+//     along dashed steps, the dashed 8" zone and a dashed 7" pocket too; the
+//     bay's "T/SLAB: Varies" middle is not guessed; sheet 6's 17" note in
+//     an elevation is not offered. Horizon's beam "T: / B:" tags (B, above)
+//     never become slab zones.
 import { createRequire } from 'node:module';
 const { chromium } = await (async () => {
   try { return await import('playwright'); }
@@ -92,10 +95,8 @@ const C = await page.evaluate(async () => {
 });
 ok(C && C.kind === 'slab' && C.t === 10 && C.page === 10 && /10" SLAB/.test(C.label), 'the slab area takes 10" from its note: ' + JSON.stringify(C));
 
-const BOT = process.env.BOTHELL_DIR || path.resolve(here, '..', 'Project Testing', 'Bothell');
-const bJob = path.join(BOT, 'Bothell_TrustAll_2026.10.16.reshore.json'), bPdf = path.join(BOT, 'Reshore Calculator Test.pdf');
-if (!fs.existsSync(bJob) || !fs.existsSync(bPdf)) console.log('D. (Bothell test set not in this checkout, skipped)');
-else {
+const bJob = path.resolve(here, '..', '1175_Bothell_Stem_4.reshore.json'), bPdf = path.resolve(here, '..', 'Reshore Calculator Test.pdf');
+{
   console.log('D. Bothell sheet 5');
   await open(bPdf, bJob);
   const D = await detect(5);
@@ -103,10 +104,15 @@ else {
   const half = D.find(d => d.tIn === 8.5);
   ok(half && !half.failed && half.sf > 550 && half.sf < 800 && half.inEdge > 0.9, 'the 8 1/2" hatched zone is traced (~680 SF): ' + JSON.stringify(half));
   ok(half && Math.abs(half.tosFt - (119 + 11.5 / 12)) < 0.01, 'with its T/SLAB 119\'-11 1/2"');
-  const deep = D.filter(d => d.tIn >= 22 && !d.failed);
-  ok(deep.length === 1 && deep[0].tIn === 22.5 && /22″? and 22½|both point here/.test(deep[0].why), '22" and 22 1/2" into one bay: one candidate, the thicker, saying so: ' + JSON.stringify(deep));
+  const t22 = D.find(d => d.tIn === 22 && !d.failed && /^22"/.test(d.label)), t225 = D.find(d => d.tIn === 22.5 && !d.failed);
+  ok(t22 && t22.sf >= 30 && t22.sf <= 150, 'the 22" strip is traced at 22": ' + JSON.stringify(t22));
+  ok(t225 && t225.sf >= 30 && t225.sf <= 150, 'the 22 1/2" strip is traced at 22 1/2", separately: ' + JSON.stringify(t225));
+  const t8 = D.find(d => d.tIn === 8 && !d.failed);
+  ok(t8 && t8.sf >= 100 && t8.sf <= 220, 'the dashed 8" zone is traced (model: 163 SF): ' + JSON.stringify(t8));
+  ok(D.some(d => d.tIn === 7 && !d.failed && d.sf >= 6 && d.sf <= 30), 'a dashed 7" pocket is traced at its dot');
+  ok(!D.some(d => d.tIn === 13 && !d.failed), 'the "T/SLAB: Varies" middle of the bay is not guessed at 13"');
   const hand = D.filter(d => d.failed);
-  ok(hand.length >= 4 && hand.every(d => d.tIn === 7 || d.tIn === 8) && hand.every(d => /draw it by hand/.test(d.why)), 'the 7" and 8" dashed boxes are listed to draw by hand: ' + JSON.stringify(hand.map(d => d.label)));
+  ok(hand.every(d => /draw it by hand/.test(d.why)), 'what does not trace is listed to draw by hand: ' + JSON.stringify(hand.map(d => d.label)));
   ok(!D.some(d => d.tIn === 9), 'no candidate from the typical 9" notes');
   const D6 = await detect(6);
   ok(!D6.some(d => d.tIn === 17), 'sheet 6: the 17" note in the building elevation is not offered: ' + JSON.stringify(D6));

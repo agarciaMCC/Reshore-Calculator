@@ -1,4 +1,4 @@
-// @rules RVT-15  (see DECISIONS.md)
+// @rules RVT-15, ARE-32  (see DECISIONS.md)
 // THE MODEL AS ANSWER KEY (Oct 16 2026)
 // Bothell's drawing set (Reshore Calculator Test.pdf) was printed from its
 // Revit model, so the model says what every floor should read back: floor
@@ -10,8 +10,8 @@
 //     reads back what Revit says (floor 1's slab on grade, floor 3's zones)
 //  B. the scorer: the hand-checked 1175 job scores full marks where it
 //     was drawn by hand (edges, openings, beams) — so a low score is the job
-//  C. the scan today on floor 3 (drawing set in the repo): its slab-zone
-//     candidates, all accepted, scored — a floor, not a ceiling
+//  C. the scan today on floors 2 and 3 (drawing set in the repo): its
+//     slab-zone candidates, all accepted, scored — a floor, not a ceiling
 //  D. the Oct 16 jobs, where present: scores printed
 import { createRequire } from 'node:module';
 const { chromium } = await (async () => {
@@ -76,19 +76,25 @@ await page.waitForTimeout(1200);
 await page.addScriptTag({ path: path.join(here, 'tools', 'model-score.js') });
 const C = await page.evaluate(async raw => {
   if (typeof beamScan !== 'undefined' && beamScan) cancelBeamScan();
-  const pg = 5, li = levelForPage(pg), lv = state.levels[li];
-  await goToPage(pg);
-  const items = (await detectSlabNotes(pg, lv)).filter(i => !i.failed).map(i => ({ ...i, page: pg, levelIdx: li }));
-  beamScan = { page: pg, levelIdx: li, items, sel: -1, what: 'beams', view: 'queue' };
-  scanCommit(items, 'model score'); beamScan = null;
-  const s = modelScore(modelAnswerKey(raw)).levels.find(x => x.name === 'LEVEL 03');
-  return s.zones;
+  for (const pg of [4, 5]) {
+    const li = levelForPage(pg), lv = state.levels[li];
+    await goToPage(pg);
+    const items = (await detectSlabNotes(pg, lv)).filter(i => !i.failed).map(i => ({ ...i, page: pg, levelIdx: li }));
+    beamScan = { page: pg, levelIdx: li, items, sel: -1, what: 'beams', view: 'queue' };
+    scanCommit(items, 'model score'); beamScan = null;
+  }
+  const sc = modelScore(modelAnswerKey(raw)).levels;
+  return { ...sc.find(x => x.name === 'LEVEL 03').zones, l2: sc.find(x => x.name === 'LEVEL 02').zones };
 }, raw);
 for (const z of C.list) console.log(`   ${z.right ? 'ok  ' : 'MISS'} ${z.type} ${z.sf} SF · covered ${Math.round(z.covered * 100)}%${z.jobT != null ? ` · scan says ${z.jobT}"` : ''}`);
 console.log(`   ${C.rightSF} of ${C.keySF} SF right · ${C.extra.length} candidate(s) not in the model`);
+console.log(`   floor 2: ${C.l2.rightSF} of ${C.l2.keySF} SF right (${C.l2.right} of ${C.l2.key} zones) · ${C.l2.extra.length} not in the model`);
 const half = C.list.find(z => z.type === '8 1/2" PT SLAB');
 ok(half && half.right, 'the 8 1/2" zone is right, thickness and top: ' + JSON.stringify(half));
-ok(C.rightSF >= 700, 'at least the 8 1/2" zone’s area is right (today’s floor): ' + C.rightSF);
+ok(C.rightSF >= 1100, 'floor 3: at least 1,100 SF of slab zones right (ARE-32, Oct 17: 852 before): ' + C.rightSF);
+for (const t of ['8" PT SLAB', '22" PT SLAB', '22 1/2" PT SLAB']) ok(C.list.some(z => z.type === t && z.right), `the ${t} zone is right`);
+ok(!C.list.some(z => z.jobT != null && Math.abs(z.jobT - z.tIn) > 1 && z.sf > 100), 'no zone over 100 SF is offered at the wrong thickness (the stepped bay was 22 1/2" over a 7 1/2" slab)');
+ok(C.l2.rightSF >= 10 && C.l2.extra.length === 0, 'floor 2: a 7" pocket right, nothing outside the model: ' + C.l2.rightSF);
 ok(C.extra.length === 0, 'no candidate lands where the model has no slab zone');
 
 const BOT = process.env.BOTHELL_DIR || path.join(root, 'Project Testing', 'Bothell');
