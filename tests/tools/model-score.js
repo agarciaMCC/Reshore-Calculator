@@ -60,7 +60,10 @@
     const levels = [];
     const elevOf = new Map(raw.levels.map(l => [l.name, l.elev]));
     for (const L of raw.levels) {
-      const floors = raw.floors.filter(f => f.level === L.name && !/\bFTG\b|FOOTING|PILE|CAP\b/i.test(f.type) && (f.areaSF || 0) >= 1 && f.loops && f.loops.length);
+      // a floor's thickness is its parameter, else its type name ('7 1/2" MS SLAB' carries none)
+      const tOf = f => { if (f.thicknessIn != null) return f.thicknessIn; const m = /^(\d+)(?:\s+(\d+)\/(\d+))?\s*"/.exec(f.type || ''); return m ? +m[1] + (m[2] ? m[2] / m[3] : 0) : null; };
+      const floors = raw.floors.filter(f => f.level === L.name && !/\bFTG\b|FOOTING|PILE|CAP\b/i.test(f.type) && (f.areaSF || 0) >= 1 && f.loops && f.loops.length)
+        .map(f => ({ ...f, thicknessIn: tOf(f) }));
       if (!floors.length) continue;
       // a sketch is even-odd: several islands, each with its holes
       const shape = f => { const rs = f.loops.map(T).filter(r => r.length >= 3); return rs.length ? safe(() => PC().xor(...rs.map(r => [[close(r)]])), []) : []; };
@@ -97,8 +100,11 @@
       const openings = [];
       for (const poly of solid) for (const h of poly.slice(1)) { const a = ringArea(open(h)); if (a >= 10) openings.push({ mp: [[h]], sf: a }); }
       // slab zones: a floor whose thickness or top differs from the typical
+      // one zone per island: a floor element drawn as five separate boxes
+      // is five zones on the sheet, each found (or not) on its own
       const zones = typ ? susp.filter(p => Math.abs(p.f.thicknessIn - typ.t) > 0.06 || Math.abs((p.f.offsetIn || 0) - typ.off) > 0.06)
-        .filter(p => (p.f.areaSF || 0) >= 1).map(p => ({ type: p.f.type, tIn: p.f.thicknessIn, offIn: (p.f.offsetIn || 0) - typ.off, mp: p.mp, sf: mpArea(p.mp) })) : [];
+        .filter(p => (p.f.areaSF || 0) >= 1).flatMap(p => p.mp.map(poly => ({ type: p.f.type, tIn: p.f.thicknessIn, offIn: (p.f.offsetIn || 0) - typ.off, mp: [poly], sf: mpArea([poly]) })))
+        .filter(z => z.sf >= 1) : [];
       const beams = raw.beams.filter(b => b.level === L.name && b.p0 && b.p1).map(b => {
         const s = sizeOf(b.type) || {}; const a = fit.to(b.p0), c = fit.to(b.p1);
         return { type: b.type, w: s.w, d: s.d, a, b: c, len: Math.hypot(c[0] - a[0], c[1] - a[1]) };
