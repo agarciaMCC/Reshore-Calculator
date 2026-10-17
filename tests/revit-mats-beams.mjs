@@ -79,7 +79,7 @@ for l in job['levels']:
                       'beams': [[z['label'], z['offsetIn']] for z in zs if z['kind'] == 'beam']}
 print(json.dumps(out))
 `);
-ok(R && R.status === 0, 'build() runs on the made-up model: ' + (R ? (R.stderr || '').trim().slice(-300) : 'no python'));
+ok(R && R.status === 0, 'build() runs on the made-up model: ' + (R ? (R.stderr || '').trim().split('\n').pop() : 'no python'));
 if (R && R.status === 0) {
   const o = JSON.parse(R.stdout.trim().split('\n').pop());
   console.log('RVT-16. a topping on mats is on grade, over the mats too');

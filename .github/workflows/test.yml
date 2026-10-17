@@ -20,6 +20,14 @@ jobs:
 
       - run: npm ci
 
+      # the converter tests (revit-mats-beams) run ifc2reshore.build() on a
+      # made-up model, which needs shapely; the IFC stack itself is not needed
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install shapely
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
