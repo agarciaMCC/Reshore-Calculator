@@ -1,4 +1,4 @@
-// @rules LOD-16, LOD-17, ARE-34, BLD-23, EDG-10, UI-39  (see DECISIONS.md)
+// @rules LOD-16, LOD-17, ARE-34, BLD-23, EDG-10, EDG-11, EDG-12, UI-39  (see DECISIONS.md)
 // Horizon House garage, "trust every default" run (Oct 17, 2026). Accepting
 // everything the calculator proposed gave far too few reshores on B3–B6 and
 // too many on B2. The worst misreads, each pinned here:
@@ -7,7 +7,8 @@
 //  B. B4 and B5's parking area offered as B3 34 PSF, not C3 158 PSF (LOD-16)
 //  C. the same area is not traced or written twice (ARE-34)
 //  D. the load map proposes each floor's typical (LOD-17)
-//  E. a floor edge far smaller than the floor above or below is not a good read (EDG-10)
+//  E. a floor edge far smaller than the floor above or below is not a good read (EDG-10);
+//     a steel deck left out is reported but is no doubt (EDG-12)
 //  F. between suspended floors, "Do the floors line up?" leads with checking
 //     the floor below's edge (UI-39)
 // Fixture: the job as the run saved it (tests/fixtures/horizon/horizon-trustall.reshore.json).
@@ -110,9 +111,14 @@ const E = await page.evaluate(async () => {
   renderEdgeSweepPanel();
   return v;
 });
-ok(E.B6.v === 'check' && !E.B6.pick && /B5 above/.test(E.B6.why), 'B6 (14.0k SF under B5\'s 25.0k) is look closely: ' + JSON.stringify(E.B6));
-ok(E.B1.v === 'check' && /B2 below/.test(E.B1.why), 'B1 (17.8k SF over B2\'s 27.9k) is look closely: ' + JSON.stringify(E.B1));
-ok(['B2', 'B3', 'B4', 'B5', 'B7'].every(n => E[n].v === 'good'), 'the full floors still read well: ' + JSON.stringify(Object.fromEntries(Object.entries(E).map(([k, o]) => [k, o.v]))));
+// B6 used to read 14.0k SF under B5's 25.0k; since EDG-11 it reads the whole
+// floor and is not flagged. B1 really is an L of 15.3k SF over B2's 25.4k
+// (the estimator's and the model's), so it stays "look closely" — EDG-10
+// doing its job.
+ok(E.B6.v === 'good' && /23\.\dk SF/.test(E.B6.why), 'B6 reads the whole floor and is not flagged (EDG-11): ' + JSON.stringify(E.B6));
+ok(E.B1.v === 'check' && !E.B1.pick && /B2 below/.test(E.B1.why), 'B1 (15.4k SF over B2\'s 25.4k) is look closely: ' + JSON.stringify(E.B1));
+ok(['B2', 'B3', 'B4', 'B5', 'B6', 'B7'].every(n => E[n].v === 'good'), 'the full floors still read well: ' + JSON.stringify(Object.fromEntries(Object.entries(E).map(([k, o]) => [k, o.v]))));
+ok(/metal deck left out/.test(E.B2.why) && /metal deck left out/.test(E.B3.why), 'B2 and B3 say the deck was left out, and are still good reads (EDG-12): ' + E.B2.why);
 
 await openJob();
 console.log('F. between suspended floors, check the floor below first (UI-39)');
