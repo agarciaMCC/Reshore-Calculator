@@ -6055,6 +6055,12 @@ function drawGradePastBelow(r){
   state.results=null;
   return pieces.reduce((t,p)=>t+p.sf,0);
 }
+// UI-39: the floor below an overshoot, when it is itself suspended (floors
+// under it, not on grade) — then its edge is the likelier fault, not soil
+function ssSuspendedBelow(r){
+  const bl=r&&r.lv&&levelBelowOf(r.lv);
+  return bl&&!levelGradeFlag(bl)&&levelBelowOf(bl)?bl:null;
+}
 function renderSheetStack(){
   const host=document.getElementById('sheetStack');
   if(!host)return;
@@ -6077,7 +6083,7 @@ function renderSheetStack(){
          <span class="ss-st">${r.matched?'matched':'<b>unmatched</b>'} \u00b7 ${r.nEdges?`${r.nEdges} floor edge${r.nEdges>1?'s':''}`:(r.bb?'slab areas only':'nothing drawn')}</span>
          <span class="ss-ft">${r.bb?`x ${ft(r.bb.minX)}\u2013${ft(r.bb.maxX)} \u00b7 y ${ft(r.bb.minY)}\u2013${ft(r.bb.maxY)} ft \u00b7 ${Math.round(r.sf).toLocaleString()} SF`:'\u2014'}</span>
          ${r.issues.length?`<span class="ss-why">${r.issues.map(esc).join(' \u00b7 ')}${r.over&&!r.overOnGrade&&!r.overAccepted
-              ?` <button type="button" class="btn btn-sm ss-ok" data-ssok="${i}" title="The slab there is on grade \u2014 it bears on soil and needs nothing under it. Draws it as an on-grade area inside the floor edge (check its outline on Areas › Slab) and accepts this overshoot; the warning returns if it grows or a new side appears.">OK \u2014 that's slab on grade</button>`:''}</span>`:''}
+              ?`${ssSuspendedBelow(r)?` <button type="button" class="btn btn-sm btn-go ss-chk" data-sschk="${i}" title="${esc(ssSuspendedBelow(r).name)} has floors under it, so it is not on grade — its floor edge is more likely cut short than the ground is soil. Opens it on Floor edge.">Check ${esc(ssSuspendedBelow(r).name)}'s floor edge</button>`:''} <button type="button" class="btn btn-sm ss-ok" data-ssok="${i}" title="The slab there is on grade \u2014 it bears on soil and needs nothing under it. Draws it as an on-grade area inside the floor edge (check its outline on Areas › Slab) and accepts this overshoot; the warning returns if it grows or a new side appears.">OK \u2014 that's slab on grade</button>`:''}</span>`:''}
          ${r.notes.length?`<span class="ss-note">${r.notes.map(esc).join(' \u00b7 ')}${r.over&&r.overAccepted&&!r.overOnGrade
               ?` <button type="button" class="btn btn-sm ss-draw" data-ssdraw="${i}" title="Draw the on-grade area so the solver sees the soil there too">Draw it as slab on grade</button> <button type="button" class="ss-undo" data-ssundo="${i}" title="Take the confirmation back and warn about this overshoot again">recheck</button>`:''}</span>`:''}
        </div>`).join('')}
@@ -6095,6 +6101,15 @@ function renderSheetStack(){
         :`${r.level}${r.zone?' '+r.zone:''}: the ground past ${esc(bn)} is taken as slab on grade, but it could not be drawn (no floor edge on this sheet). Draw it as an on-grade area on the Slab tab so the solver sees it too.`,6000);
       persist();renderSheetStack();renderSidebar();renderCanvas();
     }
+  }));
+  // UI-39: the floor below is suspended — look at its edge first
+  host.querySelectorAll('button[data-sschk]').forEach(b=>b.addEventListener('click',ev=>{
+    ev.stopPropagation();
+    const r=rows[+b.dataset.sschk],bl=r&&ssSuspendedBelow(r);if(!bl)return;
+    state.activeLevelIdx=state.levels.indexOf(bl);state.activeZoneIdx=null;
+    const pg=bl.pdfPage!=null?bl.pdfPage:(levelSheets(bl)[0]||{}).page;
+    const go=pg!=null&&pg!==state.pdf.current?goToPage(pg):Promise.resolve();
+    go.then(()=>{setStep('edge');renderSidebar();renderCanvas();renderPageBar()});
   }));
   host.querySelectorAll('button[data-ssdraw]').forEach(b=>b.addEventListener('click',ev=>{
     ev.stopPropagation();
@@ -6202,6 +6217,17 @@ function typicalSuggestion(lv){
     }
     coverage=floorA>0?drawnA/floorA:0;
   }
+  // LOD-17: nothing drawn yet — the floor's own load map, once read, names its
+  // main area (LOD-16 picks it safely); that is the typical (Horizon House
+  // B2–B6, where nothing was proposed and B3 had to be found by hand)
+  if(!best){
+    const m=loadMapMainArea(lv);
+    if(m){
+      const how=`its load map, where ${m.code} covers the largest area (${Math.round(m.sf).toLocaleString()} SF)`;
+      if(m.llMark!=null)return{from:how,defLL:String(m.llMark),defSDL:m.sdlMark!=null?String(m.sdlMark):null};
+      if(m.mark!=null)return{from:how,defMark:String(m.mark)};
+    }
+  }
   const drawnWins=best&&(coverage>=0.6||!fromSchedule);
   if(drawnWins){
     const how=coverage>=0.6?'the largest area on it, which the drawn areas cover':'the largest area drawn on it';
@@ -6210,6 +6236,41 @@ function typicalSuggestion(lv){
   }
   if(fromSchedule)return fromSchedule;
   return null;
+}
+// LOD-17: the largest area the floor's load map was read with, from the
+// trace cache (no new read here). Null when the maps are not read yet.
+function loadMapMainArea(lv){
+  if(typeof traceCache==='undefined'||!traceCache.size)return null;
+  const key=traceCacheKey();let best=null;
+  for(const hit of traceCache.values()){
+    if(!hit||hit.key!==key||!hit.res||!hit.res.plans)continue;
+    for(const pl of hit.res.plans){
+      if(state.levels[pl.levelIdx]!==lv)continue;
+      for(const f of pl.fills){
+        if(f.llMark==null&&f.mark==null)continue;
+        const sf=f.areaSF||0;
+        if(!best||sf>best.sf)best={sf,llMark:f.llMark,sdlMark:f.sdlMark,mark:f.mark,code:f.untagged?(f.pick||f.code):f.code};
+      }
+    }
+  }
+  return best;
+}
+// LOD-17: on Loads, read the load maps once in the background so their main
+// areas can propose the typicals — only once the floors are on the project
+// grid (a read before that would define the grid off a load map).
+let _typicalMapRead=null,_typicalMapKey=null;
+function readLoadMapsForTypicals(){
+  if(_typicalMapRead||!state.pdf.doc||scheduleShape()==='none'||gridIsEmpty())return;
+  if(_typicalMapKey===traceCacheKey())return;          // read for this schedule and grid already
+  _typicalMapKey=traceCacheKey();
+  const top=topLevelId();
+  if(!state.levels.some(l=>!typicalIsSet(l)&&!levelOnGrade(l)&&l.id!==top))return;
+  _typicalMapRead=tracedLoadMaps().then(()=>{
+    if(prefillTypicals()){
+      if(typeof renderLoadMapTable==='function')renderLoadMapTable();
+      if(typeof refreshFlow==='function')refreshFlow();
+    }
+  }).catch(e=>console.error(e)).finally(()=>{_typicalMapRead=null});
 }
 function typicalIsSet(l){
   return !!(l&&(l.defLL!=null||l.defMark!=null||l.defaultCapacity>0));
@@ -6230,6 +6291,7 @@ function prefillTypicals(){
     did++;
   }
   if(did){state.results=null;persist()}
+  else readLoadMapsForTypicals();
   return did;
 }
 function assumedTypicalLevels(){
@@ -9421,6 +9483,26 @@ function levelNameFromTitle(title){
   }
   return name?{name,onGrade}:null;
 }
+// BLD-23: the sheet's general note for the typical slab — "SLAB THICKNESS IS
+// 12" MILD-REINFORCED TYP. U.N.O.", "10" SLAB TYP.", "SLAB IS 4'-0" MAT FTG
+// TYP." Inches, or null. A note that is a thickened band's ("THICKENED SLAB;
+// TYP.") or a range ("12" MIN/15" MAX") says nothing about the typical.
+function readSheetTypicalSlab(items){
+  const ins=(ft,inch)=>(ft?Number(ft)*12:0)+(inch?Number(inch):0);
+  const pats=[
+    /\bSLAB(?:\s+THICKNESS)?\s+IS\s+(?:(\d{1,2})'\s*-?\s*)?(\d{1,2}(?:\.\d+)?)?\s*"/i,
+    /(?:^|\s)(?:(\d{1,2})'\s*-?\s*)?(\d{1,2}(?:\.\d+)?)?\s*"\s*(?:THICK\s+)?(?:CONC(?:RETE)?\.?\s+)?(?:SLAB|MAT)\b[^.]*?\bTYP/i];
+  for(const it of items){
+    const t=String(it.s||'');
+    if(!/\bTYP/i.test(t)||/THICKE?NED|THICKEN\b|\bMIN\b|\bMAX\b|BAND|DROP|STEP/i.test(t))continue;
+    for(const re of pats){
+      const m=t.match(re);if(!m||(m[1]==null&&m[2]==null))continue;
+      const v=ins(m[1],m[2]);
+      if(v>=3&&v<=96)return{thickIn:Math.round(v*100)/100,mat:/\bMAT\b|\bFTG\b|FOOTING/i.test(t),text:t.trim()};
+    }
+  }
+  return null;
+}
 // Every sheet that looks like a floor plan, with what it states about itself.
 // Nothing is written here — this is the proposal.
 async function proposeLevelsFromDrawings(){
@@ -9452,10 +9534,14 @@ async function proposeLevelsFromDrawings(){
       const mode=modeOf(tags.map(t=>t.f));
       if(mode){sElev=mode.value;sN=mode.n;sTotal=mode.total;fromTag=true}
     }
-    const sThick=(r.thickIn!=null&&r.thickN>=3)?null:strip.thickIn;
-    out.push({page:n,title,name:named.name,onGrade:named.onGrade||strip.onGrade,
+    // BLD-23: the sheet's typical-slab note beats top/bottom pairs — a pair
+    // marks a thickened band or a step (Horizon House B2: 28" from
+    // "T 245'-4" / B 243'-0"" against "SLAB THICKNESS IS 12" … TYP.")
+    const note=readSheetTypicalSlab(items);
+    const sThick=note?note.thickIn:(r.thickIn!=null&&r.thickN>=3)?null:strip.thickIn;
+    out.push({page:n,title,name:named.name,onGrade:named.onGrade||strip.onGrade||!!(note&&note.mat),
       elev:r.tos?r.tos.value:sElev,elevN:r.tos?r.tos.n:sN,elevTotal:r.tos?r.tos.total:sTotal,
-      fromStrip:!r.tos&&sElev!=null&&!fromTag,fromTag,thickStrip:sThick!=null,
+      fromStrip:!r.tos&&sElev!=null&&!fromTag,fromTag,thickStrip:sThick!=null,thickNote:note?note.text:null,
       thickIn:sThick!=null?sThick:r.thickIn,thickN:r.thickN,
       clrFt:r.clr?r.clr.value:null,clrN:r.clr?r.clr.n:0,
       steps:r.steps});
@@ -9507,7 +9593,12 @@ function applyLevelDrawingProposals(list,picks){
     // BLD-15: three callouts agreeing, or the sheet saying so once in its
     // title strip — a strip states the floor's typical, which is the figure
     // this field wants
-    if(p.thickIn!=null&&p.thickIn>0&&(p.thickN>=3||p.thickStrip)&&lv.slabThickness!==p.thickIn){lv.slabThickness=p.thickIn;changed++}
+    // BLD-23: with a typical-slab note the callout pairs are bands, so they
+    // say nothing; the note fills a floor still at no figure or the 7½"
+    // default and never overwrites one typed in
+    if(p.thickNote){
+      if(p.thickIn>0&&(lv.slabThickness==null||lv.slabThickness===7.5)&&lv.slabThickness!==p.thickIn){lv.slabThickness=p.thickIn;changed++}
+    }else if(p.thickIn!=null&&p.thickIn>0&&(p.thickN>=3||p.thickStrip)&&lv.slabThickness!==p.thickIn){lv.slabThickness=p.thickIn;changed++}
     // a floor named on two plan sheets keeps both
     {const held=levelForPage(p.page);
      if(held<0||state.levels[held]===lv){
@@ -10317,8 +10408,11 @@ function autoAssignSheets(){
     if(s.kind==='plan'&&s.levelName){
       let li=state.levels.findIndex(l=>!isRange(l)&&normLevelName(l.name)===normLevelName(s.levelName));
       if(li<0){
-        state.levels.push({id:sid(),name:s.levelName,elevation:null,floorToFloor:null,slabThickness:7.5,
-          defaultCapacity:0,rangeFrom:null,rangeTo:null,pdfPage:null,zones:[],slabZones:[],onGrade:!!s.onGrade});
+        // BLD-23: a floor met only here (its plan read as no settled level —
+        // Horizon House B1) still takes its sheet's typical-slab note
+        const note=_pageTextCache[pg]?readSheetTypicalSlab(_pageTextCache[pg]):null;
+        state.levels.push({id:sid(),name:s.levelName,elevation:null,floorToFloor:null,slabThickness:note?note.thickIn:7.5,
+          defaultCapacity:0,rangeFrom:null,rangeTo:null,pdfPage:null,zones:[],slabZones:[],onGrade:!!s.onGrade||!!(note&&note.mat)});
         li=state.levels.length-1;out.created++;
       }
       const lv=state.levels[li];
@@ -18050,14 +18144,21 @@ async function autoTracePage(num){
     for(const f of fills){const k=sig(f);if(!k)continue;if(!bySig.has(k))bySig.set(k,[]);bySig.get(k).push(f)}
     for(const list of bySig.values()){
       const codes=new Set(list.map(f=>f.code));
-      if(list.length<2||codes.size<2)continue;
+      if(list.length<2)continue;
+      // ARE-34: two tags of the same code in one region are one area, not two
+      if(codes.size<2){list[0].note=list.length+' tags';for(const f of list.slice(1))fills.splice(fills.indexOf(f),1);continue}
       // the area's own tag is the one standing clear of the others (a
       // parking bay's tag sits out in the open; stair and room tags cluster
       // round the cores) — proposed, with the code left for the user
       // the tag deepest inside the region: a leaked room tag sits against the
       // walls its outline leaked through, the area's own tag out in the open
       const depth=f=>{const P=f.polygon||[];let d=1e9;for(let i=0,j=P.length-1;i<P.length;j=i++){const ax=P[j].x,ay=P[j].y,bx=P[i].x,by=P[i].y,dx=bx-ax,dy=by-ay,L2=dx*dx+dy*dy;const t=L2?Math.max(0,Math.min(1,((f.center.x-ax)*dx+(f.center.y-ay)*dy)/L2)):0;d=Math.min(d,Math.hypot(ax+t*dx-f.center.x,ay+t*dy-f.center.y))}return d};
-      list.sort((a,b)=>depth(b)-depth(a));
+      // LOD-16: but never a heavier tag than the lightest one inside. Room
+      // tags (storage, cores) leak in and can sit deeper than the open-floor
+      // tag (Horizon House B4/B5: C3 158 PSF over the B3 34 PSF parking), so
+      // the weakest floor is the safe reading; the deepest breaks a tie.
+      const capOf=f=>f.capacity!=null?f.capacity:Infinity;
+      list.sort((a,b)=>capOf(a)-capOf(b)||depth(b)-depth(a));
       const keep=list[0];
       const cnt={};for(const f of list)cnt[f.code]=(cnt[f.code]||0)+1;
       keep.note='tags inside: '+Object.entries(cnt).map(([c,n])=>`${c}×${n}`).join(', ');
@@ -18080,7 +18181,9 @@ async function autoTracePage(num){
       const keep=list[0];
       const distinct=Object.keys(codes);
       if(distinct.length>1){
-        const top=distinct.sort((a,b)=>codes[b]-codes[a])[0];
+        // LOD-16: the lightest tag inside, the most frequent on a tie
+        const capOf=c=>{const i=tagCodeInfo(c.replace(/^#/,''));return i&&i.capacity!=null?i.capacity:Infinity};
+        const top=distinct.sort((a,b)=>capOf(a)-capOf(b)||codes[b]-codes[a])[0];
         keep.untagged=true;keep.code='?';keep.capacity=null;keep.llMark=keep.sdlMark=keep.mark=undefined;
         keep.pick=top.replace(/^#/,'');const info=tagCodeInfo(keep.pick);if(info){Object.assign(keep,info)}
         keep.note='tags inside: '+distinct.map(c=>`${c}×${codes[c]}`).join(', ');
@@ -19618,6 +19721,38 @@ async function readEdgeRow(row){
   row.pick=!!row.polygon&&v.v==='good';
   return row;
 }
+// EDG-10: a first read that covers much less than the floor above or below
+// is not a good read — part of the floor is probably cut off (Horizon House:
+// B6 read 14,000 SF under B5's 25,000). Only suspended floors drawn whole on
+// one sheet are compared; a zone sheet shows part of a floor.
+function edgeRowSF(row){
+  if(row.areaSF!=null)return row.areaSF;
+  const P=row.polygon;if(!P||P.length<3)return null;
+  const fpi=lockedFtPerInch(row.page)||(_pageTextCache[row.page]?parseSheetScale(_pageTextCache[row.page]):null);
+  if(!fpi)return null;
+  let a=0;for(let i=0,j=P.length-1;i<P.length;j=i++)a+=(P[j].x+P[i].x)*(P[j].y-P[i].y);
+  const k=fpi/PX_PER_INCH;return Math.abs(a/2)*k*k;
+}
+function flagShortEdges(rows){
+  // a floor on grade is often smaller (a basement under part of it) and needs
+  // no shoring: it is neither flagged nor measured against
+  const whole=rows.filter(r=>r.polygon&&state.levels[r.levelIdx]&&!levelGradeFlag(state.levels[r.levelIdx])&&levelSheets(state.levels[r.levelIdx]).length===1);
+  const sfOf=new Map(whole.map(r=>[state.levels[r.levelIdx],edgeRowSF(r)]));
+  for(const r of whole){
+    if(r.verdict!=='good')continue;
+    const lv=state.levels[r.levelIdx],sf=sfOf.get(lv);if(!(sf>0))continue;
+    const above=state.levels.filter(o=>o!==lv&&o.elevation!=null&&lv.elevation!=null&&o.elevation>lv.elevation).sort((a,b)=>a.elevation-b.elevation)[0];
+    const below=levelBelowOf(lv);
+    for(const nb of [below,above]){
+      const nsf=nb&&sfOf.get(nb);
+      if(nsf>0&&sf<nsf*0.8){
+        r.verdict='check';r.pick=false;
+        r.why=`covers ${fmtArea(sf)} — ${nb.name} ${nb===below?'below':'above'} covers ${fmtArea(nsf)}; part of the floor may be cut off`;
+        break;
+      }
+    }
+  }
+}
 async function runEdgeSweep(){
   if(!state.pdf.doc){toast('Detecting the floor edge needs a vector PDF — draw it by hand on an image.',3600);return null}
   const rows=edgeSweepTargets();
@@ -19633,6 +19768,7 @@ async function runEdgeSweep(){
     await readEdgeRow(rows[i]);
     if(!edgeSweep)return null;                  // canceled while reading
   }
+  flagShortEdges(rows);
   edgeSweep.running=false;edgeSweep.done=rows.length;
   if(btn&&btnWas!=null)btn.textContent=btnWas;
   renderEdgeSweepPanel();
@@ -21405,6 +21541,14 @@ function codeOptionsHtml(sel){
   else if(shape==='combined')codes=getConditions().filter(c=>!isConcOnly(c)).map(c=>String(c.mark));
   return `<option value=""${!sel?' selected':''}>— pick a code —</option>`+codes.map(c=>`<option value="${esc(c)}"${sel===c?' selected':''}>${esc(shape==='combined'?'#'+c:c)}</option>`).join('');
 }
+// ARE-34: two loading areas are the same when they carry the same mark and
+// their outlines agree to within the MDL-12 half foot, corner for corner.
+function sameLoadArea(a,b){
+  if(!a||!b||!a.bPoly||!b.bPoly||a.bPoly.length!==b.bPoly.length)return false;
+  if(String(a.llMark)!==String(b.llMark)||String(a.sdlMark)!==String(b.sdlMark)||String(a.mark)!==String(b.mark))return false;
+  if(a.page!=null&&b.page!=null&&a.page!==b.page)return false;
+  return a.bPoly.every(p=>b.bPoly.some(q=>Math.abs(p.x-q.x)<=0.5&&Math.abs(p.y-q.y)<=0.5));
+}
 async function acceptAutoTrace(){
   const R=autoTrace;if(!R)return;
   for(const pl of R.plans)for(const f of pl.fills)if(f.accepted&&f.untagged&&!f.pick){toast('Pick a code for every ticked untagged area, or untick it.',3600);return}
@@ -21423,7 +21567,7 @@ async function acceptAutoTrace(){
   await warmSheetSizes([...new Set(R.plans.flatMap(pl=>{
     const lv=state.levels[pl.levelIdx];return lv?levelSheets(lv).map(x=>x.page):[]}))]);
   history.record('Add areas from load map');
-  let added=0,pending=0,offSheet=0,split=0;const offNames=new Set();
+  let added=0,pending=0,offSheet=0,split=0,dup=0;const offNames=new Set();
   for(const pl of R.plans){
     const lv=state.levels[pl.levelIdx];if(!lv)continue;
     const arr=zonesOf(lv,'loading');
@@ -21451,6 +21595,8 @@ async function acceptAutoTrace(){
       if(multi&&pg==null){offSheet++;offNames.add(lv.name);continue}
       const z=Object.assign({id:sid(),polygon:[],bPoly:f.bPoly},base);
       if(pg!=null)z.page=pg;
+      // ARE-34: the same mark over the same outline is already there — once only
+      if(arr.some(o=>sameLoadArea(o,z))){dup++;continue}
       arr.push(z);added++;
     }
     materializeLevelZones(lv);
@@ -21466,6 +21612,7 @@ async function acceptAutoTrace(){
   toast(`${added} loading area${added===1?'':'s'} added${pending?` — ${pending} will appear once their floor sheets are matched`:''}`
     +(split?` · ${split} cross${split===1?'es':''} between zone sheets and ${split===1?'is':'are'} drawn on each`:'')
     +(offSheet?` · ${offSheet} left out: not on any sheet of ${[...offNames].join(', ')}`:'')
+    +(dup?` · ${dup} already there, not added twice`:'')
     +(R.returnPage!=null?`. Back on your sheet — they are in the Loading list.`:`. Open Areas to check and adjust them.`),6200);
   // ARE-12: back to the sheet the trace was started from
   if(R.returnPage!=null)await traceReturn(R);
