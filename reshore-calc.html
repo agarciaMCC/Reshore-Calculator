@@ -18844,19 +18844,21 @@ async function edgeRaster(num,thrOverride){
   const pg=await doc.getPage(num);
   const vp=pg.getViewport({scale:PDF_RENDER_SCALE});
   const opList=await pg.getOperatorList();const O=pdfjsLib.OPS;
-  let ctm=vp.transform.slice();const stack=[];let lw=1,col='0,0,0';
+  let ctm=vp.transform.slice();const stack=[];let lw=1,col='0,0,0',dashed=false;
   const segsByW=new Map(),hist=new Map();const ticks=[];
+  const solid=[];                                 // undashed strokes, [x1,y1,x2,y2,w]… (EDG-11)
   const fn=opList.fnArray,ar=opList.argsArray;
   for(let k=0;k<fn.length;k++){
     const op=fn[k],a=ar[k];
-    if(op===O.save){stack.push([ctm.slice(),lw,col]);continue}
-    if(op===O.restore){const st=stack.pop();if(st){ctm=st[0];lw=st[1];col=st[2]}continue}
+    if(op===O.save){stack.push([ctm.slice(),lw,col,dashed]);continue}
+    if(op===O.restore){const st=stack.pop();if(st){ctm=st[0];lw=st[1];col=st[2];dashed=st[3]}continue}
     if(op===O.transform){ctm=matMul(ctm,a);continue}
     if(op===O.setLineWidth){lw=a[0];continue}
+    if(op===O.setDash){dashed=!!(a&&a[0]&&a[0].length);continue}
     if(op===O.setStrokeRGBColor){col=a.join(',');continue}
     if(op===O.setStrokeGray){col='g'+a[0];continue}
-    if(op===O.paintFormXObjectBegin){stack.push([ctm.slice(),lw,col]);if(a&&a[0])ctm=matMul(ctm,a[0]);continue}
-    if(op===O.paintFormXObjectEnd){const st=stack.pop();if(st){ctm=st[0];lw=st[1];col=st[2]}continue}
+    if(op===O.paintFormXObjectBegin){stack.push([ctm.slice(),lw,col,dashed]);if(a&&a[0])ctm=matMul(ctm,a[0]);continue}
+    if(op===O.paintFormXObjectEnd){const st=stack.pop();if(st){ctm=st[0];lw=st[1];col=st[2];dashed=st[3]}continue}
     if(op!==O.constructPath)continue;
     const nx=fn[k+1];
     if(!(nx===O.stroke||nx===O.closeStroke||nx===O.fillStroke||nx===O.closeFillStroke||nx===O.eoFillStroke))continue;
@@ -18885,6 +18887,7 @@ async function edgeRaster(num,thrOverride){
     }
     if(!segsByW.has(w))segsByW.set(w,[]);segsByW.get(w).push(...out);
     hist.set(w,(hist.get(w)||0)+out.length/4);
+    if(!dashed)for(let i=0;i<out.length;i+=4)solid.push(out[i],out[i+1],out[i+2],out[i+3],w);
   }
   let mode=0.7,best=0;for(const [w,n] of hist)if(n>best){best=n;mode=w}
   const thr=thrOverride!=null?thrOverride:Math.max(1.2,mode*2);
@@ -18901,6 +18904,11 @@ async function edgeRaster(num,thrOverride){
   const heavyThr=Math.max(1.2,mode*2);
   let ann={eraseSegs:[],eraseFills:[],fillIn:[],nDim:0,nMark:0,nDash:0,nOpen:0};
   try{ann=annotationInk(await pageTextCached(num),segsByW,heavyThr,objs,ticks)}catch(e){console.error(e)}
+  // EDG-11: a straight edge whose heavy line breaks where the same run goes
+  // on drawn thin (a wall outlined between columns) is closed across the break
+  const bridges=edgeBridges(heavyW,segsByW,solid,thr,objs,num,Math.max(vp.width,vp.height));
+  const strokeBridges=()=>{if(!bridges.length)return;g.lineWidth=Math.max(2.5*K,heavyW[0]*S*1.5);g.beginPath();
+    for(let i=0;i<bridges.length;i+=4){g.moveTo(bridges[i]*S,bridges[i+1]*S);g.lineTo(bridges[i+2]*S,bridges[i+3]*S)}g.stroke()};
   const strokeW=ws=>{for(const w of ws){const arr=segsByW.get(w);g.lineWidth=Math.max(2.5*K,w*S*1.5);g.beginPath();
     for(let i=0;i<arr.length;i+=4){g.moveTo(arr[i]*S,arr[i+1]*S);g.lineTo(arr[i+2]*S,arr[i+3]*S)}g.stroke()}};
   strokeW(heavyW.filter(w=>w<heavyThr));
@@ -18911,7 +18919,7 @@ async function edgeRaster(num,thrOverride){
   // outlines offered side by side; the clean one is preferred when it holds.
   let inkRaw=null;
   if(anyAnn){
-    strokeW(heavyW.filter(w=>w>=heavyThr));
+    strokeW(heavyW.filter(w=>w>=heavyThr));strokeBridges();
     g.fillStyle='#000';
     for(const o of objs){if(o.white)continue;const a=(o.bbox.maxx-o.bbox.minx)*(o.bbox.maxy-o.bbox.miny);if(a>vp.width*vp.height*0.3)continue;
       for(const poly of o.polys){g.beginPath();poly.forEach((p,i)=>i?g.lineTo(p[0]*S,p[1]*S):g.moveTo(p[0]*S,p[1]*S));g.closePath();g.fill()}}
@@ -18928,7 +18936,7 @@ async function edgeRaster(num,thrOverride){
     g.stroke();
     g.strokeStyle='#000';g.lineCap='round';
   }
-  strokeW(heavyW.filter(w=>w>=heavyThr));
+  strokeW(heavyW.filter(w=>w>=heavyThr));strokeBridges();
   g.fillStyle='#000';let nFills=0;
   const erasedFill=new Set(ann.eraseFills);
   for(const o of objs){if(o.white)continue;const a=(o.bbox.maxx-o.bbox.minx)*(o.bbox.maxy-o.bbox.miny);if(a>vp.width*vp.height*0.3)continue;nFills++;
@@ -18944,6 +18952,7 @@ async function edgeRaster(num,thrOverride){
   // a Revit hatch is one 5,000-vertex polygon and all of it is noise.
   const dsegs=[];
   for(const w of heavyW){const arr=segsByW.get(w);if(arr)for(let i=0;i<arr.length;i++)dsegs.push(arr[i])}
+  for(let i=0;i<bridges.length;i++)dsegs.push(bridges[i]);
   const fillPairs=[];
   for(const o of objs){
     if(o.white)continue;
@@ -18956,7 +18965,7 @@ async function edgeRaster(num,thrOverride){
   const fsegs=[];
   for(let i=0;i<fillPairs.length&&i<3000;i++)fsegs.push(fillPairs[i][1],fillPairs[i][2],fillPairs[i][3],fillPairs[i][4]);
   const rec={S,K,W,H,ink,mode,thr,heavyW,segs:new Float32Array(dsegs),fillSegs:new Float32Array(fsegs),
-             nHeavy:heavyW.reduce((n,w)=>n+hist.get(w),0),nFills,nDim:ann.nDim,nMark:ann.nMark,nDash:ann.nDash,nOpen:ann.nOpen,inkRaw};
+             nHeavy:heavyW.reduce((n,w)=>n+hist.get(w),0),nFills,nBridges:bridges.length/4,nDim:ann.nDim,nMark:ann.nMark,nDash:ann.nDash,nOpen:ann.nOpen,inkRaw};
   edgeRasterCache[key]=rec;
   return rec;
 }
@@ -18967,6 +18976,60 @@ async function edgeRaster(num,thrOverride){
 // detector has actually been measured on, which is why the cap sits just above
 // it rather than at a round number.
 const EDGE_MAX_CELLS=18e6;
+// ── A WALL DRAWN THIN IS STILL THE EDGE (EDG-11) ──
+// Horizon House B6, Oct 17 2026: the 14" wall on the north-west diagonal is a
+// grey-filled heavy outline from column to column, except one 22 ft run drawn
+// as two thin lines. The flood ran in through that break and the read lost
+// the south-west of the floor (14.0k SF of 23.2k). A break in a straight
+// heavy line is closed when, on the SAME line, solid (undashed) thin
+// linework runs on across most of the break in long pieces — not a dash-dot
+// grid line, not a scatter of ticks. Returns bridge segments, flat x1,y1,x2,y2.
+function edgeBridges(heavyW,segsByW,solid,thr,objs,num,sheetMax){
+  const ft=pageFtPerPx(num);
+  const maxGap=ft>0?40/ft:0.08*sheetMax, MIN=30, TOL=3, PAR=0.01, NB=360;
+  const H=[],T=[];
+  const add=(L,x1,y1,x2,y2)=>{const len=Math.hypot(x2-x1,y2-y1);if(len<(L===H?MIN:20))return;
+    let a=Math.atan2(y2-y1,x2-x1);if(a<0)a+=Math.PI;if(a>=Math.PI)a-=Math.PI;
+    const ux=Math.cos(a),uy=Math.sin(a);
+    L.push({x1,y1,x2,y2,len,ux,uy,rho:-uy*x1+ux*y1,bin:Math.round(a/Math.PI*NB)%NB})};
+  for(const w of heavyW){const s=segsByW.get(w);if(s)for(let i=0;i<s.length;i+=4)add(H,s[i],s[i+1],s[i+2],s[i+3])}
+  const fe=[];
+  for(const o of objs||[]){if(o.white)continue;for(const poly of o.polys)for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const a=poly[j],b=poly[i];const L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L>=MIN)fe.push([L,a[0],a[1],b[0],b[1]])}}
+  fe.sort((p,q)=>q[0]-p[0]);
+  for(let i=0;i<fe.length&&i<3000;i++)add(H,fe[i][1],fe[i][2],fe[i][3],fe[i][4]);
+  for(let i=0;i<solid.length;i+=5)if(solid[i+4]<thr)add(T,solid[i],solid[i+1],solid[i+2],solid[i+3]);
+  const byBin=L=>{const m=new Map();for(const s of L){if(!m.has(s.bin))m.set(s.bin,[]);m.get(s.bin).push(s)}return m};
+  const HB=byBin(H),TB=byBin(T);
+  // the pieces of L lying on A's line, as [t0,t1] along it
+  const onLine=(A,M,par)=>{const out=[];
+    for(const b of [(A.bin+NB-1)%NB,A.bin,(A.bin+1)%NB])for(const s of M.get(b)||[]){
+      if(Math.abs(A.ux*s.uy-A.uy*s.ux)>par)continue;
+      const d1=Math.abs(-A.uy*(s.x1-A.x1)+A.ux*(s.y1-A.y1)),d2=Math.abs(-A.uy*(s.x2-A.x1)+A.ux*(s.y2-A.y1));
+      if(d1>TOL||d2>TOL)continue;
+      const t1=A.ux*(s.x1-A.x1)+A.uy*(s.y1-A.y1),t2=A.ux*(s.x2-A.x1)+A.uy*(s.y2-A.y1);
+      out.push([Math.min(t1,t2),Math.max(t1,t2)]);}
+    out.sort((p,q)=>p[0]-q[0]);return out};
+  const merge=iv=>{const m=[];for(const v of iv){const l=m[m.length-1];if(l&&v[0]<=l[1]+TOL)l[1]=Math.max(l[1],v[1]);else m.push(v.slice())}return m};
+  const out=[],seen=new Set();
+  const done=new Set();
+  for(const A of H){
+    const lk=A.bin+':'+Math.round(A.rho/TOL);if(done.has(lk))continue;done.add(lk);
+    const run=merge(onLine(A,HB,PAR));
+    for(let k=0;k+1<run.length;k++){
+      const g0=run[k][1],g1=run[k+1][0],gap=g1-g0;
+      if(gap<=2*TOL||gap>maxGap)continue;
+      const P=[A.x1+A.ux*g0,A.y1+A.uy*g0,A.x1+A.ux*g1,A.y1+A.uy*g1];
+      const key=P.map(v=>Math.round(v/8)).join(',');if(seen.has(key))continue;seen.add(key);
+      // long thin pieces only, clipped to the break
+      const th=merge(onLine(A,TB,2*PAR).filter(v=>v[1]-v[0]>=Math.max(20,0.4*gap))
+        .map(v=>[Math.max(v[0],g0),Math.min(v[1],g1)]).filter(v=>v[1]>v[0]));
+      const cov=th.reduce((n,v)=>n+v[1]-v[0],0);
+      if(cov>=0.8*gap)out.push(...P);
+    }
+  }
+  return out;
+}
 // How big a break in the linework the edge trace closes over, in half-res
 // cells. 6 was tried on Kinect (Sep 17 2026) to bridge the 2'-5" pilaster
 // notches that break L3 North's edge, and it welded every sheet into a
@@ -19159,6 +19222,47 @@ function flattenScallops(poly,ftPerPx,depthFt,widthFt){
   }
   return{polygon:P,removed};
 }
+// ── CONCRETE ON METAL DECK IS NOT THE FLOOR (EDG-12) ──
+// Horizon House B1–B3, Oct 17 2026: east of grid 8 a closed area labeled
+// "3 1/2" CONCRETE ON STEEL DECK" hangs off the slab outline and was read as
+// floor (B1 17.8k SF against 15.3k). Topping on deck is not a cast-in-place
+// slab and does not carry the decks below (the estimator, Oct 17), so the
+// closed area the label sits in is cut out of the outline, along with the
+// lines that close it, and what is left is the floor. A label pointing at
+// most of the outline names the whole floor, not a piece of it, and cuts
+// nothing.
+const DECK_RE=/\bCONC(?:RETE|\.)?\s+(?:TOPPING\s+)?(?:ON|OVER)\s+(?:\S+\s+){0,2}?(?:STEEL|METAL|MTL|COMPOSITE)\s+DECK/i;
+const DECK_NOTE_RE=/^concrete on metal deck left out/;
+function cutDeckAreas(pk,r,ink,pts){
+  if(!pts.length)return null;
+  const {W,H,S}=r,K=r.K||1;const mask=pk.mask;
+  let cut=null,nCut=0;
+  for(const p of pts){
+    const x=Math.round(p[0]*S),y=Math.round(p[1]*S);if(x<0||y<0||x>=W||y>=H)continue;
+    const i0=y*W+x;if(!mask[i0]||ink[i0]||(cut&&cut[i0]))continue;
+    const comp=new Uint8Array(W*H);const stk=[i0];comp[i0]=1;let n=0;
+    while(stk.length){const i=stk.pop();n++;const xx=i%W,yy=(i-xx)/W;
+      for(const j of [xx>0?i-1:-1,xx<W-1?i+1:-1,yy>0?i-W:-1,yy<H-1?i+W:-1])if(j>=0&&!comp[j]&&mask[j]&&!ink[j]){comp[j]=1;stk.push(j)}}
+    if(n>0.5*pk.n)continue;
+    if(!cut)cut=new Uint8Array(W*H);
+    for(let i=0;i<W*H;i++)if(comp[i])cut[i]=1;nCut+=n;
+  }
+  if(!cut)return null;
+  // the lines closing the deck go with it
+  const gone=morphAxis(morphAxis(cut,W,H,Math.round(4*K),true,false),W,H,Math.round(4*K),true,false);
+  let m=new Uint8Array(W*H);for(let i=0;i<W*H;i++)if(mask[i]&&!gone[i])m[i]=1;
+  m=morphOpen(m,W,H,Math.round(3*K));
+  // the largest piece left is the floor
+  const lab=new Int32Array(W*H);let best=0,bestId=0,id=0;
+  for(let i0=0;i0<W*H;i0++){if(!m[i0]||lab[i0])continue;id++;let n=0;const stk=[i0];lab[i0]=id;
+    while(stk.length){const i=stk.pop();n++;const xx=i%W,yy=(i-xx)/W;
+      for(const j of [xx>0?i-1:-1,xx<W-1?i+1:-1,yy>0?i-W:-1,yy<H-1?i+W:-1])if(j>=0&&m[j]&&!lab[j]){lab[j]=id;stk.push(j)}}
+    if(n>best){best=n;bestId=id}}
+  if(!best)return null;
+  let minx=W,miny=H,maxx=0,maxy=0;
+  for(let i=0;i<W*H;i++){if(lab[i]!==bestId){m[i]=0;continue}const x=i%W,y=(i-x)/W;if(x<minx)minx=x;if(x>maxx)maxx=x;if(y<miny)miny=y;if(y>maxy)maxy=y}
+  return{mask:m,n:best,bbox:{minx,miny,maxx,maxy},cutPx2:nCut/(S*S)};
+}
 async function detectFloorEdge(num,opts){
   const t0=performance.now();
   const st=await pageStrokes(num);
@@ -19210,13 +19314,21 @@ async function detectFloorEdge(num,opts){
   // at the commonest line weight, because on some soffit plans the slab edge IS
   // that weight — and those pockets join the list rather than replacing it.
   const cands=[];
+  // label points of any "concrete on metal deck" note, sampled across the text
+  const deckPts=[];
+  for(const it of items||[])if(it&&it.s&&DECK_RE.test(it.s)){
+    const w=it.w||0,h=it.h||0;
+    for(const fx of [0.5,0.25,0.75,0])for(const fy of [0,-0.5,0.5])deckPts.push([it.x+fx*w,it.y+fy*h]);
+  }
   const addFrom=async(thrOverride,why)=>{
     const r=await edgeRaster(num,thrOverride);
     if(!r)return null;
     const fromInk=(ink,clean)=>{
       const {pockets,boxArea}=edgePockets({...r,ink},bb,4);
       const out=[];
-      for(const pk of pockets){
+      for(let pk of pockets){
+        const deck=cutDeckAreas(pk,r,ink,deckPts);
+        if(deck)pk={...pk,mask:deck.mask,n:deck.n,bbox:deck.bbox};
         const raw=maskOutline({mask:pk.mask,W:r.W,H:r.H,S:r.S,bbox:pk.bbox});
         if(!raw||raw.length<3)continue;
         // The raster trace is only a first guess at where the edge runs; the
@@ -19226,7 +19338,7 @@ async function detectFloorEdge(num,opts){
           segs:regSegsFromFlat(r.segs,2).concat(regSegsFromFlat(r.fillSegs,1))});
         let cx=0,cy=0;for(const q of raw){cx+=q.x;cy+=q.y}cx/=raw.length;cy/=raw.length;
         const sc=flattenScallops(reg.changed?reg.polygon:traced,pageFtPerPx(num),2.5,6);
-        out.push({polygon:sc.polygon,scallops:sc.removed/2,traced:traced.length,
+        out.push({polygon:sc.polygon,scallops:sc.removed/2,traced:traced.length,deckPx2:deck?deck.cutPx2:0,
           areaPx2:pk.n/(r.S*r.S),frac:pk.n/(boxArea||1),why,thr:r.thr,clean,cx,cy,
           regular:reg.stats||null,regReason:reg.changed?null:reg.reason,
           ink:{mode:r.mode,thr:r.thr,heavyW:r.heavyW,nHeavy:r.nHeavy,nFills:r.nFills,nDim:clean?(r.nDim||0):0,nMark:clean?(r.nMark||0):0,nDash:clean?(r.nDash||0):0,nOpen:clean?(r.nOpen||0):0}});
@@ -19275,6 +19387,7 @@ async function detectFloorEdge(num,opts){
     if(rs&&!c.regReason&&rs.unsnapLen>0.35*(rs.snapLen+rs.unsnapLen))
       c.notes.push(`${rs.unsnapped} of ${rs.snapped+rs.unsnapped} edges had no drafted line to sit on — check those corners`);
     if(c.regReason)c.notes.push('corners left as traced — '+c.regReason);
+    if(c.deckPx2){const f=pageFtPerPx(num);c.notes.push('concrete on metal deck left out'+(f>0?` (${Math.round(c.deckPx2*f*f).toLocaleString()} SF)`:'')+' — it is not a cast-in-place slab')}
     if(c.clean===false)c.notes.push('closes only with a dimension line as its edge — the slab edge is not drawn closed here; check that side');
   }
   const b0=top[0];
@@ -19694,9 +19807,11 @@ function edgeChangeVs(lv,page,poly,T){
 }
 function edgeVerdict(row){
   if(!row.polygon)return{v:'none',why:row.err||'not read'};
-  if(row.notes&&row.notes.length)return{v:'check',why:row.notes[0]};
+  // EDG-12: leaving the deck out is reported, not a doubt about the read
+  const warn=(row.notes||[]).filter(n=>!DECK_NOTE_RE.test(n)),info=(row.notes||[]).filter(n=>DECK_NOTE_RE.test(n));
+  if(warn.length)return{v:'check',why:warn[0]};
   if(row.corners<4)return{v:'check',why:`only ${row.corners} corners — check it is the slab outline`};
-  return{v:'good',why:`${row.corners} corners${row.areaSF!=null?` · ${fmtArea(row.areaSF)}`:''}`};
+  return{v:'good',why:`${row.corners} corners${row.areaSF!=null?` · ${fmtArea(row.areaSF)}`:''}${info.length?' · '+info[0]:''}`};
 }
 async function readEdgeRow(row){
   row.err=null;row.polygon=null;row.notes=[];
