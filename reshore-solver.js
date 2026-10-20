@@ -813,6 +813,65 @@ function beamProfileAt(stack,pourIdx,regSteps,shores){
   }
   return rows;
 }
+// ONE ROW PER BEAM PER FLOOR BELOW (RES-19; Horizon House, Oct 19 2026: 11
+// beams on the B1 pour gave 67 rows — the 24×53 twice under every floor, the
+// 20×30s three or four times, split only by the loading below). A beam is
+// still cut along the slab pieces (BEM-03), but pieces of one beam that
+// differ only in the condition they carry come back together as one item:
+// on each floor below, the piece that leaves the least capacity to spare
+// governs (a piece over an opening has none), the shore is the tallest any
+// piece needs, and the load is the heaviest stem's. Pieces stay apart where
+// the beam itself changes: a stem more than 3" different (BEM-03, BEM-09),
+// a shore more than 1" taller on any floor (BEM-04, the BEM-06 tolerance),
+// or open/on grade on one floor and not the other.
+function mergeBeamPieces(items,shores){
+  const byBeam=new Map();
+  // a piece with no slab under it at all (past the floor edges below) has
+  // nothing to shore against: it stays its own item, said as such, and does
+  // not take the shoring rows from the rest of the beam
+  for(const it of items){const r0=(it.profile||[])[0],k=it.beamId+(r0&&r0.open&&r0.noSlab?'|none':'');
+    (byBeam.get(k)||byBeam.set(k,[]).get(k)).push(it)}
+  const out=[];
+  const spareOf=r=>r.open?-Infinity:r.grade?Infinity:(+r.sparePsf||0);
+  const kin=(a,b)=>{
+    if(Math.abs(a.stemIn-b.stemIn)>3)return false;
+    const at=new Map((a.profile||[]).map(r=>[r.levelIdx,r]));
+    for(const r of b.profile||[]){const q=at.get(r.levelIdx);if(!q)continue;
+      if(!!q.open!==!!r.open||!!q.grade!==!!r.grade)return false;
+      if(q.shoreHeightFt!=null&&r.shoreHeightFt!=null&&Math.abs(q.shoreHeightFt-r.shoreHeightFt)>1/12+1e-9)return false}
+    return true};
+  const clusters=[];
+  for(const [,all] of byBeam){
+    all.sort((a,b)=>b.areaSF-a.areaSF);
+    const used=all.map(()=>false);
+    for(let i=0;i<all.length;i++){if(used[i])continue;used[i]=true;const c=[all[i]];
+      for(let j=i+1;j<all.length;j++)if(!used[j]&&kin(all[i],all[j])){used[j]=true;c.push(all[j])}
+      clusters.push(c)}
+  }
+  for(const l of clusters){
+    if(l.length<2){out.push(l[0]);continue}
+    const a=l[0];
+    const idxs=[...new Set(l.flatMap(m=>(m.profile||[]).map(r=>r.levelIdx)))].sort((x,y)=>x-y);
+    const profile=[];
+    for(const j of idxs){
+      const rs=l.map(m=>(m.profile||[]).find(r=>r.levelIdx===j)).filter(Boolean);
+      let g=rs[0];
+      for(const r of rs)if(spareOf(r)<spareOf(g))g=r;
+      if(g.open||g.grade){profile.push({...g});if(g.grade)break;continue}
+      const hs=rs.filter(r=>!r.open&&!r.grade&&r.shoreHeightFt!=null).map(r=>r.shoreHeightFt);
+      const h=hs.length?Math.max(...hs):g.shoreHeightFt;
+      profile.push(h!==g.shoreHeightFt?{...g,shoreHeightFt:h,options:shoreOptionsFor(h,0,shores)}:{...g});
+      if(!g.supportLevel)break;
+    }
+    const heavy=l.reduce((m,x)=>x.plf>m.plf?x:m,a);
+    let mp=null;const cells=[];let areaSF=0,samples=0;
+    const bb={minX:Infinity,minY:Infinity,maxX:-Infinity,maxY:-Infinity};
+    for(const m of l){mp=mpUnion(mp,m.mp);cells.push(...(m.cells||[]));areaSF+=m.areaSF;samples+=m.samples||0;
+      bb.minX=Math.min(bb.minX,m.bb.minX);bb.maxX=Math.max(bb.maxX,m.bb.maxX);bb.minY=Math.min(bb.minY,m.bb.minY);bb.maxY=Math.max(bb.maxY,m.bb.maxY)}
+    out.push({...a,stemIn:heavy.stemIn,plf:heavy.plf,profile,mp,cells,areaSF,samples,bb,stemSplit:false,pieces:l.length});
+  }
+  return out;
+}
 function beamRowKey(pourName,item,levelIdx){return `${pourName}|beam|${item.beamId}|${item.regionKey}|${levelIdx}`}
 // Apply the per-row effective widths and the user's shore picks.
 function beamChain(item,pourName){
@@ -1711,7 +1770,7 @@ function solvePourLevel(stack,pourIdx,opts){
       if(stems.size>1)for(const x of combined.values())if(x.beamId===l[0].beamId)x.stemSplit=true;
     }
   }
-  const rawBeams=[...combined.values()].map(it=>{
+  const rawBeams=mergeBeamPieces([...combined.values()],shores).map(it=>{
     const regOut=out.find(r=>r.key===it.regionKey);
     const chain=beamChain(it,pour.name);
     it.cells=mpCells(it.mp,step);it.cellStep=step;

@@ -1,4 +1,4 @@
-// @rules ARE-31, ARE-32, ARE-19, ARE-11  (see DECISIONS.md)
+// @rules ARE-31, ARE-32, ARE-19, ARE-11, ARE-35  (see DECISIONS.md)
 // A SLAB ZONE FROM ITS NOTE (Bothell, Oct 16 2026)
 // Sheet 5 shows 7", 8 1/2", 22" and 22 1/2" PT slab zones, but the scan
 // offered none: it found thickened slabs only as solid gray fills, and these
@@ -79,12 +79,14 @@ const B2 = await page.evaluate(async () => {
   for (const pg of [5, 6, 7, 8, 9]) { const lv = state.levels[levelForPage(pg)]; out.push(...(await detectSlabNotes(pg, lv)).filter(i => !i.failed).map(i => [pg, i.label])); }
   return out;
 });
-ok(B2.length === 0, 'no traced candidates on the other Horizon floors (their notes are the typical): ' + JSON.stringify(B2));
+// B3–B6's notes are the typical; B2's one other note is its 19" flat soffit,
+// a MIN/MAX range read as the MAX since Oct 19 (ARE-35)
+ok(B2.length === 1 && B2[0][0] === 9 && /19" MAX/.test(B2[0][1]), 'the only traced candidate on the other Horizon floors is the 19" flat soffit on B2: ' + JSON.stringify(B2));
 
 console.log('C. accepting one writes its thickness');
 const C = await page.evaluate(async () => {
   const pg = 10, li = levelForPage(pg), lv = state.levels[li];
-  const it = (await detectSlabNotes(pg, lv)).find(i => !i.failed);
+  const it = (await detectSlabNotes(pg, lv)).find(i => !i.failed && i.tIn === 10);
   beamScan = { page: pg, levelIdx: li, items: [{ ...it, page: pg, levelIdx: li }], sel: -1, what: 'beams', view: 'queue' };
   const added = scanCommit(beamScan.items, 'test');
   const z = added[0] && added[0].z;

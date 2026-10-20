@@ -1,4 +1,4 @@
-// @rules BEM-06  (see DECISIONS.md)
+// @rules BEM-06, RES-19  (see DECISIONS.md)
 // IDENTICAL BEAMS SHARE A ROW (Sep 18 2026)
 // Adolfo: beams should be grouped into one row when they are the same type of
 // beam under the same shore-height and load-capacity conditions. Chose:
@@ -92,12 +92,13 @@ const bc = R.find(r => r.label === 'BC');
 ok(bc && !bc.group, 'the 24x20 over a different capacity stands alone too — same beam, different conditions: ' + JSON.stringify(bc && [bc.label, bc.group]));
 
 console.log('C. heights cluster within an inch, the row shows the tallest');
-// The step under the middle of B2 cuts B2 into two items (BEM-03): 20 ft
+// The step under the middle of B2 cuts B2 into two pieces (BEM-03): 20 ft
 // standing 1" higher, 40 ft like the others. Same conditions, height 1" apart
-// -> all FOUR items share the row, and the row shows the taller height.
+// -> B2's pieces are one beam again (RES-19), the three beams share the row,
+// and the row shows the taller height.
 R = await page.evaluate(() => { build({ stepUnder: 1, stepIn: -1 }); return rows(); });
 console.log('   ' + JSON.stringify(R.map(r => [r.name, r.count, r.rows.map(x => [x.under, x.h && +x.h.toFixed(4)])])));
-ok(R.length === 1 && R[0].count === 4, 'a 1" difference keeps the piece in the group (four items, one row): ' + JSON.stringify(R.map(r => r.count)));
+ok(R.length === 1 && R[0].count === 3 && R[0].sf >= 350 && R[0].sf <= 370, 'a 1" difference keeps the piece in its beam and the beam in the group (three beams, one row, all 360 SF): ' + JSON.stringify(R.map(r => [r.count, r.sf])));
 const hA = await page.evaluate(() => { build(); const r = rows(); return r[0].rows.find(x => x.under === 'L2').h; });
 const hC = R[0].rows.find(x => x.under === 'L2').h;
 ok(Math.abs((hC - hA) - 1 / 12) < 1e-6, 'and the row shows the tallest member\'s height, 1" up: ' + JSON.stringify([hA, hC]));
