@@ -14508,6 +14508,11 @@ function levelsWithoutCapacity(){
 // ARE-25: beams with no usable width or depth, across the job
 function beamSizeMissing(z){return isBeam(z)&&!(z.widthIn>0&&z.depthIn>0)}
 function beamsWithoutSize(){return state.levels.reduce((n,l)=>n+zonesOf(l,'slab').filter(beamSizeMissing).length,0)}
+// ARE-35: a thickened slab read off the sheet with no thickness is a check,
+// like a beam with no size — never solved as the floor's typical. One drawn
+// by hand is the user's own, and soil carries an on-grade floor.
+function slabThicknessMissing(lv,z){return slabKind(z)==='slab'&&!!z.fromSheet&&!(z.thicknessIn>0)&&!levelOnGrade(lv)}
+function slabsWithoutThickness(){return state.levels.reduce((n,l)=>n+zonesOf(l,'slab').filter(z=>slabThicknessMissing(l,z)).length,0)}
 function alignedCount(){return state.levels.filter(l=>levelFullyMatched(l)||!levelNeedsAlignment(l)).length}
 function areasCount(){return state.levels.reduce((n,l)=>n+zonesOf(l,'loading').length,0)}
 // A floor has said its piece when it says where the slab is AND what it
@@ -14592,6 +14597,7 @@ function stepBlockers(id){
        if(bare.length)b.push({step:'loads',label:`a typical capacity on ${bare.join(', ')}`})}
       // ARE-25: a beam with no depth carries nothing; it never solves as 0 PLF
       {const nb=beamsWithoutSize();if(nb)b.push({step:'areas',label:`a size for ${nb} beam${nb>1?'s':''} (no depth read)`})}
+      {const ns=slabsWithoutThickness();if(ns)b.push({step:'areas',label:`a thickness for ${ns} thickened slab area${ns>1?'s':''} (none read)`})}
       break;
   }
   return b;
@@ -20159,8 +20165,112 @@ async function detectGreyShapes(num){
     }
   }
   beamContinuations(out);
+  {const li=typeof levelForPage==='function'?levelForPage(num):-1;if(li>=0)await greyShapeThickness(out,num,state.levels[li])}
   out.sort((a,b2)=>b2.areaPx2-a.areaPx2);
   return{page:num,items:out,labels:labels.length};
+}
+// ARE-32 / ARE-35: each leader dot's line, followed from the dot back toward
+// its note: up to three pieces (a run, a shoulder), stopping at the last one
+// that continues
+function dotLeadsOf(segs,dots){
+  const dotLeads=[];
+  for(const d of dots){
+    const g=segs.find(q=>Math.min(Math.hypot(q.x0-d.x,q.y0-d.y),Math.hypot(q.x1-d.x,q.y1-d.y))<=8&&q.len>=6);
+    if(!g)continue;
+    let far=Math.hypot(g.x0-d.x,g.y0-d.y)<=8?{x:g.x1,y:g.y1}:{x:g.x0,y:g.y0},len=g.len,prev=g;
+    for(let hop=0;hop<2;hop++){
+      const nx=segs.find(q=>q!==prev&&q.len>=4&&(Math.hypot(q.x0-far.x,q.y0-far.y)<1.5||Math.hypot(q.x1-far.x,q.y1-far.y)<1.5));
+      if(!nx)break;
+      const f2=Math.hypot(nx.x0-far.x,nx.y0-far.y)<1.5?{x:nx.x1,y:nx.y1}:{x:nx.x0,y:nx.y0};
+      if(Math.hypot(f2.x-d.x,f2.y-d.y)<Math.hypot(far.x-d.x,far.y-d.y))break;   // turning back: not a leader's run
+      far=f2;len+=nx.len;prev=nx;
+    }
+    dotLeads.push({dot:d,far,len});
+  }
+  return dotLeads;
+}
+// ── THE SHORT T/B TAG: "T: 245'-4"" OVER "B: 243'-0"" ──
+// Every such two-line box on the sheet, with its top, bottom and their
+// difference in inches, centered on the box (image px).
+function tbPairsOn(lines){
+  const out=[];
+  const elevAt=(tx,tag)=>{const m=new RegExp('^'+tag+'\\s*:\\s*(\\d+\\s*\'\\s*-?\\s*\\d+(?:\\s+\\d+\\/\\d+)?\\s*"?)','i').exec(String(tx||'').replace(/[″”]/g,'"').replace(/[′’]/g,"'").trim());if(!m)return null;const v=parseFeet(m[1]);return v!=null&&isFinite(v)?v:null};
+  for(const a of lines){
+    const T=elevAt(a.text,'T');if(T==null)continue;
+    const h=a.h||10;
+    const b=lines.find(ln=>ln!==a&&ln.y>a.y&&ln.y-a.y<=h*1.9&&Math.abs(ln.x-a.x)<h*1.5&&elevAt(ln.text,'B')!=null);
+    if(!b)continue;
+    const B=elevAt(b.text,'B'),t=Math.round((T-B)*12*8)/8;
+    if(!(t>0&&t<=60))continue;
+    const x0=Math.min(a.x,b.x),x1=Math.max(a.x+(a.w||0),b.x+(b.w||0));
+    out.push({T,B,t,x:(x0+x1)/2,y:(a.y-h+b.y)/2,h,text:`${String(a.text).trim()} ${String(b.text).trim()}`});
+  }
+  return out;
+}
+// ── A GRAY THICKENED SLAB TAKES ITS THICKNESS FROM THE SHEET (ARE-35) ──
+// Horizon House, Oct 19 2026: 21 of 23 thickened slabs came in with no
+// thickness, so B2's 28" band poured as the 12" typical — and four of its
+// pieces, long and thin with no BM label, were offered as beams. A gray shape
+// with no beam size of its own reads, inside or touching it: a thickness note
+// ('10" SLAB'), else a T/B tag thicker than the floor ("T: 245'-4" B:
+// 243'-0"" is 28" — inside a thickened shape it is the slab's, not a beam's,
+// so ARE-32's "Varies" test does not apply here). Found, the shape is a
+// thickened slab of that thickness, its top from the tag; two that disagree
+// give the thicker, flagged to check.
+async function greyShapeThickness(items,num,lv){
+  if(!lv||levelOnGrade(lv))return;
+  const typ=+lv.slabThickness||0;
+  const lines=adLines(num);if(!lines.length)return;
+  const pairs=tbPairsOn(lines).filter(p=>p.t>typ+0.5);
+  const notes=lines.map(ln=>({ln,t:slabNoteInches(ln.text,true)})).filter(n=>n.t!=null&&n.t>typ+0.5);
+  // a tag set off on a leader speaks for where its dot lands (Horizon B6:
+  // "T: 208'-0" B: 206'-4"" beside the band, its dot inside it)
+  if(pairs.length&&typeof pageDots==='function'){
+    const leads=dotLeadsOf(await pageColourSegs(num),await pageDots(num));
+    for(const p of pairs.slice()){const r=p.h*2.5;
+      const L=leads.find(l=>Math.abs(l.far.x-p.x)<=r*2.5&&Math.abs(l.far.y-p.y)<=r);
+      if(L)pairs.push({...p,x:L.dot.x,y:L.dot.y,lead:true});}
+  }
+  // a ramp ("9.11% DN") is a sloped slab of the floor's own thickness
+  const ramps=lines.filter(ln=>/^\d+(\.\d+)?\s*%\s*(DN|DOWN|UP)\b/i.test(String(ln.text).trim()));
+  // inside the shape first; else touching its outline (within a text height)
+  const where=(it,x,y,h)=>{const b=it.bbox;
+    if(x<b.minx-h||x>b.maxx+h||y<b.miny-h||y>b.maxy+h)return 0;
+    if(pointInPoly({x,y},it.polygon))return 2;
+    const P=it.polygon;for(let k=0;k<P.length;k++){const a=P[k],c=P[(k+1)%P.length];if(segPtDist(x,y,a.x,a.y,c.x,c.y)<=h)return 1}
+    return 0};
+  for(const it of items){
+    if(it.kind==='beam'&&it.sized)continue;
+    let src=null,t=null,tos=null,mixed=false;
+    const nW=notes.map(n=>{const[x,y]=textCenter(n.ln);return{n,w:where(it,x,y,n.ln.h||10)}}).filter(o=>o.w);
+    const pW=pairs.map(p=>({p,w:where(it,p.x,p.y,p.h)})).filter(o=>o.w);
+    for(const lvl of [2,1]){
+      const ns=nW.filter(o=>o.w===lvl).map(o=>o.n),ps=pW.filter(o=>o.w===lvl).map(o=>o.p);
+      if(ns.length){const v=[...new Set(ns.map(n=>n.t))];t=Math.max(...v);mixed=v.length>1;src=`the sheet's note "${String(ns.find(n=>n.t===t).ln.text).trim()}"`}
+      else if(ps.length){const v=[...new Set(ps.map(p=>p.t))];t=Math.max(...v);mixed=v.length>1;const p=ps.find(q=>q.t===t);tos=p.T;src=`the tag "${p.text}"`}
+      if(t!=null){if(lvl===1)src+=' on its edge';break}
+    }
+    if(t==null&&typ>0){
+      const rp=ramps.find(ln=>{const[x,y]=textCenter(ln);return where(it,x,y,0)===2});
+      if(rp){it.kind='slab';it.tIn=typ;it.ramp=true;it.widthIn=it.depthIn=null;it.sized=false;it.check=false;
+        it.why=`a ramp ("${String(rp.text).trim()}") — the floor's ${inchStr(typ)} typical`;continue}
+    }
+    if(t==null)continue;
+    it.kind='slab';it.tIn=t;if(tos!=null)it.tosFt=tos;
+    it.widthIn=it.depthIn=null;it.sized=false;it.check=mixed;it.label=it.label||null;
+    it.why=`${inchStr(t)} from ${src}`+(mixed?' — the sheet gives more than one here; the thicker is offered, check it':'');
+  }
+  // a gray piece with nothing of its own that touches a read one, in the same
+  // gray, is the same band broken at a corner (Horizon B6's middle piece):
+  // it takes that thickness, flagged to check
+  const read=items.filter(i=>i.kind==='slab'&&i.tIn>0&&!i.ramp);
+  for(let pass=0;pass<3;pass++)for(const it of items){
+    if(it.tIn>0||(it.kind==='beam'&&it.sized))continue;
+    const b=it.bbox,k=read.find(r=>r.gray===it.gray&&r.bbox.minx<=b.maxx+2&&r.bbox.maxx>=b.minx-2&&r.bbox.miny<=b.maxy+2&&r.bbox.maxy>=b.miny-2);
+    if(!k)continue;
+    it.kind='slab';it.tIn=k.tIn;if(k.tosFt!=null)it.tosFt=k.tosFt;it.widthIn=it.depthIn=null;it.sized=false;it.check=true;
+    it.why=`${inchStr(k.tIn)} from the thickened slab it continues — check it`;read.push(it);
+  }
 }
 // BEM-10: A BEAM PIECE WITH NO LABEL OF ITS OWN THAT CONTINUES A SIZED ONE
 // takes its size: same direction, on the same line, the same drawn width
@@ -20361,6 +20471,11 @@ function isOutlined(cov){
 // a note.
 function slabNoteInches(text,loose){
   const s=String(text||'').replace(/[″”]/g,'"').trim();
+  // ARE-35: a range, '16" MIN, 19" MAX SLAB WITH FLAT SOFFIT' (Horizon
+  // House B2) or '12" MIN/15" MAX SLAB W/FLAT SOFFIT' (B1), is the MAX — the
+  // heavier pour. Never the floor's typical (BLD-23 skips MIN/MAX).
+  const rg=/^(\d+(?:\.\d+)?)\s*"\s*MIN\.?\s*[,\/&]?\s*(?:TO\s+)?(\d+(?:\.\d+)?)\s*"\s*MAX\.?\s+(?:THICKENED\s+|THK\.?\s+)?(?:PT\s+|CIP\s+)?(?:SLAB|PANEL)\b/i.exec(s);
+  if(rg){const v=+rg[2];return v>0&&v<=60&&v>=+rg[1]?v:null}
   const m=new RegExp('^(\\d+(?:\\s*-?\\s*\\d+\\/\\d+)?|\\d+\\.\\d+)\\s*"\\s*(?:THICKENED\\s+|THK\\.?\\s+|DROP\\s+|DEPRESSED\\s+)?(?:PT\\s+|P\\.T\\.\\s+|CIP\\s+)?(?:SLAB|PANEL)'+(loose?'\\b':'\\s*$'),'i').exec(s);
   if(!m)return null;
   const f=/^(\d+)\s*-?\s*(\d+)\/(\d+)$/.exec(m[1].trim());
@@ -20405,20 +20520,7 @@ async function detectSlabNotes(num,lv){
   const dots=await pageDots(num);
   // each dot's leader, followed from the dot back toward its note: up to
   // three pieces (a run, a shoulder), stopping at the last one that continues
-  const dotLeads=[];
-  for(const d of dots){
-    const g=segs.find(q=>Math.min(Math.hypot(q.x0-d.x,q.y0-d.y),Math.hypot(q.x1-d.x,q.y1-d.y))<=8&&q.len>=6);
-    if(!g)continue;
-    let far=Math.hypot(g.x0-d.x,g.y0-d.y)<=8?{x:g.x1,y:g.y1}:{x:g.x0,y:g.y0},len=g.len,prev=g;
-    for(let hop=0;hop<2;hop++){
-      const nx=segs.find(q=>q!==prev&&q.len>=4&&(Math.hypot(q.x0-far.x,q.y0-far.y)<1.5||Math.hypot(q.x1-far.x,q.y1-far.y)<1.5));
-      if(!nx)break;
-      const f2=Math.hypot(nx.x0-far.x,nx.y0-far.y)<1.5?{x:nx.x1,y:nx.y1}:{x:nx.x0,y:nx.y0};
-      if(Math.hypot(f2.x-d.x,f2.y-d.y)<Math.hypot(far.x-d.x,far.y-d.y))break;   // turning back: not a leader's run
-      far=f2;len+=nx.len;prev=nx;
-    }
-    dotLeads.push({dot:d,far,len});
-  }
+  const dotLeads=dotLeadsOf(segs,dots);
   const edgeA=edge&&edge.polygon&&edge.polygon.length>2?Math.abs(edge.polygon.reduce((a,p,i)=>{const q=edge.polygon[(i+1)%edge.polygon.length];return a+p.x*q.y-q.x*p.y},0)/2):Infinity;
   const ptIn=(p,b)=>p.x>=b.minx&&p.x<=b.maxx&&p.y>=b.miny&&p.y<=b.maxy;
   const T=(levelAlignmentFor(lv,num)||{}).transform,fpp=T?Math.hypot(T[0],T[2]):0;
@@ -20500,7 +20602,10 @@ async function detectSlabNotes(num,lv){
         const own=pointInPoly({x:cx,y:cy},P);
         if(!(lead&&lead.dot&&!own)&&m.areaPx2<(cb.maxx-cb.minx)*(cb.maxy-cb.miny)*(lead?0.5:2)){why='only the callout box traced';continue}
         if(m.areaPx2<(lead&&lead.dot?minPx2/5:minPx2)){why='only a small pocket traced';continue}
-        if(m.areaPx2>edgeA*0.25){why='the trace ran into the rest of the floor';continue}
+        // ARE-35: a zone closed by drawn outlines (heavy, medium or dashed)
+        // may be up to a third of the floor — Horizon House B2's 19" flat
+        // soffit is 27%; a trace over every dark line stays under a quarter
+        if(m.areaPx2>edgeA*(md.heavyOnly?0.35:0.25)){why='the trace ran into the rest of the floor';continue}
         // another note pointing inside: leaked into a neighboring zone or across a step
         const same=o=>o.t!=null&&Math.abs(o.t-n.t)<0.06&&(o.co.tosFt==null||tosFt==null||Math.abs(o.co.tosFt-tosFt)<0.03);
         const other=all.find(o=>o!==n&&pointInPoly(o.co.at,P)&&!same(o));
@@ -20524,8 +20629,12 @@ async function detectSlabNotes(num,lv){
         else if(twin.tosFt==null&&tosFt!=null)twin.tosFt=tosFt;
         continue;
       }
+      // ARE-35: no top in the callout — a T/B tag of the same thickness
+      // inside the zone gives it (Horizon B2's 19" at T: 244'-7", 9" down)
+      let top=tosFt;
+      if(top==null){const tp=tbPairsOn(lines).find(q=>Math.abs(q.t-n.t)<0.06&&pointInPoly({x:q.x,y:q.y},P));if(tp)top=tp.T}
       out.push({kind:'slab',polygon:P,bbox:bb,areaPx2:best.areaPx2,aspect:1,gray:null,sized:true,check:true,fromNote:true,
-        tIn:n.t,tosFt,label,how:best.how,why:`traced from the sheet's note "${label}"${lead?' along its leader':''} — check its outline`,pick:false});
+        tIn:n.t,tosFt:top,label,how:best.how,why:`traced from the sheet's note "${label}"${lead?' along its leader':''} — check its outline`,pick:false});
     }else{
       const at=n.co.at;
       out.push({kind:'slab',failed:true,fromNote:true,tIn:n.t,tosFt,label,x:at.x,y:at.y,
@@ -20849,6 +20958,15 @@ function beamGeomWidthIn(it){
 // corners live, Skip passes it, Accept all remaining takes the rest of its
 // type. The old list is one click away for anyone who wants to tick.
 const SCAN_TYPE_ORDER={beam:0,slab:1,opening:2};
+// ARE-35 / ARE-21: a beam is named by its width × depth, a thickened slab by
+// its thickness — never "Thickened slab undefined″ × undefined″"
+function scanShapeSized(it){return it.kind==='slab'?it.tIn>0:!!it.sized}
+function scanShapeName(it,gw,q){
+  if(it.kind==='slab')return 'Thickened slab '+(it.tIn>0?`${inchStr(it.tIn)} thick`
+    :`<span class="lm-warn">thickness not read</span>${gw?` &middot; measures ${gw}${q} wide`:''}`);
+  return 'Beam '+(it.sized?`${it.widthIn}${q} &times; ${it.depthIn}${q}`
+    :`<span class="lm-warn">size not read</span>${gw?` &middot; measures ${gw}${q} wide`:''}`);
+}
 function scanTypeName(kind,n){return kind==='beam'?(n===1?'beam':'beams'):kind==='opening'?(n===1?'opening':'openings'):(n===1?'thickened slab':'thickened slabs')}
 // ── FLOOR BY FLOOR, BOTTOM UP (ARE-28) ──
 // Adolfo, Sep 25 2026: "the confirmation process should start from the bottom
@@ -20972,12 +21090,11 @@ function scanCommit(list,label){
     }else if(it.kind==='opening'){opens++}
     else{
       slabs++;
-      // ARE-31: a zone found from its note takes the note's thickness and top
-      if(it.fromNote){
-        if(it.tIn!=null)z.thicknessIn=it.tIn;
-        if(it.tosFt!=null&&hasElev(lv))z.offsetIn=Math.round((it.tosFt-lv.elevation)*12*8)/8;
-        z.label=it.label||'';
-      }
+      // ARE-31: a zone found from its note takes the note's thickness and top;
+      // ARE-35: so does a gray thickened slab whose tag or note was read
+      if(it.tIn!=null)z.thicknessIn=it.tIn;
+      if(it.tosFt!=null&&hasElev(lv))z.offsetIn=Math.round((it.tosFt-lv.elevation)*12*8)/8;
+      if(it.fromNote)z.label=it.label||'';
     }
     arr.push(z);
     it.done='added';it.pick=false;it.zoneId=z.id;
@@ -21104,12 +21221,11 @@ function scanQueueHtml(){
   // while adjusting, the card is about the shape just accepted, not the next one
   const shown=adjusting&&beamScan.adjustingItem?beamScan.adjustingItem:it;
   const lv=state.levels[shown.levelIdx!=null?shown.levelIdx:beamScan.levelIdx]||{};
-  const bad=shown.kind!=='opening'&&(!shown.sized||!!shown.check);
+  const bad=shown.kind!=='opening'&&(!scanShapeSized(shown)||!!shown.check);
   let name;
   if(shown.kind==='opening')name=`Opening${shown.label&&!/^OPNG$/i.test(shown.label)?' &middot; '+esc(shown.label):''}`;
   else{const gw=beamGeomWidthIn(shown);
-    name=(shown.kind==='beam'?'Beam ':'Thickened slab ')+(shown.sized?`${shown.widthIn}&Prime; &times; ${shown.depthIn}&Prime;`
-      :`<span class="lm-warn">size not read</span>${gw?` &middot; measures ${gw}&Prime; wide`:''}`)}
+    name=scanShapeName(shown,gw,'&Prime;')}
   const allN=kindQ.filter(x=>x.kind!=='beam'||x.sized).length;
   const added=beamScan.items.filter(x=>x.done==='added').length;
   const acts=`<div class="mp-actions sq-acts">
@@ -21183,8 +21299,7 @@ function renderBeamPanel(){
       stat=it.failed?'<span class="lm-warn">could not be traced</span>':sf(it);
     }else{
       const gw=beamGeomWidthIn(it);
-      name=(it.kind==='beam'?'Beam ':'Thickened slab ')+(it.sized?`${it.widthIn}" &times; ${it.depthIn}"`
-        :`<span class="lm-warn">size not read</span>${gw?` &middot; measures ${gw}" wide`:''}`);
+      name=scanShapeName(it,gw,'"');
       stat=`${sf(it)} &middot; ${it.aspect}:1 &middot; gray ${it.gray}`;
     }
     return `<div class="mp-row${beamScan.sel===i?' sel':''}${bad?' v-warn':''}">
@@ -23285,7 +23400,9 @@ function adTagText(lv,z,layer){
     if(beamSizeMissing(z))return{t:`${sz} · size needed`,short:sz,warn:true};
     if(t.state==='conflict')return{t:`${sz} · verify top`,warn:true};
     return{t:`${sz} · T.O.B. ${el(t.off)}`,short:sz};}
-  if(k==='slab'){const o=slabOffsetOf(z);return{t:`${inchStr(slabThicknessOf(lv,z))} Slab · T.O.S. ${el(o)}`,short:`T.O.S. ${el(o)}`}}
+  if(k==='slab'){const o=slabOffsetOf(z);
+    if(slabThicknessMissing(lv,z))return{t:`? Slab · thickness needed`,short:'? Slab',warn:true};
+    return{t:`${inchStr(slabThicknessOf(lv,z))} Slab · T.O.S. ${el(o)}`,short:`T.O.S. ${el(o)}`}}
   if(k==='grade'){const o=slabOffsetOf(z);return{t:`${inchStr(slabThicknessOf(lv,z))} SOG · T.O.S. ${el(o)}`,short:`SOG ${el(o)}`}}
   if(k==='opening')return{t:'OPENING',short:'OPEN'};
   return null;
@@ -23564,6 +23681,7 @@ function adChecks(lv){
       if(beamSizeMissing(b))out.push({type:'size',rings:[adP(b.polygon)],ids:[b.id],text:`${nm(b)} — no ${b.widthIn>0?'depth':'size'} read, so it would carry nothing. Type its size (the sheet's BM label) before Results`});
       else if(b.adSizeSrc==='default')out.push({type:'size',rings:[adP(b.polygon)],ids:[b.id],text:`${nm(b)} — size not read from a BM label (${b.widthIn}×${b.depthIn} assumed)`});
     });
+    arr.filter(z=>slabThicknessMissing(lv,z)).forEach(z=>out.push({type:'size',rings:[adP(z.polygon)],ids:[z.id],text:`${nm(z)} — thickened slab with no thickness read, so it would pour as the ${inchStr(+lv.slabThickness||0)} typical. Type its thickness (the sheet's note or T/B tag) before Results`}));
     arr.filter(z=>['slab','grade'].includes(slabKind(z))&&z.adSheet).forEach(z=>{
       const s=z.adSheet,d=[];
       if(s.tIn!=null&&Math.abs(s.tIn-slabThicknessOf(lv,z))>0.01)d.push(`${inchStr(s.tIn)} thick`);
